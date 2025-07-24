@@ -1,26 +1,11 @@
 from __future__ import annotations
-from dataclasses import dataclass
 import cappa
 import asyncio
 import structlog
 
+from photonyx.interface.app import PhotonyxApp
+
 log = structlog.get_logger()
-
-
-@dataclass
-class PhotonyxApp:
-    """Photonyx application."""
-
-    commands: cappa.Subcommands[VersionCommand]
-
-
-@cappa.command(name="version")
-@dataclass
-class VersionCommand:
-    """Show the version of Photonyx."""
-
-    def __call__(self, output: cappa.Output):
-        output("Photonyx version 0.1.0")
 
 
 def main() -> None:  # pragma: no cover
