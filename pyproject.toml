@@ -1,0 +1,31 @@
+[project]
+name = "photonyx"
+version = "0.1.0"
+description = "Photonyx is a command-line tool for processing astronomical images."
+readme = "README.md"
+authors = [
+    { name = "Kyle LeNeau" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "aiofiles>=24.1.0",
+    "astropy>=7.1.0",
+    "async-siril>=0.1.5",
+    "asyncio>=3.4.3",
+    "cappa>=0.29.0",
+    "structlog>=25.4.0",
+]
+
+[project.scripts]
+px = "photonyx.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+    "ruff>=0.12.4",
+    "ty>=0.0.1a15",
+]
