@@ -17,6 +17,7 @@ dependencies = [
     "photonyx-cli",
     "pydantic>=2.11.7",
     "pydantic-yaml>=1.6.0",
+    "pydash>=8.0.5",
     "structlog>=25.4.0",
 ]
 

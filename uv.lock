@@ -317,6 +317,7 @@ dependencies = [
     { name = "orjson" },
     { name = "pydantic" },
     { name = "pydantic-yaml" },
+    { name = "pydash" },
     { name = "structlog" },
 ]
 
@@ -331,6 +332,7 @@ requires-dist = [
     { name = "photonyx-cli", editable = "packages/photonyx.cli" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pydantic-yaml", specifier = ">=1.6.0" },
+    { name = "pydash", specifier = ">=8.0.5" },
     { name = "structlog", specifier = ">=25.4.0" },
 ]
 
@@ -455,6 +457,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/bb/6c/6bc8f39406cdeed864578df88f52a63db27bd24aa8473206d650bc4fa1d8/pydantic_yaml-1.6.0.tar.gz", hash = "sha256:ce5f10b65d95ca45846a36ea8dae54e550fa3058e7d6218e0179184d9bf6f660", size = 25782, upload-time = "2025-08-08T21:01:13.097Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ba/39/8d263fbcb409a8f5dd78ac8f89f1e6af1d4e4d9fbb7f856ca3245b354809/pydantic_yaml-1.6.0-py3-none-any.whl", hash = "sha256:02cb800b455b68daeeb74ad736c252a94a0b203da5fbbeef02539d468e1d98f8", size = 22511, upload-time = "2025-08-08T21:01:11.425Z" },
+]
+
+[[package]]
+name = "pydash"
+version = "8.0.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2f/24/91c037f47e434172c2112d65c00c84d475a6715425e3315ba2cbb7a87e66/pydash-8.0.5.tar.gz", hash = "sha256:7cc44ebfe5d362f4f5f06c74c8684143c5ac481376b059ff02570705523f9e2e", size = 164861, upload-time = "2025-01-17T16:08:50.562Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2c/86/e74c978800131c657fc5145f2c1c63e0cea01a49b6216f729cf77a2e1edf/pydash-8.0.5-py3-none-any.whl", hash = "sha256:b2625f8981862e19911daa07f80ed47b315ce20d9b5eb57aaf97aaf570c3892f", size = 102077, upload-time = "2025-01-17T16:08:47.91Z" },
 ]
 
 [[package]]
