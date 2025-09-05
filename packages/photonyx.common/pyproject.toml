@@ -1,0 +1,14 @@
+[project]
+name = "photonyx-common"
+version = "0.1.0"
+description = "Common utilities used by all photonyx packages"
+readme = "README.md"
+authors = [
+    { name = "Kyle LeNeau" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
