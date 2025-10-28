@@ -7,6 +7,7 @@ from pydantic_yaml import parse_yaml_file_as, to_yaml_file
 from .global_app import GlobalAppConfig, GLOBAL_CONFIG_DIR, GLOBAL_CONFIG_FILE_PATH
 from .session import SessionConfig, SESSION_CONFIG_FILE_NAME
 from .profile import ProfileConfig, PROFILE_CONFIG_FILE_NAME
+from .project import ProjectConfig, PROJECT_CONFIG_FILE_NAME
 
 log = structlog.get_logger()
 
@@ -40,6 +41,14 @@ def load_or_create_global_config() -> GlobalAppConfig:
     result = GlobalAppConfig()
     to_yaml_file(GLOBAL_CONFIG_FILE_PATH, result, add_comments=True)
     return result
+
+
+def find_project_config(folder: pathlib.Path) -> ProjectConfig:
+    config_file = folder / PROJECT_CONFIG_FILE_NAME
+    if not config_file.exists():
+        raise ConfigLoaderError("Project config file not found")
+    config = parse_yaml_file_as(ProjectConfig, config_file)
+    return config
 
 
 def find_session_config(folder: pathlib.Path) -> SessionConfig:

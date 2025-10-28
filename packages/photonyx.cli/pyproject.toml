@@ -10,11 +10,12 @@ requires-python = ">=3.12"
 dependencies = [
     "aiofiles>=24.1.0",
     "astropy>=7.1.0",
-    "async-siril>=0.2.0",
+    "async-siril>=0.3.0",
     "asyncio>=3.4.3",
     "cappa>=0.29.0",
     "orjson>=3.11.2",
     "photonyx-cli",
+    "photonyx-engine",
     "pydantic>=2.11.7",
     "pydantic-yaml>=1.6.0",
     "pydash>=8.0.5",
@@ -27,3 +28,6 @@ photonyx-cli = "photonyx_cli:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv.sources]
+photonyx-engine = { workspace = true }

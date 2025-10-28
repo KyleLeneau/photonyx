@@ -72,7 +72,7 @@ wheels = [
 
 [[package]]
 name = "async-siril"
-version = "0.2.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "asyncio" },
@@ -80,9 +80,9 @@ dependencies = [
     { name = "psutil" },
     { name = "structlog" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2d/a4/d0b38d75e20d93a1a82ac4ba318c395b2d7708d1e4fb0ae7a192c95ee096/async_siril-0.2.0.tar.gz", hash = "sha256:82a2f6d6f36069455834fc9a773a5793cc70d82eff74bce6688783cd909c64d7", size = 119007, upload-time = "2025-08-23T23:04:28.847Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/82/1f/33209702af7d275f243bd1af2c9ac177b303b1a9357a04213f766e8dd31e/async_siril-0.3.0.tar.gz", hash = "sha256:e1a2b6b50bcdfa6c3b837c9b9849aec4efa0ec053897fd27d4f646b73bb9b0d3", size = 119421, upload-time = "2025-09-08T23:08:44.776Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f6/9b/a52f6e969c5f87647c1c4357d273eb4469241ebb00187ec78f7e2547d1cc/async_siril-0.2.0-py3-none-any.whl", hash = "sha256:958a779952a1aea0c4be91b5db2a39dc9045b7cdd29929c3f159e0b9e0e23405", size = 61647, upload-time = "2025-08-23T23:04:27.68Z" },
+    { url = "https://files.pythonhosted.org/packages/92/2d/1c1311356506f930e370cb260043c64240ce43eb1660cee76671e0eca908/async_siril-0.3.0-py3-none-any.whl", hash = "sha256:4a07a962c4042c3c3ae54340aea2943a6006a374fb23826ec3f6ce5009d4e6c8", size = 62157, upload-time = "2025-09-08T23:08:43.544Z" },
 ]
 
 [[package]]
@@ -315,6 +315,7 @@ dependencies = [
     { name = "asyncio" },
     { name = "cappa" },
     { name = "orjson" },
+    { name = "photonyx-engine" },
     { name = "pydantic" },
     { name = "pydantic-yaml" },
     { name = "pydash" },
@@ -325,11 +326,12 @@ dependencies = [
 requires-dist = [
     { name = "aiofiles", specifier = ">=24.1.0" },
     { name = "astropy", specifier = ">=7.1.0" },
-    { name = "async-siril", specifier = ">=0.2.0" },
+    { name = "async-siril", specifier = ">=0.3.0" },
     { name = "asyncio", specifier = ">=3.4.3" },
     { name = "cappa", specifier = ">=0.29.0" },
     { name = "orjson", specifier = ">=3.11.2" },
     { name = "photonyx-cli", editable = "packages/photonyx.cli" },
+    { name = "photonyx-engine", editable = "packages/photonyx.engine" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pydantic-yaml", specifier = ">=1.6.0" },
     { name = "pydash", specifier = ">=8.0.5" },
@@ -358,7 +360,7 @@ dependencies = [
 requires-dist = [
     { name = "aiofiles", specifier = ">=24.1.0" },
     { name = "astropy", specifier = ">=7.1.0" },
-    { name = "async-siril", specifier = ">=0.2.0" },
+    { name = "async-siril", specifier = ">=0.3.0" },
     { name = "asyncio", specifier = ">=4.0.0" },
     { name = "photonyx-common", editable = "packages/photonyx.common" },
     { name = "structlog", specifier = ">=25.4.0" },

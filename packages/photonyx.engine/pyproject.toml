@@ -10,7 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "aiofiles>=24.1.0",
     "astropy>=7.1.0",
-    "async-siril>=0.2.0",
+    "async-siril>=0.3.0",
     "asyncio>=4.0.0",
     "photonyx-common",
     "structlog>=25.4.0",

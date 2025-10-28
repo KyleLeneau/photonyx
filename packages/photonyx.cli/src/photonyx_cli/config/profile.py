@@ -104,6 +104,7 @@ class ProfileConfig(BaseModel):
 
     def validate(self):
         """Validate the profile configuration."""
+        self.profile_home = self.profile_home.expanduser()
         self.calibration_masters._validate(self.home)
 
     def resolve_calibration_masters(self, exposure: ExposureConfig) -> ResolvedCalibrationMasters:
@@ -123,13 +124,12 @@ class ProfileConfig(BaseModel):
                 and dark.exposure == exposure.exposure
                 and dark.temperature == exposure.temperature,
             )
-        
+
         # Find the master flat if requested
         if exposure.calibration.flat_date is not None:
             resolved.flat = py_.find(
                 self.calibration_masters.flat,
-                lambda flat: flat.date == exposure.calibration.flat_date
-                and flat.filter_key == exposure.filter_key
+                lambda flat: flat.date == exposure.calibration.flat_date and flat.filter_key == exposure.filter_key,
             )
-        
+
         return resolved

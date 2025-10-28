@@ -12,8 +12,7 @@ log = structlog.stdlib.get_logger()
 class StackCommand:
     """Start a stacking session for a given project."""
 
-    folder: t.Annotated[pathlib.Path, cappa.Arg(help="Path to the session folder")]
+    folder: t.Annotated[pathlib.Path, cappa.Arg(help="Path to the project folder")]
 
     def __post_init__(self):
         log.info("Stack command initialized", folder=self.folder)
-        # TODO: load and merge all config files from this folder up to the root

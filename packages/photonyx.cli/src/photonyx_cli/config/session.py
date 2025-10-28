@@ -34,8 +34,12 @@ class ExposureConfig(BaseModel):
     calibration: CalibrationSettings = CalibrationSettings()
 
     @property
-    def pp_folder(self) -> pathlib.Path:
+    def pp_folder_name(self) -> pathlib.Path:
         return f"PP_{self.raw_folder.name.removeprefix('RAW_')}"
+
+    @property
+    def pp_folder(self) -> pathlib.Path:
+        return self.raw_folder.parent / self.pp_folder_name
 
 
 class SessionConfig(BaseModel):
@@ -50,3 +54,4 @@ class SessionConfig(BaseModel):
 
             if not raw_dir.exists():
                 raise FileNotFoundError(f"RAW session folder not found: '{raw_dir}'")
+            exp.raw_folder = raw_dir
