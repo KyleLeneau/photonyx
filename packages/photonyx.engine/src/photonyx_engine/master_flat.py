@@ -1,6 +1,5 @@
 from __future__ import annotations
 import asyncio
-import datetime
 import pathlib
 import structlog.stdlib
 import tempfile
@@ -9,6 +8,7 @@ import typing as t
 from async_siril import SirilCli
 from async_siril.command import setext, set32bits, cd, convert, stack, calibrate
 from async_siril.command import fits_extension
+from photonyx_engine.utils import first_observation_date_filter
 
 
 log = structlog.stdlib.get_logger()
@@ -22,8 +22,7 @@ async def create_calibration_master_flat(
     raw_folder: pathlib.Path,
     output_folder: pathlib.Path,
     master_bias: pathlib.Path,
-    filter_name: str,
-    name_suffix: t.Optional[str] = None,
+    filter_name: t.Optional[str] = None,
     extension: fits_extension = fits_extension.FITS_EXT_FITS,
 ) -> pathlib.Path:
     # Check if input folder exists
@@ -43,13 +42,18 @@ async def create_calibration_master_flat(
         raw_folder=raw_folder,
         output=output_folder,
         master_bias=master_bias,
-        name_suffix=name_suffix,
+        filter_name=filter_name,
         extension=extension,
     )
 
-    current_datetime = datetime.datetime.now()
-    date = current_datetime.strftime("%Y-%m-%d")
-    output_file = output_folder / f"{date}_FLAT_master_{filter_name}{name_suffix.ljust(1, '_') if name_suffix else ''}"
+    # Setup output
+    obs_datetime, obs_filter = first_observation_date_filter(raw_folder)
+    used_filter = obs_filter if len(obs_filter) > 0 else filter_name
+    if used_filter is None:
+        raise CalibrationMasterFlatException("unknown filter_name for sequence")
+
+    date = obs_datetime.strftime("%Y-%m-%d")
+    output_file = output_folder / f"{date}_FLAT_master_{used_filter}"
 
     with tempfile.TemporaryDirectory(prefix="photonyx-") as tempdir:  # type: ignore
         temp = pathlib.Path(tempdir)

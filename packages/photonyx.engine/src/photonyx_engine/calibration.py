@@ -39,7 +39,7 @@ async def calibrate_raw_light_frames(
         raise CalibrationException("one of the master calibration should be passed")
 
     # Check if all raw frames are OSC
-    all_color = all_color_raw_frames(raw_folder, extension)
+    all_color = all_color_raw_frames(raw_folder)
     log.info(f"Raw images are OSC: {all_color}")
 
     log.info(

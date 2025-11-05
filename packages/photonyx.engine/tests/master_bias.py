@@ -5,10 +5,10 @@ from async_siril.command_types import fits_extension
 
 
 async def _test_create_master_bias():
-    input = pathlib.Path("/Users/kyle/Pictures/Astro/Radian_75_71mc_pro/BIAS/2025-06-24/RAW")
-    output = pathlib.Path("/Users/kyle/Pictures/Astro/Radian_75_71mc_pro/BIAS/2025-06-24")
+    input = pathlib.Path("/Users/kyle/Pictures/Astro/FRA300_6200mc_pro/BIAS/2025-11-04/O-1x1")
+    output = pathlib.Path("/Users/kyle/Pictures/Astro/FRA300_6200mc_pro/BIAS")
 
-    await create_calibration_master_bias(raw_folder=input, output_folder=output, extension=fits_extension.FITS_EXT_FIT)
+    await create_calibration_master_bias(raw_folder=input, output_folder=output, extension=fits_extension.FITS_EXT_FITS)
 
 
 if __name__ == "__main__":

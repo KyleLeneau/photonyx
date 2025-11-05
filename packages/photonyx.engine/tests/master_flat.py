@@ -16,7 +16,7 @@ async def _test_create_master_flat():
         output_folder=output,
         master_bias=master_bias,
         filter_name="Ultra",
-        extension=fits_extension.FITS_EXT_FIT,
+        extension=fits_extension.FITS_EXT_FITS,
     )
 
 

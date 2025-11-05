@@ -1,15 +1,13 @@
 from __future__ import annotations
 import asyncio
-import datetime
 import pathlib
 import structlog.stdlib
 import tempfile
-import typing as t
 
 from async_siril import SirilCli
 from async_siril.command import setext, set32bits, cd, convert, stack
 from async_siril.command import fits_extension
-
+from photonyx_engine.utils import first_observation_date
 
 log = structlog.stdlib.get_logger()
 
@@ -21,7 +19,6 @@ class CalibrationMasterBiasException(Exception):
 async def create_calibration_master_bias(
     raw_folder: pathlib.Path,
     output_folder: pathlib.Path,
-    name_suffix: t.Optional[str] = None,
     extension: fits_extension = fits_extension.FITS_EXT_FITS,
 ) -> pathlib.Path:
     # Check if input folder exists
@@ -36,14 +33,13 @@ async def create_calibration_master_bias(
         "Starting create calibration master bias frame",
         raw_folder=raw_folder,
         output=output_folder,
-        name_suffix=name_suffix,
         extension=extension,
     )
 
     # Setup output
-    current_datetime = datetime.datetime.now()
-    date = current_datetime.strftime("%Y-%m-%d")
-    output_file = output_folder / f"{date}_BIAS_master{name_suffix.ljust(1, '_') if name_suffix else ''}"
+    obs_datetime = first_observation_date(raw_folder)
+    date = obs_datetime.strftime("%Y-%m-%d")
+    output_file = output_folder / f"{date}_BIAS_master"
 
     with tempfile.TemporaryDirectory(prefix="photonyx-") as tempdir:  # type: ignore
         temp = pathlib.Path(tempdir)

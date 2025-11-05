@@ -125,7 +125,7 @@ async def linear_stack_light_frames(
 
             # Split and save RGB from OSC image
             if split_color:
-                osc_result = is_color_frame(f"{filter_output_file}.{extension.value}")
+                osc_result = is_color_frame(pathlib.Path(f"{filter_output_file}.{extension.value}"))
                 if osc_result:
                     log.info("Splitting color image into RGB layers")
                     _r = output_folder / f"{date}_linear_stack_R"

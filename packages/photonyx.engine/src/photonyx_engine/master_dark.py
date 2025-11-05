@@ -1,6 +1,5 @@
 from __future__ import annotations
 import asyncio
-import datetime
 import pathlib
 import structlog.stdlib
 import tempfile
@@ -8,6 +7,7 @@ import tempfile
 from async_siril import SirilCli
 from async_siril.command import setext, set32bits, cd, convert, stack
 from async_siril.command import fits_extension
+from photonyx_engine.utils import first_observation_date_exp_temp
 
 
 log = structlog.stdlib.get_logger()
@@ -20,7 +20,6 @@ class CalibrationMasterDarkException(Exception):
 async def create_calibration_master_dark(
     raw_folder: pathlib.Path,
     output_folder: pathlib.Path,
-    name_suffix: str,
     extension: fits_extension = fits_extension.FITS_EXT_FITS,
 ) -> pathlib.Path:
     # Check if input folder exists
@@ -35,13 +34,13 @@ async def create_calibration_master_dark(
         "Starting create calibration master dark frame",
         raw_folder=raw_folder,
         output=output_folder,
-        name_suffix=name_suffix,
         extension=extension,
     )
 
-    current_datetime = datetime.datetime.now()
-    date = current_datetime.strftime("%Y-%m-%d")
-    output_file = output_folder / f"{date}_DARK_master_{name_suffix}"
+    # Setup output
+    obs_datetime, exp_s, temp_c = first_observation_date_exp_temp(raw_folder)
+    date = obs_datetime.strftime("%Y-%m-%d")
+    output_file = output_folder / f"{date}_DARK_master_{exp_s}s_{temp_c}C"
 
     with tempfile.TemporaryDirectory(prefix="photonyx-") as tempdir:  # type: ignore
         temp = pathlib.Path(tempdir)
