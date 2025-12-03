@@ -7,7 +7,7 @@ import tempfile
 from async_siril import SirilCli
 from async_siril.command import setext, set32bits, cd, convert, stack
 from async_siril.command import fits_extension
-from photonyx_engine.utils import first_observation_date
+from photonyx_engine.utils import first_observation_date, all_fits_files
 
 log = structlog.stdlib.get_logger()
 
@@ -24,6 +24,11 @@ async def create_calibration_master_bias(
     # Check if input folder exists
     if not raw_folder.exists():
         raise CalibrationMasterBiasException("raw_folder is missing")
+    
+    # Check to make sure the folder has files to work with
+    raw_files = all_fits_files(raw_folder)
+    if not raw_files or len(raw_files) == 0:
+        raise CalibrationMasterBiasException("raw_folder contains no files")
 
     # Check if output folder exists else make it
     if not output_folder.exists():

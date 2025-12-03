@@ -37,6 +37,7 @@ async def linear_stack_light_frames(
     input_folders: t.List[pathlib.Path],
     output_folder: pathlib.Path,
     filter_name: str,
+    suffix: t.Optional[str] = None,
     extract_background: bool = False,
     split_color: bool = False,
     extension: fits_extension = fits_extension.FITS_EXT_FITS,
@@ -53,6 +54,7 @@ async def linear_stack_light_frames(
         inputs=input_folders,
         output=output_folder,
         filter_name=filter_name,
+        suffix=suffix,
         extract_background=extract_background,
         split_color=split_color,
         extension=extension,
@@ -120,7 +122,8 @@ async def linear_stack_light_frames(
             current_datetime = datetime.datetime.now()
             date = current_datetime.strftime("%Y-%m-%d")
 
-            filter_output_file = output_folder / f"{date}_linear_stack_{filter_name}"
+            file_suffix = f"_{suffix}" if suffix is not None else ""
+            filter_output_file = output_folder / f"{date}_linear_stack_{filter_name}{file_suffix}"
             await siril.command(save(str(filter_output_file)))
 
             # Split and save RGB from OSC image
@@ -128,9 +131,9 @@ async def linear_stack_light_frames(
                 osc_result = is_color_frame(pathlib.Path(f"{filter_output_file}.{extension.value}"))
                 if osc_result:
                     log.info("Splitting color image into RGB layers")
-                    _r = output_folder / f"{date}_linear_stack_R"
-                    _g = output_folder / f"{date}_linear_stack_G"
-                    _b = output_folder / f"{date}_linear_stack_B"
+                    _r = output_folder / f"{date}_linear_stack_R{file_suffix}"
+                    _g = output_folder / f"{date}_linear_stack_G{file_suffix}"
+                    _b = output_folder / f"{date}_linear_stack_B{file_suffix}"
                     await siril.command(split(_r, _g, _b))
                 else:
                     log.warn("Can not split non-color result")

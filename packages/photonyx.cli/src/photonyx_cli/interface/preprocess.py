@@ -7,9 +7,9 @@ import structlog
 log = structlog.stdlib.get_logger()
 
 
-@cappa.command(name="calibrate", invoke="photonyx_cli.command.calibrate.invoke")
+@cappa.command(name="preprocess", invoke="photonyx_cli.command.preprocess.invoke")
 @dataclass
-class CalibrateCommand:
+class PreprocessCommand:
     """Start a calibration session for a target."""
 
     folder: t.Annotated[pathlib.Path, cappa.Arg(help="Path to the session folder")]

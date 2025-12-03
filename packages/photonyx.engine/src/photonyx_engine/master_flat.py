@@ -7,8 +7,8 @@ import typing as t
 
 from async_siril import SirilCli
 from async_siril.command import setext, set32bits, cd, convert, stack, calibrate
-from async_siril.command import fits_extension
-from photonyx_engine.utils import first_observation_date_filter
+from async_siril.command import fits_extension, stack_norm
+from photonyx_engine.utils import first_observation_date_filter, all_fits_files
 
 
 log = structlog.stdlib.get_logger()
@@ -28,6 +28,11 @@ async def create_calibration_master_flat(
     # Check if input folder exists
     if not raw_folder.exists():
         raise CalibrationMasterFlatException("raw_folder is missing")
+
+    # Check to make sure the folder has files to work with
+    raw_files = all_fits_files(raw_folder)
+    if not raw_files or len(raw_files) == 0:
+        raise CalibrationMasterFlatException("raw_folder contains no files")
 
     # Check if output folder exists else make it
     if not output_folder.exists():
@@ -75,7 +80,7 @@ async def create_calibration_master_flat(
             await siril.command(calibrate("flat_", bias=str(master_bias)))
 
             # Stack with defaults
-            await siril.command(stack("pp_flat_", out=str(output_file)))
+            await siril.command(stack("pp_flat_", out=str(output_file), norm=stack_norm.NORM_MUL))
 
             await asyncio.sleep(1)
             log.info("master creation ended")

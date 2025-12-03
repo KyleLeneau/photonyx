@@ -1,5 +1,4 @@
 import cappa
-from photonyx_cli.interface.scan import ScanCommand
 import structlog
 
 from pydantic import BaseModel
@@ -8,8 +7,10 @@ from ..config.global_app import GlobalAppConfig, LoggingConfig
 from ..config.loader import setup_app_dir, load_or_create_global_config
 from ..utils import logging
 
-from .calibrate import CalibrateCommand
-from .livestack import LivestackCommand
+from .preprocess import PreprocessCommand
+from .master_bias import MasterBiasCommand
+from .master_dark import MasterDarkCommand
+from .master_flat import MasterFlatCommand
 from .stack import StackCommand
 from .version import VersionCommand
 
@@ -30,7 +31,16 @@ def setup_logging(cfg: LoggingConfig) -> None:
 class PhotonyxApp(BaseModel):
     """Photonyx CLI application."""
 
-    commands: cappa.Subcommands[VersionCommand | LivestackCommand | CalibrateCommand | StackCommand | ScanCommand]
+    commands: cappa.Subcommands[
+        VersionCommand
+        # | LivestackCommand
+        | PreprocessCommand
+        | StackCommand
+        # | ScanCommand
+        | MasterBiasCommand
+        | MasterDarkCommand
+        | MasterFlatCommand
+    ]
 
     _global_config: GlobalAppConfig = GlobalAppConfig()
 

@@ -5,7 +5,7 @@ import structlog
 from rich.prompt import Confirm
 
 from ..interface.app import PhotonyxApp
-from ..interface.calibrate import CalibrateCommand
+from ..interface.preprocess import PreprocessCommand
 from ..config.loader import find_session_config, ConfigLoaderError
 from ..config.loader import find_hardware_profile
 from photonyx_engine.calibration import calibrate_raw_light_frames, CalibrationException
@@ -13,7 +13,7 @@ from photonyx_engine.calibration import calibrate_raw_light_frames, CalibrationE
 log = structlog.stdlib.get_logger()
 
 
-async def invoke(app: PhotonyxApp, command: CalibrateCommand, output: cappa.Output):
+async def invoke(app: PhotonyxApp, command: PreprocessCommand, output: cappa.Output):
     log.debug(app)
     log.debug(command)
 
@@ -35,14 +35,6 @@ async def invoke(app: PhotonyxApp, command: CalibrateCommand, output: cappa.Outp
 
     # Calibrate each exposure in the session
     for exp in session_config.exposures:
-        # Create the PP_ folder (TODO: allow deleting this)
-        if not exp.pp_folder.exists():
-            exp.pp_folder.mkdir()
-            log.debug("Created PP_ folder", folder=exp.pp_folder)
-        else:
-            log.warn("Skipping exposure since it exists already", exposure=exp)
-            continue
-
         resolved = hardware_profile.resolve_calibration_masters(exp)
         log.debug("resolved calibration master:")
         log.debug(resolved)
@@ -56,6 +48,14 @@ async def invoke(app: PhotonyxApp, command: CalibrateCommand, output: cappa.Outp
         output.output("")
 
         if Confirm.ask("Ready?"):
+            # Create the PP_ folder (TODO: allow deleting this)
+            if not exp.pp_folder.exists():
+                exp.pp_folder.mkdir()
+                log.debug("Created PP_ folder", folder=exp.pp_folder)
+            else:
+                log.warn("Skipping exposure since it exists already", exposure=exp)
+                continue
+
             try:
                 await calibrate_raw_light_frames(
                     raw_folder=exp.raw_folder,
