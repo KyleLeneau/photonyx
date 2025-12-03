@@ -14,13 +14,13 @@ log = structlog.stdlib.get_logger()
 
 
 async def invoke(app: PhotonyxApp, command: PreprocessCommand, output: cappa.Output):
-    log.debug(app)
-    log.debug(command)
+    log.debug("app object", app)
+    log.debug("command info", command)
 
     try:
         # Find the hardware profile by searching up the directory tree
         hardware_profile = find_hardware_profile(command.folder)
-        log.debug(hardware_profile)
+        log.debug("found hardware profile", profile=hardware_profile)
     except ConfigLoaderError:
         log.error("No hardware profile found")
         return
@@ -28,7 +28,7 @@ async def invoke(app: PhotonyxApp, command: PreprocessCommand, output: cappa.Out
     try:
         # Find the session config file
         session_config = find_session_config(command.folder)
-        log.debug(session_config)
+        log.debug("found session config", session=session_config)
     except ConfigLoaderError:
         log.error("No session config found")
         return
@@ -36,8 +36,7 @@ async def invoke(app: PhotonyxApp, command: PreprocessCommand, output: cappa.Out
     # Calibrate each exposure in the session
     for exp in session_config.exposures:
         resolved = hardware_profile.resolve_calibration_masters(exp)
-        log.debug("resolved calibration master:")
-        log.debug(resolved)
+        log.debug("resolved calibration master:", resolved=resolved)
 
         output.output("Calibration Masters found, please confirm:")
         output.output("")
@@ -66,4 +65,4 @@ async def invoke(app: PhotonyxApp, command: PreprocessCommand, output: cappa.Out
                 )
                 output.output("Done")
             except CalibrationException as e:
-                log.error(e)
+                log.error("error processing raw_folder: %s", exp.raw_folder, error=e)

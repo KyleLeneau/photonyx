@@ -18,9 +18,12 @@ px = "photonyx_cli.main:main"
 dev = [
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",
-    "ruff>=0.12.4",
-    "ty>=0.0.1a15",
+    "ruff>=0.14.7",
+    "ty>=0.0.1a30",
 ]
+
+[tool.setuptools]
+packages = []
 
 [tool.uv]
 package = true
@@ -35,7 +38,10 @@ members = [
 [tool.ruff]
 # Allow lines to be as long as 120.
 line-length = 120
-extend-exclude = ["**/generated/*"]
+extend-exclude = [
+    "**/generated/*",
+    "**/photonyx.engine/tests/*"
+]
 
 [tool.uv.sources]
 photonyx-cli = { workspace = true }

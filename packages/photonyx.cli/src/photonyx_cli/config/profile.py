@@ -63,8 +63,8 @@ class CalibrationMastersConfig(BaseModel):
     dark: list[CalibrationMasterDark] = []
     flat: list[CalibrationMasterFlat] = []
 
-    def _validate(self, profile_home: pathlib.Path):
-        """Validate that all the master files exist"""
+    def _resolve(self, profile_home: pathlib.Path):
+        """Resolve that all the master files exist"""
         for master in self.flat + self.bias + self.dark:
             file_path = profile_home / master.file
 
@@ -102,10 +102,10 @@ class ProfileConfig(BaseModel):
     def home(self) -> pathlib.Path:
         return self.profile_home.expanduser().resolve()
 
-    def validate(self):
-        """Validate the profile configuration."""
+    def resolve(self):
+        """Resolve the profile configuration."""
         self.profile_home = self.profile_home.expanduser()
-        self.calibration_masters._validate(self.home)
+        self.calibration_masters._resolve(self.home)
 
     def resolve_calibration_masters(self, exposure: ExposureConfig) -> ResolvedCalibrationMasters:
         resolved = ResolvedCalibrationMasters()

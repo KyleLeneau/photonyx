@@ -34,7 +34,7 @@ class ExposureConfig(BaseModel):
     calibration: CalibrationSettings = CalibrationSettings()
 
     @property
-    def pp_folder_name(self) -> pathlib.Path:
+    def pp_folder_name(self) -> str:
         return f"PP_{self.raw_folder.name.removeprefix('RAW_')}"
 
     @property
@@ -47,8 +47,8 @@ class SessionConfig(BaseModel):
 
     exposures: list[ExposureConfig] = []
 
-    def validate(self, folder: pathlib.Path):
-        """Validate that all the exposure configs exist"""
+    def resolve(self, folder: pathlib.Path):
+        """Resolve that all the exposure configs exist"""
         for exp in self.exposures:
             raw_dir = folder / exp.raw_folder
 

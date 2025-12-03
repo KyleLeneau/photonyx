@@ -57,7 +57,7 @@ async def calibrate_raw_light_frames(
         temp = pathlib.Path(tempdir)
         log.info(f"temp dir: {temp}")
 
-        async with SirilCli(directory=tempdir) as siril:
+        async with SirilCli(directory=temp) as siril:
             # Caution: these settings are saved between Siril sessions
             await siril.command(setext(extension))
             await siril.command(set32bits())

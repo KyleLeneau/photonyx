@@ -10,7 +10,7 @@ log = structlog.stdlib.get_logger()
 @cappa.command(name="master-dark", invoke="photonyx_cli.command.master_dark.invoke")
 @dataclass
 class MasterDarkCommand:
-    """Create Calibration Master Dark."""
+    """Create a Master DARK frame for preprocessing LIGHT frames."""
 
     input: t.Annotated[pathlib.Path, cappa.Arg(help="Path to the RAW folder")]
 

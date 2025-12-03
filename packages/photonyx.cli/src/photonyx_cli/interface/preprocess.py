@@ -10,7 +10,7 @@ log = structlog.stdlib.get_logger()
 @cappa.command(name="preprocess", invoke="photonyx_cli.command.preprocess.invoke")
 @dataclass
 class PreprocessCommand:
-    """Start a calibration session for a target."""
+    """Preprocess a set LIGHT frames with their matching BIAS, DARK & FLAT frames."""
 
     folder: t.Annotated[pathlib.Path, cappa.Arg(help="Path to the session folder")]
 

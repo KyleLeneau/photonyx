@@ -21,5 +21,5 @@ async def invoke(app: PhotonyxApp, command: MasterFlatCommand, output: cappa.Out
         )
         output.output(f"Master FLAT created: {master}")
     except Exception as e:
-        log.error(e)
+        log.error(str(e))
         output.error(e)

@@ -19,5 +19,5 @@ async def invoke(app: PhotonyxApp, command: MasterBiasCommand, output: cappa.Out
         )
         output.output(f"Master BIAS created: {master}")
     except Exception as e:
-        log.error(e)
+        log.error(str(e))
         output.error(e)

@@ -33,13 +33,13 @@ class PhotonyxApp(BaseModel):
 
     commands: cappa.Subcommands[
         VersionCommand
+        | MasterBiasCommand
+        | MasterDarkCommand
+        | MasterFlatCommand
         # | LivestackCommand
         | PreprocessCommand
         | StackCommand
         # | ScanCommand
-        | MasterBiasCommand
-        | MasterDarkCommand
-        | MasterFlatCommand
     ]
 
     _global_config: GlobalAppConfig = GlobalAppConfig()

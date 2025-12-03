@@ -28,8 +28,8 @@ class ProjectConfig(BaseModel):
 
     sessions: list[SessionReferenceConfig] = []
 
-    def validate(self, folder: pathlib.Path):
-        """Validate that all the session configs exist"""
+    def resolve(self, folder: pathlib.Path):
+        """Resolve that all the session configs exist"""
         for ses in self.sessions:
             raw_dir = folder / ses.session_folder
 

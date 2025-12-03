@@ -10,7 +10,7 @@ log = structlog.stdlib.get_logger()
 @cappa.command(name="master-flat", invoke="photonyx_cli.command.master_flat.invoke")
 @dataclass
 class MasterFlatCommand:
-    """Create Calibration Master Flat."""
+    """Create a Master FLAT frame for preprocessing LIGHT frames."""
 
     input: t.Annotated[pathlib.Path, cappa.Arg(help="Path to the RAW folder")]
 

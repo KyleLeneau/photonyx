@@ -56,7 +56,7 @@ def find_session_config(folder: pathlib.Path) -> SessionConfig:
     if not config_file.exists():
         raise ConfigLoaderError("Session config file not found")
     config = parse_yaml_file_as(SessionConfig, config_file)
-    config.validate(folder)
+    config.resolve(folder)
     return config
 
 
@@ -68,7 +68,7 @@ def find_hardware_profile(folder: pathlib.Path) -> ProfileConfig:
         config_file = current_path / PROFILE_CONFIG_FILE_NAME
         if config_file.exists():
             config = parse_yaml_file_as(ProfileConfig, config_file)
-            config.validate()
+            config.resolve()
             return config
 
         # TODO: add a stop at global config profile_home_directory

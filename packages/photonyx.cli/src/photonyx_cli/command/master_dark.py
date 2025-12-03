@@ -19,5 +19,5 @@ async def invoke(app: PhotonyxApp, command: MasterDarkCommand, output: cappa.Out
         )
         output.output(f"Master DARK created: {master}")
     except Exception as e:
-        log.error(e)
+        log.error(str(e))
         output.error(e)

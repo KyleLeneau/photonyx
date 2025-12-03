@@ -10,7 +10,7 @@ log = structlog.stdlib.get_logger()
 @cappa.command(name="master-bias", invoke="photonyx_cli.command.master_bias.invoke")
 @dataclass
 class MasterBiasCommand:
-    """Create Calibration Master Bias."""
+    """Create a Master BIAS used for preprocessing LIGHT frames."""
 
     input: t.Annotated[pathlib.Path, cappa.Arg(help="Path to the RAW folder")]
 

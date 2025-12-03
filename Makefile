@@ -21,3 +21,6 @@ check:
 
 format:
 	uv run ruff format
+
+sync-all:
+	uv sync --all-packages --dev
