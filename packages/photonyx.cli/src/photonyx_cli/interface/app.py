@@ -13,6 +13,7 @@ from .master_dark import MasterDarkCommand
 from .master_flat import MasterFlatCommand
 from .stack import StackCommand
 from .version import VersionCommand
+from .inspect import InspectCommand
 
 
 log = structlog.get_logger()
@@ -33,6 +34,7 @@ class PhotonyxApp(BaseModel):
 
     commands: cappa.Subcommands[
         VersionCommand
+        | InspectCommand
         | MasterBiasCommand
         | MasterDarkCommand
         | MasterFlatCommand
