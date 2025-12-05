@@ -15,10 +15,10 @@ class MasterFlatCommand(BaseProfileCommand):
 
     input: t.Annotated[pathlib.Path, cappa.Arg(help="Path to the RAW folder")]
 
-    output: t.Annotated[t.Optional[pathlib.Path], cappa.Arg(help="Path to save master")] = None
-
     # TODO: get this from hardware profile that matches closest to the date of the flat
-    bias: t.Annotated[pathlib.Path, cappa.Arg(help="Path to Master BIAS")]
+    bias: t.Annotated[pathlib.Path, cappa.Arg(help="Path to Master BIAS", short=True)]
+
+    output: t.Annotated[t.Optional[pathlib.Path], cappa.Arg(help="Path to save master")] = None
 
     # TODO: make this smart (but ASIAir images don't have filter name in fits header)
     filter: t.Annotated[t.Optional[str], cappa.Arg(help="The name of the filter for the master flat", short=True)] = (
