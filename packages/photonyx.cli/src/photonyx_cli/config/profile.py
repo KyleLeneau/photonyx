@@ -102,6 +102,26 @@ class ProfileConfig(BaseModel):
     def home(self) -> pathlib.Path:
         return self.profile_home.expanduser().resolve()
 
+    @property
+    def bias(self) -> pathlib.Path:
+        return self.home / "BIAS"
+
+    @property
+    def dark(self) -> pathlib.Path:
+        return self.home / "DARK"
+
+    @property
+    def flat(self) -> pathlib.Path:
+        return self.home / "FLAT"
+
+    @property
+    def light(self) -> pathlib.Path:
+        return self.home / "LIGHT"
+
+    @property
+    def projects(self) -> pathlib.Path:
+        return self.home / "PROJECTS"
+
     def resolve(self):
         """Resolve the profile configuration."""
         self.profile_home = self.profile_home.expanduser()

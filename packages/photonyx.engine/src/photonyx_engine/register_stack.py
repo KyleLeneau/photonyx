@@ -95,6 +95,7 @@ def validate_all_paths_exist(path_list: t.List[pathlib.Path]):
     if len(non_existent_paths) > 0:
         raise RegisterStackException(f"Some paths missing {non_existent_paths}")
 
+
 async def _move_converted_files(output_folder: pathlib.Path, conversion: ConversionFile, prefix: str) -> None:
     log.info(f"Moving converted files to {output_folder}")
     for entry in conversion.entries:

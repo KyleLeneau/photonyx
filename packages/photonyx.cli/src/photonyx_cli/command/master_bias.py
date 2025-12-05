@@ -11,6 +11,10 @@ log = structlog.stdlib.get_logger()
 
 
 async def invoke(app: PhotonyxApp, command: MasterBiasCommand, output: cappa.Output):
+    if command.output is None:
+        output.error("output folder must be specified")
+        return
+
     try:
         master = await create_calibration_master_bias(
             raw_folder=command.input.resolve(),

@@ -8,7 +8,8 @@ from rich.table import Table
 from ..interface.app import PhotonyxApp
 from ..interface.inspect import InspectCommand
 
-IGNORED_KEYS = ['COMMENT', 'HISTORY']
+IGNORED_KEYS = ["COMMENT", "HISTORY"]
+
 
 async def invoke(app: PhotonyxApp, command: InspectCommand, output: cappa.Output):
     # Ensure file exists else error
@@ -39,7 +40,7 @@ async def invoke(app: PhotonyxApp, command: InspectCommand, output: cappa.Output
         data_max = data.max()
 
         # If you want to see the equivalent ADU values for reference
-        full_well = hdr.get('MAXADU') or hdr.get('SATLEVEL') or 65535
+        full_well = hdr.get("MAXADU") or hdr.get("SATLEVEL") or 65535
 
         stats_table.add_row("full well ADU", None, str(full_well), None)
         stats_table.add_row("mean", f"{mean:.4f}", f"{mean * full_well:.0f}", f"{mean * 100:.2f}%")

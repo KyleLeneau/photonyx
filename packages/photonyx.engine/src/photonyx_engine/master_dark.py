@@ -30,7 +30,7 @@ async def create_calibration_master_dark(
     raw_files = all_fits_files(raw_folder)
     if not raw_files or len(raw_files) == 0:
         raise CalibrationMasterDarkException("raw_folder contains no files")
-    
+
     # Check if output folder exists else make it
     if not output_folder.exists():
         raise CalibrationMasterDarkException("output_folder should be created ahead of time")

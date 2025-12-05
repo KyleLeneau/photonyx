@@ -24,7 +24,7 @@ async def create_calibration_master_bias(
     # Check if input folder exists
     if not raw_folder.exists():
         raise CalibrationMasterBiasException("raw_folder is missing")
-    
+
     # Check to make sure the folder has files to work with
     raw_files = all_fits_files(raw_folder)
     if not raw_files or len(raw_files) == 0:

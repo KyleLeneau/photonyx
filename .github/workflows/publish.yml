@@ -1,37 +1,37 @@
-# name: Publish on Latest Release
+name: Publish on Latest Release
 
-# on:
-#   release:
-#     types: [published]
-#   workflow_dispatch:
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
 
-# jobs:
-#   publish:
-#     if: |
-#       github.event.release.draft == false &&
-#       github.event.release.prerelease == false
-#     runs-on: ubuntu-latest
+jobs:
+  publish:
+    if: |
+      github.event.release.draft == false &&
+      github.event.release.prerelease == false
+    runs-on: ubuntu-latest
 
-#     steps:
-#       - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-#       - name: Install uv
-#         uses: astral-sh/setup-uv@v6
-#         with:
-#           enable-cache: true
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
-#       - name: "Set up Python"
-#         uses: actions/setup-python@v5
-#         with:
-#           python-version-file: ".python-version"
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
 
-#       - name: Install the project
-#         run: uv sync --locked --all-extras --dev
+      - name: Install the project
+        run: uv sync --locked --all-extras --dev
 
-#       - name: Build package
-#         run: make build
+      - name: Build package
+        run: make build
 
-#       - name: Publish to PyPI
-#         run: make publish
-#         env:
-#           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+      # - name: Publish to PyPI
+      #   run: make publish
+      #   env:
+      #     UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
