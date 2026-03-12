@@ -1,0 +1,19 @@
+[workspace]
+members = ["xtask/", "lib/*", "crates/*"]
+resolver = "2"
+
+[workspace.package]
+rust-version = "1.91"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+authors = ["photonyx team"]
+repository = "https://github.com/KyleLeneau/photonyx"
+
+[workspace.dependencies]
+# local crates
+
+[workspace.lints.rust]
+# 
+
+[workspace.lints.clippy]
+# 

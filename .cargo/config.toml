@@ -1,0 +1,7 @@
+[alias]
+xtask = "run --package xtask --bin xtask --"
+lint = "clippy --all-targets -- --cap-lints warn"
+px = "run --package photonyx --bin photonyx --"
+
+[env]
+CARGO_WORKSPACE_DIR = { value = "", relative = true }
