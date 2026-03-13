@@ -12,6 +12,10 @@ repository = "https://github.com/KyleLeneau/photonyx"
 [workspace.dependencies]
 # local crates
 
+# external crates
+anyhow = "1.0.102"
+xshell = "0.2.7"
+
 [workspace.lints.rust]
 # 
 

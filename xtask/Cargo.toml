@@ -4,3 +4,6 @@ version = "0.0.0"
 edition = "2024"
 
 [dependencies]
+anyhow.workspace = true
+xflags = "0.3.2"
+xshell.workspace = true
