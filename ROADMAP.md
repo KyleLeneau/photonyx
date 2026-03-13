@@ -12,6 +12,10 @@
 * [ ] siril-sys
 * [ ] siril-commands
 * [ ] xtask to generate siril-commands
+* [ ] logging / tracing crate and setup
+* [ ] clap to photonyx cli front end for testing more things
+* [ ] fits crate to wrap some other fits library (cfitsio?)
+* [ ] 
 
 
 ### Future

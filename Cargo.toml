@@ -11,10 +11,14 @@ repository = "https://github.com/KyleLeneau/photonyx"
 
 [workspace.dependencies]
 # local crates
+siril-sys = { path = "./crates/siril-sys", version = "0.0.0" }
+siril-commands = { path = "./crates/siril-commands", version = "0.0.0" }
 
 # external crates
 anyhow = "1.0.102"
 xshell = "0.2.7"
+tokio = { version = "1", features = ["full"] }
+nix = { version = "0.29", features = ["fs"] }
 
 [workspace.lints.rust]
 # 
