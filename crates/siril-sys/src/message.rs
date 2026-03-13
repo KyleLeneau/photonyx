@@ -1,3 +1,5 @@
+use thiserror::Error;
+
 #[derive(Debug, Clone)]
 pub enum SirilMessage {
     Ready,
@@ -52,33 +54,20 @@ impl SirilMessage {
 // SirilError
 // ---------------------------------------------------------------------------
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum SirilError {
+    #[error("Siril command '{command}' failed: {logs:?}")]
     CommandFailed { command: String, logs: Vec<String> },
-    Io(std::io::Error),
+    
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+    
+    #[error("Siril process exited unexpectedly")]
     ProcessExited,
+    
+    #[error("Timed out waiting for Siril")]
     Timeout,
+
+    #[error("Pipe setup error: {0}")]
     PipeSetup(String),
 }
-
-impl From<std::io::Error> for SirilError {
-    fn from(e: std::io::Error) -> Self {
-        Self::Io(e)
-    }
-}
-
-impl std::fmt::Display for SirilError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::CommandFailed { command, logs } => {
-                write!(f, "Siril command '{}' failed: {}", command, logs.join("\n"))
-            }
-            Self::Io(e) => write!(f, "I/O error: {}", e),
-            Self::ProcessExited => write!(f, "Siril process exited unexpectedly"),
-            Self::Timeout => write!(f, "Timed out waiting for Siril"),
-            Self::PipeSetup(msg) => write!(f, "Pipe setup error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for SirilError {}
