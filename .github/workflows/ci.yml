@@ -19,7 +19,7 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable 
-          cache-subkey: "photonyx-rust-cache"
+          cache-key: "photonyx-rust-cache"
           
       - name: Build
         run: cargo build --verbose
