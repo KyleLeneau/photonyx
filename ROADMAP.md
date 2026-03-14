@@ -11,10 +11,11 @@
 * [x] Agents/Claude init
 * [x] logging / tracing crate and setup
 * [x] clap to photonyx cli front end for testing more things
-* [ ] siril-sys
+* [x] siril-sys
 * [ ] siril-commands
 * [ ] xtask to generate siril-commands
 * [ ] fits crate to wrap some other fits library (cfitsio?)
+* [ ] Windows support & check / info command for siril testing
 * [ ] 
 
 

@@ -43,6 +43,7 @@ tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
+tempfile = "3"
 
 [workspace.lints.rust]
 # 

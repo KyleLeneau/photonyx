@@ -58,16 +58,19 @@ impl SirilMessage {
 pub enum SirilError {
     #[error("Siril command '{command}' failed: {logs:?}")]
     CommandFailed { command: String, logs: Vec<String> },
-    
+
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Siril process exited unexpectedly")]
     ProcessExited,
-    
+
     #[error("Timed out waiting for Siril")]
     Timeout,
 
     #[error("Pipe setup error: {0}")]
     PipeSetup(String),
+
+    #[error("Siril CLI executable not found, please install it first")]
+    NotInstalled,
 }

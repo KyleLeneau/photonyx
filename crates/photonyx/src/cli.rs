@@ -1,5 +1,5 @@
-use clap::{Parser, Subcommand, ValueEnum};
 use clap::builder::styling::{AnsiColor, Styles};
+use clap::{Parser, Subcommand, ValueEnum};
 
 const STYLES: Styles = Styles::styled()
     .header(AnsiColor::Green.on_default().bold())
@@ -18,7 +18,6 @@ pub struct Cli {
     // /// Path to configuration file
     // #[arg(short, long, default_value = "config.yaml", env = "CONFIG_PATH")]
     // pub config: PathBuf,
-
     /// Log format
     #[arg(short, long, default_value = "pretty", env = "RUST_LOG_FORMAT")]
     pub log_format: LogFormat,

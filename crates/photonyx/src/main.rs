@@ -2,14 +2,15 @@ mod cli;
 
 use clap::Parser;
 use siril_sys::Siril;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::cli::{Cli, LogFormat};
 
 fn init_logging(cli: &Cli) {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         let level = match cli.verbose {
-            0 => "info,floor_cam_rs=debug",
+            0 => "info,siril_sys=debug",
             1 => "debug",
             _ => "trace",
         };
@@ -63,6 +64,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::info!("stat: {:?}", line);
     }
 
+    // TODO: Need a better way? to wait for enter key to continue so can check temp directories
+    block_till_input();
+
     siril.close().await?;
     // Siril also cleans up when dropped
 
@@ -72,4 +76,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // }
 
     Ok(())
+}
+
+fn block_till_input() {
+    use std::io::{self, BufRead};
+
+    let stdin = io::stdin();
+    stdin.lock().lines().next();
 }
