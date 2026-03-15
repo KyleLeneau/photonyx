@@ -8,16 +8,14 @@ use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-use crate::FitsExt;
 use crate::message::{SirilError, SirilMessage};
+use crate::{FitsExt, SirilSetting};
 
 // TODO: Need a working directory to startup in, make it a tmpfs
 
 // TODO: need to be sure to support windows pipes
 
 // TODO: logs from siril should not go to stdout by default (will want for sse streaming)
-
-// FUTURE: Add a Siril setting enum with string backing and associate types (codegen??)
 
 /// Find the right siril-cli across the system
 ///
@@ -263,7 +261,7 @@ impl Siril {
     }
 
     /// Call some helper commands on siril if the user provided a builder to us
-    ///  
+    ///
     async fn configure<'a>(&mut self, builder: Builder<'a>) -> Result<(), SirilError> {
         self.command("requires 0.99.10").await?;
         if let Some(cores) = builder.cpu_limit {
@@ -272,18 +270,18 @@ impl Siril {
 
         match builder.memory_limit {
             MemoryLimit::FixedGB(gb) => {
-                self.command("set core.mem_mode=1").await?;
-                self.command(&format!("set core.mem_amount={}", gb)).await?;
+                self.set(SirilSetting::MemoryMode, "1").await?;
+                self.set(SirilSetting::MemoryAmount, gb).await?;
             }
             MemoryLimit::Ratio(percent) => {
-                self.command("set core.mem_mode=0").await?;
-                self.command(&format!("set core.mem_ratio={:.2}", percent))
+                self.set(SirilSetting::MemoryMode, "0").await?;
+                self.set(SirilSetting::MemoryRatio, &format!("{:.2}", percent))
                     .await?;
             }
         }
 
         self.command("capabilities").await?;
-        self.command(&format!("set core.extension={}", builder.fits_extension))
+        self.set(SirilSetting::Extension, builder.fits_extension)
             .await?;
 
         Ok(())
@@ -355,6 +353,17 @@ impl Siril {
         let _ = std::fs::remove_file(&self.in_pipe_path);
         let _ = std::fs::remove_file(&self.out_pipe_path);
 
+        Ok(())
+    }
+
+    /// Sets a Siril setting by key and value (`set {key}={value}`)
+    ///
+    pub async fn set(
+        &mut self,
+        setting: SirilSetting,
+        value: impl std::fmt::Display,
+    ) -> Result<(), SirilError> {
+        self.command(&format!("set {}={}", setting, value)).await?;
         Ok(())
     }
 }
