@@ -11,8 +11,6 @@ use tokio::task::JoinHandle;
 use crate::message::{SirilError, SirilMessage};
 use crate::{FitsExt, SirilSetting};
 
-// TODO: Need a working directory to startup in, make it a tmpfs
-
 // TODO: need to be sure to support windows pipes
 
 // TODO: logs from siril should not go to stdout by default (will want for sse streaming)
@@ -126,7 +124,7 @@ pub struct Siril {
     stderr_task: JoinHandle<()>,
     in_pipe_path: PathBuf,
     out_pipe_path: PathBuf,
-    _temp_dir: Option<TempDir>,
+    _temp_dir: TempDir,
 }
 
 impl Siril {
@@ -137,12 +135,13 @@ impl Siril {
         let siril_exe = find_siril_cli("siril-cli")?;
         tracing::debug!("siril-cli found {:?}", &siril_exe);
 
-        // TODO: AAA Cleanup this now that the builder exists for us to decide where to start (can we drop the lifetime?)
-
-        // Create temp directory to work in
+        // Always create temp directory to work in but start in builder supplied
         let temp_dir = TempDir::with_prefix("photonyx-")?;
-        let uses_temp_dir = true;
-        let dir = temp_dir.path();
+        let dir = if let Some(startup_dir) = builder.directory {
+            startup_dir
+        } else {
+            temp_dir.path()
+        };
         tracing::debug!("starting in directory: {:?}", dir);
 
         // 1. Generate unique pipe paths
@@ -240,7 +239,7 @@ impl Siril {
             stderr_task,
             in_pipe_path,
             out_pipe_path,
-            _temp_dir: if uses_temp_dir { Some(temp_dir) } else { None },
+            _temp_dir: temp_dir,
         };
 
         loop {
