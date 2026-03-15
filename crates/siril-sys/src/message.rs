@@ -73,4 +73,7 @@ pub enum SirilError {
 
     #[error("Siril CLI executable not found, please install it first")]
     NotInstalled,
+
+    #[error("Invalid configuration: {0}")]
+    InvalidConfig(String),
 }

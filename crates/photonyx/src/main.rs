@@ -1,11 +1,12 @@
 mod cli;
+mod commands;
 
 use clap::Parser;
-use siril_sys::Siril;
 
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::cli::{Cli, LogFormat};
+use crate::cli::{Cli, Commands, LogFormat};
+use crate::commands::{siril_test, stat};
 
 fn init_logging(cli: &Cli) {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
@@ -53,34 +54,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let file = "'/Users/kyle/Pictures/Astro/FRA300_6200mc_pro/LIGHT/NGC 2244/2026-02-02/RAW_O_300.00s/2026-02-02_22-49-25_O_-9.90c_100g_30o_300.00s_d_1x1_0720.fits'";
 
-    // Startup and wait till process is ready for additional commands
-    let mut siril = Siril::new().await?;
-    siril.command("requires 0.99.10").await?;
-    siril.command("set core.mem_ratio=0.9").await?;
-    siril.command(&format!("load {}", file)).await?;
-
-    let stat_output = siril.command("stat").await;
-    for line in &stat_output.unwrap() {
-        tracing::info!("stat: {:?}", line);
+    match cli.command {
+        Commands::Check => stat(file).await?,
+        Commands::SirilTest => siril_test().await?,
     }
 
-    // TODO: Need a better way? to wait for enter key to continue so can check temp directories
-    block_till_input();
-
-    siril.close().await?;
-    // Siril also cleans up when dropped
-
-    // match cli.command {
-    //     Commands::Serve => serve(&cli).await,
-    //     Commands::Check => check(&cli),
-    // }
-
     Ok(())
-}
-
-fn block_till_input() {
-    use std::io::{self, BufRead};
-
-    let stdin = io::stdin();
-    stdin.lock().lines().next();
 }

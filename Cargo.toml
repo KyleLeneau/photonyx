@@ -45,6 +45,10 @@ tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 chrono = { version = "0.4", features = ["serde"] }
 tempfile = "3"
 
+# String backed emums + macros
+strum = "0.28"
+strum_macros = "0.28"
+
 [workspace.lints.rust]
 # 
 

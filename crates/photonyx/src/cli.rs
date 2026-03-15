@@ -34,6 +34,9 @@ pub struct Cli {
 pub enum Commands {
     /// Validate the configuration file and exit
     Check,
+
+    /// Test if siril is installed and working
+    SirilTest,
 }
 
 #[derive(ValueEnum, Clone, Debug)]

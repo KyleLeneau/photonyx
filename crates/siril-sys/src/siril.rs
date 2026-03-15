@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use tempfile::TempDir;
@@ -8,6 +8,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
+use crate::FitsExt;
 use crate::message::{SirilError, SirilMessage};
 
 // TODO: Need a working directory to startup in, make it a tmpfs
@@ -15,6 +16,8 @@ use crate::message::{SirilError, SirilMessage};
 // TODO: need to be sure to support windows pipes
 
 // TODO: logs from siril should not go to stdout by default (will want for sse streaming)
+
+// FUTURE: Add a Siril setting enum with string backing and associate types (codegen??)
 
 /// Find the right siril-cli across the system
 ///
@@ -45,6 +48,77 @@ pub fn find_siril_cli(exe: &str) -> Result<PathBuf, SirilError> {
         .ok_or(SirilError::NotInstalled)
 }
 
+enum MemoryLimit {
+    /// Fixed memory limit in Gigabytes
+    FixedGB(u8),
+
+    /// Percent of available memory (0.0 to 1.0)
+    Ratio(f64),
+}
+
+pub struct Builder<'a> {
+    /// Directory to start up in, if None then uses a tempdir
+    directory: Option<&'a Path>,
+
+    /// How much CPU to use (in number of cores, default is all)
+    cpu_limit: Option<u8>,
+
+    /// How much memory to use (in GB, default is 90% of available memory)
+    memory_limit: MemoryLimit,
+
+    /// Default fit extension to use (default: fits)
+    fits_extension: FitsExt,
+}
+
+impl Default for Builder<'_> {
+    fn default() -> Self {
+        Self {
+            directory: None, // temp dir
+            cpu_limit: None, // all cpu's
+            memory_limit: MemoryLimit::Ratio(0.9),
+            fits_extension: FitsExt::FITS,
+        }
+    }
+}
+
+impl<'a> Builder<'a> {
+    pub fn use_cpu_limit(mut self, cores: u8) -> Self {
+        self.cpu_limit = Some(cores);
+        self
+    }
+
+    pub fn use_memory_ratio(mut self, limit: f64) -> Self {
+        self.memory_limit = MemoryLimit::Ratio(limit);
+        self
+    }
+
+    pub fn use_memory_fixed_gb(mut self, limit: u8) -> Self {
+        self.memory_limit = MemoryLimit::FixedGB(limit);
+        self
+    }
+
+    pub fn use_directory(mut self, directory: &'a Path) -> Self {
+        self.directory = Some(directory);
+        self
+    }
+
+    pub fn use_extension(mut self, ext: FitsExt) -> Self {
+        self.fits_extension = ext;
+        self
+    }
+
+    pub async fn build(self) -> Result<Siril, SirilError> {
+        if let MemoryLimit::Ratio(r) = self.memory_limit
+            && !(0.0..=1.0).contains(&r)
+        {
+            return Err(SirilError::InvalidConfig(format!(
+                "memory ratio must be between 0.0 and 1.0, got {r}"
+            )));
+        }
+        Siril::new(self).await
+    }
+}
+
 pub struct Siril {
     child: Child,
     pipe_writer: pipe::Sender,
@@ -58,16 +132,15 @@ pub struct Siril {
 }
 
 impl Siril {
-    // TODO: allow directory to be passed in otherwise null and use tempdir
-
     /// Spawn a new siril-cli process in pipe mode and wait until it is ready.
     ///
-    pub async fn new() -> Result<Self, SirilError> {
+    async fn new<'a>(builder: Builder<'a>) -> Result<Self, SirilError> {
         // Find the right siril-cli for the system
         let siril_exe = find_siril_cli("siril-cli")?;
         tracing::debug!("siril-cli found {:?}", &siril_exe);
 
-        // TODO: Cleanup once introduce directory in init
+        // TODO: AAA Cleanup this now that the builder exists for us to decide where to start (can we drop the lifetime?)
+
         // Create temp directory to work in
         let temp_dir = TempDir::with_prefix("photonyx-")?;
         let uses_temp_dir = true;
@@ -183,9 +256,37 @@ impl Siril {
             }
         }
 
-        // TODO: impelement resources type for common startup and apply here with a command
+        // Use the builder to startup once ready
+        siril.configure(builder).await?;
 
         Ok(siril)
+    }
+
+    /// Call some helper commands on siril if the user provided a builder to us
+    ///  
+    async fn configure<'a>(&mut self, builder: Builder<'a>) -> Result<(), SirilError> {
+        self.command("requires 0.99.10").await?;
+        if let Some(cores) = builder.cpu_limit {
+            self.command(&format!("setcpu {}", cores)).await?;
+        }
+
+        match builder.memory_limit {
+            MemoryLimit::FixedGB(gb) => {
+                self.command("set core.mem_mode=1").await?;
+                self.command(&format!("set core.mem_amount={}", gb)).await?;
+            }
+            MemoryLimit::Ratio(percent) => {
+                self.command("set core.mem_mode=0").await?;
+                self.command(&format!("set core.mem_ratio={:.2}", percent))
+                    .await?;
+            }
+        }
+
+        self.command("capabilities").await?;
+        self.command(&format!("set core.extension={}", builder.fits_extension))
+            .await?;
+
+        Ok(())
     }
 
     /// Send a command and wait for it to complete.
