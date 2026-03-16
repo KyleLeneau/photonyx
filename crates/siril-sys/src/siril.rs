@@ -142,8 +142,8 @@ impl<'a> Builder<'a> {
         );
         #[cfg(windows)]
         let (in_pipe_path, out_pipe_path): (PathBuf, PathBuf) = (
-            PathBuf::from(format!(r"\\.\pipe\siril_command.in")),
-            PathBuf::from(format!(r"\\.\pipe\siril_command.out")),
+            PathBuf::from(r"\\.\pipe\siril_command.in"),
+            PathBuf::from(r"\\.\pipe\siril_command.out"),
         );
 
         (in_pipe_path, out_pipe_path)
