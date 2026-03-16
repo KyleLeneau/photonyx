@@ -3,6 +3,7 @@ use std::process::Stdio;
 
 use tempfile::TempDir;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+#[cfg(unix)]
 use tokio::net::unix::pipe;
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
@@ -11,9 +12,11 @@ use tokio::task::JoinHandle;
 use crate::message::{SirilError, SirilMessage};
 use crate::{FitsExt, SirilSetting};
 
-// TODO: need to be sure to support windows pipes
-
-// TODO: logs from siril should not go to stdout by default (will want for sse streaming)
+/// Unix FIFOs use `pipe::Sender`; Windows named pipes use `NamedPipeServer`.
+#[cfg(unix)]
+type PipeWriter = pipe::Sender;
+#[cfg(windows)]
+type PipeWriter = tokio::net::windows::named_pipe::NamedPipeServer;
 
 /// Find the right siril-cli across the system
 ///
@@ -117,7 +120,7 @@ impl<'a> Builder<'a> {
 
 pub struct Siril {
     child: Child,
-    pipe_writer: pipe::Sender,
+    pipe_writer: PipeWriter,
     msg_rx: mpsc::Receiver<SirilMessage>,
     reader_task: JoinHandle<()>,
     stdout_task: JoinHandle<()>,
@@ -144,7 +147,7 @@ impl Siril {
         };
         tracing::debug!("starting in directory: {:?}", dir);
 
-        // 1. Generate unique pipe paths
+        // Generate unique pipe identifier
         let id = format!(
             "{}_{}",
             std::process::id(),
@@ -153,17 +156,45 @@ impl Siril {
                 .unwrap()
                 .as_millis()
         );
-        let in_pipe_path = PathBuf::from(format!("/tmp/siril_rs_{}.in", id));
-        let out_pipe_path = PathBuf::from(format!("/tmp/siril_rs_{}.out", id));
 
-        // 2. Create FIFOs
-        use nix::sys::stat::Mode;
-        nix::unistd::mkfifo(&in_pipe_path, Mode::S_IRUSR | Mode::S_IWUSR)
-            .map_err(|e| SirilError::PipeSetup(format!("mkfifo in: {}", e)))?;
-        nix::unistd::mkfifo(&out_pipe_path, Mode::S_IRUSR | Mode::S_IWUSR)
-            .map_err(|e| SirilError::PipeSetup(format!("mkfifo out: {}", e)))?;
+        // Platform-specific pipe paths
+        #[cfg(unix)]
+        let (in_pipe_path, out_pipe_path): (PathBuf, PathBuf) = (
+            PathBuf::from(format!("/tmp/siril_rs_{}.in", id)),
+            PathBuf::from(format!("/tmp/siril_rs_{}.out", id)),
+        );
+        #[cfg(windows)]
+        let (in_pipe_path, out_pipe_path): (PathBuf, PathBuf) = (
+            PathBuf::from(format!(r"\\.\pipe\siril_command.in", id)),
+            PathBuf::from(format!(r"\\.\pipe\siril_command.out", id)),
+        );
 
-        // 3. Spawn siril-cli in pipe mode
+        // Unix: create FIFOs before spawning (Siril opens them after launch)
+        #[cfg(unix)]
+        {
+            use nix::sys::stat::Mode;
+            nix::unistd::mkfifo(&in_pipe_path, Mode::S_IRUSR | Mode::S_IWUSR)
+                .map_err(|e| SirilError::PipeSetup(format!("mkfifo in: {}", e)))?;
+            nix::unistd::mkfifo(&out_pipe_path, Mode::S_IRUSR | Mode::S_IWUSR)
+                .map_err(|e| SirilError::PipeSetup(format!("mkfifo out: {}", e)))?;
+        }
+
+        // Windows: create named pipe servers before spawning (Siril connects as client)
+        #[cfg(windows)]
+        let (mut in_server, mut out_server) = {
+            use tokio::net::windows::named_pipe::ServerOptions;
+            let in_s = ServerOptions::new()
+                .first_pipe_instance(true)
+                .create(&in_pipe_path)
+                .map_err(SirilError::Io)?;
+            let out_s = ServerOptions::new()
+                .first_pipe_instance(true)
+                .create(&out_pipe_path)
+                .map_err(SirilError::Io)?;
+            (in_s, out_s)
+        };
+
+        // Spawn siril-cli in pipe mode
         let mut child = Command::new(&siril_exe)
             .arg("-d")
             .arg(dir)
@@ -177,7 +208,7 @@ impl Siril {
             .spawn()
             .map_err(SirilError::Io)?;
 
-        // 4. Spawn stdout/stderr logging tasks
+        // Spawn stdout/stderr logging tasks
         let stdout = child.stdout.take().expect("stdout not captured");
         let stderr = child.stderr.take().expect("stderr not captured");
 
@@ -195,41 +226,68 @@ impl Siril {
             }
         });
 
-        // 5. Open the output pipe (our read end) FIRST.
-        //    On macOS, open_receiver on a FIFO always succeeds immediately.
-        let out_pipe_reader = pipe::OpenOptions::new().open_receiver(&out_pipe_path)?;
-
-        // 6. Retry open_sender — macOS returns ENXIO until Siril opens
-        //    its read end of the input pipe.
-        let in_pipe_writer = loop {
-            match pipe::OpenOptions::new().open_sender(&in_pipe_path) {
-                Ok(sender) => break sender,
-                Err(e) if e.raw_os_error() == Some(nix::libc::ENXIO) => {
-                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                }
-                Err(e) => return Err(SirilError::Io(e)),
-            }
-        };
-
-        // 7. Background reader: parse pipe-protocol lines → mpsc channel
         let (msg_tx, msg_rx) = mpsc::channel::<SirilMessage>(256);
 
-        let reader_task = tokio::spawn(async move {
-            let mut reader = BufReader::new(out_pipe_reader).lines();
-            while let Ok(Some(line)) = reader.next_line().await {
-                let msg = SirilMessage::parse(&line);
-                match &msg {
-                    SirilMessage::Log(text) => println!("[siril] {}", text),
-                    SirilMessage::Progress(pct) => println!("[siril] progress: {}%", pct),
-                    other => println!("[siril] {:?}", other),
-                }
-                if msg_tx.send(msg).await.is_err() {
-                    break; // receiver dropped
-                }
-            }
-        });
+        // Unix: open_receiver on the output FIFO first, then retry open_sender
+        // until Siril opens its read end of the input FIFO.
+        #[cfg(unix)]
+        let (in_pipe_writer, reader_task) = {
+            let out_pipe_reader = pipe::OpenOptions::new().open_receiver(&out_pipe_path)?;
 
-        // 8. Wait for the "ready" message
+            let in_pipe_writer = loop {
+                match pipe::OpenOptions::new().open_sender(&in_pipe_path) {
+                    Ok(sender) => break sender,
+                    Err(e) if e.raw_os_error() == Some(nix::libc::ENXIO) => {
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    }
+                    Err(e) => return Err(SirilError::Io(e)),
+                }
+            };
+
+            let reader_task = tokio::spawn(async move {
+                let mut reader = BufReader::new(out_pipe_reader).lines();
+                while let Ok(Some(line)) = reader.next_line().await {
+                    let msg = SirilMessage::parse(&line);
+                    match &msg {
+                        SirilMessage::Log(text) => println!("[siril] {}", text),
+                        SirilMessage::Progress(pct) => println!("[siril] progress: {}%", pct),
+                        other => println!("[siril] {:?}", other),
+                    }
+                    if msg_tx.send(msg).await.is_err() {
+                        break; // receiver dropped
+                    }
+                }
+            });
+
+            (in_pipe_writer, reader_task)
+        };
+
+        // Windows: wait for Siril to connect to both named pipe servers.
+        // in_server — we write commands; out_server — we read responses.
+        #[cfg(windows)]
+        let (in_pipe_writer, reader_task) = {
+            in_server.connect().await.map_err(SirilError::Io)?;
+            out_server.connect().await.map_err(SirilError::Io)?;
+
+            let reader_task = tokio::spawn(async move {
+                let mut reader = BufReader::new(out_server).lines();
+                while let Ok(Some(line)) = reader.next_line().await {
+                    let msg = SirilMessage::parse(&line);
+                    match &msg {
+                        SirilMessage::Log(text) => println!("[siril] {}", text),
+                        SirilMessage::Progress(pct) => println!("[siril] progress: {}%", pct),
+                        other => println!("[siril] {:?}", other),
+                    }
+                    if msg_tx.send(msg).await.is_err() {
+                        break; // receiver dropped
+                    }
+                }
+            });
+
+            (in_server, reader_task)
+        };
+
+        // Wait for the "ready" message
         let mut siril = Self {
             child,
             pipe_writer: in_pipe_writer,
@@ -349,8 +407,11 @@ impl Siril {
         self.stdout_task.abort();
         self.stderr_task.abort();
 
-        let _ = std::fs::remove_file(&self.in_pipe_path);
-        let _ = std::fs::remove_file(&self.out_pipe_path);
+        #[cfg(unix)]
+        {
+            let _ = std::fs::remove_file(&self.in_pipe_path);
+            let _ = std::fs::remove_file(&self.out_pipe_path);
+        }
 
         Ok(())
     }
@@ -373,7 +434,10 @@ impl Drop for Siril {
         self.stdout_task.abort();
         self.stderr_task.abort();
         let _ = self.child.start_kill();
-        let _ = std::fs::remove_file(&self.in_pipe_path);
-        let _ = std::fs::remove_file(&self.out_pipe_path);
+        #[cfg(unix)]
+        {
+            let _ = std::fs::remove_file(&self.in_pipe_path);
+            let _ = std::fs::remove_file(&self.out_pipe_path);
+        }
     }
 }

@@ -9,12 +9,14 @@ repository.workspace = true
 
 [dependencies]
 tokio.workspace = true
-nix.workspace = true
 strum.workspace = true
 strum_macros.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
 tempfile.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+nix.workspace = true
 
 [lints]
 workspace = true
