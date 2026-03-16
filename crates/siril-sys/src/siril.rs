@@ -168,8 +168,8 @@ pub struct Siril {
     reader_task: JoinHandle<()>,
     stdout_task: JoinHandle<()>,
     stderr_task: JoinHandle<()>,
-    in_pipe_path: PathBuf,
-    out_pipe_path: PathBuf,
+    #[allow(unused)] in_pipe_path: PathBuf,
+    #[allow(unused)] out_pipe_path: PathBuf,
     _temp_dir: TempDir,
 }
 
