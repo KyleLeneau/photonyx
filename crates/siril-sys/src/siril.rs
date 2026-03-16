@@ -257,35 +257,31 @@ impl Siril {
             const ERROR_FILE_NOT_FOUND: i32 = 2;
             const ERROR_PIPE_BUSY: i32 = 231;
 
-            let in_pipe_writer = loop {
-                match ClientOptions::new().open(&in_pipe_path) {
-                    Ok(client) => break client,
-                    Err(e)
-                        if matches!(
-                            e.raw_os_error(),
-                            Some(ERROR_FILE_NOT_FOUND) | Some(ERROR_PIPE_BUSY)
-                        ) =>
-                    {
-                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            // Siril creates both pipes in an unspecified order and blocks waiting
+            // for a client on each. Connect to both concurrently to avoid deadlock.
+            let connect = |path: PathBuf| async move {
+                loop {
+                    match ClientOptions::new().open(&path) {
+                        Ok(client) => return Ok::<_, SirilError>(client),
+                        Err(e)
+                            if matches!(
+                                e.raw_os_error(),
+                                Some(ERROR_FILE_NOT_FOUND) | Some(ERROR_PIPE_BUSY)
+                            ) =>
+                        {
+                            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                        }
+                        Err(e) => return Err(SirilError::Io(e)),
                     }
-                    Err(e) => return Err(SirilError::Io(e)),
                 }
             };
 
-            let out_pipe_reader = loop {
-                match ClientOptions::new().open(&out_pipe_path) {
-                    Ok(client) => break client,
-                    Err(e)
-                        if matches!(
-                            e.raw_os_error(),
-                            Some(ERROR_FILE_NOT_FOUND) | Some(ERROR_PIPE_BUSY)
-                        ) =>
-                    {
-                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    }
-                    Err(e) => return Err(SirilError::Io(e)),
-                }
-            };
+            let (in_result, out_result) = tokio::join!(
+                connect(in_pipe_path.clone()),
+                connect(out_pipe_path.clone()),
+            );
+            let in_pipe_writer = in_result?;
+            let out_pipe_reader = out_result?;
 
             let reader_task = tokio::spawn(async move {
                 let mut reader = BufReader::new(out_pipe_reader).lines();
