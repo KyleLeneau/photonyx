@@ -46,6 +46,23 @@ pub fn find_siril_cli(exe: &str) -> Result<PathBuf, SirilError> {
         .ok_or(SirilError::NotInstalled)
 }
 
+/// Retry `open` until it succeeds, sleeping 50 ms between attempts on any
+/// OS error code listed in `retryable`. Any other error is returned immediately.
+async fn connect_with_retry<T>(
+    mut open: impl FnMut() -> std::io::Result<T>,
+    retryable: &[i32],
+) -> Result<T, SirilError> {
+    loop {
+        match open() {
+            Ok(v) => return Ok(v),
+            Err(e) if retryable.contains(&e.raw_os_error().unwrap_or(-1)) => {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+            Err(e) => return Err(SirilError::Io(e)),
+        }
+    }
+}
+
 enum MemoryLimit {
     /// Fixed memory limit in Gigabytes
     FixedGB(u8),
@@ -210,125 +227,70 @@ impl Siril {
 
         let (msg_tx, msg_rx) = mpsc::channel::<SirilMessage>(256);
 
-        // Unix: open_receiver on the output FIFO first, then retry open_sender
-        // until Siril opens its read end of the input FIFO.
+        // Siril creates and opens the specified pipes, we retry till connected
         #[cfg(unix)]
-        let (in_pipe_writer, reader_task) = {
+        let (in_pipe_writer, out_pipe_reader) = {
             use tokio::net::unix::pipe::OpenOptions;
 
-            let out_pipe_reader = loop {
-                match OpenOptions::new()
-                    .unchecked(true)
-                    .open_receiver(&out_pipe_path)
-                {
-                    Ok(reciever) => break reciever,
-                    Err(e)
-                        if matches!(e.raw_os_error(), Some(libc::ENXIO) | Some(libc::ENOENT)) =>
-                    {
-                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    }
-                    Err(e) => return Err(SirilError::Io(e)),
-                }
-            };
+            // unchecked
+            let out_pipe_reader = connect_with_retry(
+                || OpenOptions::new().unchecked(true).open_receiver(&out_pipe_path),
+                &[libc::ENXIO, libc::ENOENT],
+            )
+            .await?;
+            tracing::debug!("connected to out pipe (siril_command.out)");
 
-            let in_pipe_writer = loop {
-                match OpenOptions::new().open_sender(&in_pipe_path) {
-                    Ok(sender) => break sender,
-                    Err(e) if e.raw_os_error() == Some(libc::ENXIO) => {
-                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    }
-                    Err(e) => return Err(SirilError::Io(e)),
-                }
-            };
+            let in_pipe_writer = connect_with_retry(
+                || OpenOptions::new().open_sender(&in_pipe_path),
+                &[libc::ENXIO],
+            )
+            .await?;
+            tracing::debug!("connected to in pipe (siril_command.in)");
 
-            let reader_task = tokio::spawn(async move {
-                let mut reader = BufReader::new(out_pipe_reader).lines();
-                while let Ok(Some(line)) = reader.next_line().await {
-                    let msg = SirilMessage::parse(&line);
-                    match &msg {
-                        SirilMessage::Log(text) => println!("[siril] {}", text),
-                        SirilMessage::Progress(pct) => println!("[siril] progress: {}%", pct),
-                        other => println!("[siril] {:?}", other),
-                    }
-                    if msg_tx.send(msg).await.is_err() {
-                        break; // receiver dropped
-                    }
-                }
-            });
-
-            (in_pipe_writer, reader_task)
+            (in_pipe_writer, out_pipe_reader)
         };
-
-        // Windows: Siril creates the named pipe servers; we connect as clients.
-        // Retry on ERROR_FILE_NOT_FOUND (2) until Siril has created the pipes,
-        // and on ERROR_PIPE_BUSY (231) if all instances are temporarily in use.
         #[cfg(windows)]
-        let (in_pipe_writer, reader_task) = {
-            use tokio::net::windows::named_pipe;
+        let (in_pipe_writer, out_pipe_reader) = {
+            use tokio::net::windows::named_pipe::ClientOptions;
 
-            // ERROR_FILE_NOT_FOUND=2: pipe not created yet; ERROR_PIPE_BUSY=231: in use
-            const ERROR_FILE_NOT_FOUND: i32 = 2;
-            const ERROR_PIPE_BUSY: i32 = 231;
+            const ERROR_FILE_NOT_FOUND: i32 = 2; // not created yet
+            const ERROR_PIPE_BUSY: i32 = 231; // in use
 
             // Open read-only: siril_command.out is PIPE_ACCESS_OUTBOUND on Siril's side.
-            let out_pipe_reader = loop {
-                match named_pipe::ClientOptions::new()
-                    .write(false)
-                    .open(&out_pipe_path)
-                {
-                    Ok(receiver) => break receiver,
-                    Err(e)
-                        if matches!(
-                            e.raw_os_error(),
-                            Some(ERROR_FILE_NOT_FOUND) | Some(ERROR_PIPE_BUSY)
-                        ) =>
-                    {
-                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    }
-                    Err(e) => return Err(SirilError::Io(e)),
-                }
-            };
+            let out_pipe_reader = connect_with_retry(
+                || ClientOptions::new().write(false).open(&out_pipe_path),
+                &[ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY],
+            )
+            .await?;
             tracing::debug!("connected to out pipe (siril_command.out)");
 
             // Connect input pipe before waiting for any output — Siril won't
             // send its "ready" message until both pipe clients are connected.
             // Open write-only: siril_command.in is PIPE_ACCESS_INBOUND on Siril's side.
-            let in_pipe_writer = loop {
-                match named_pipe::ClientOptions::new()
-                    .read(false)
-                    .open(&in_pipe_path)
-                {
-                    Ok(sender) => break sender,
-                    Err(e)
-                        if matches!(
-                            e.raw_os_error(),
-                            Some(ERROR_FILE_NOT_FOUND) | Some(ERROR_PIPE_BUSY)
-                        ) =>
-                    {
-                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    }
-                    Err(e) => return Err(SirilError::Io(e)),
-                }
-            };
+            let in_pipe_writer = connect_with_retry(
+                || ClientOptions::new().read(false).open(&in_pipe_path),
+                &[ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY],
+            )
+            .await?;
             tracing::debug!("connected to in pipe (siril_command.in)");
 
-            let reader_task = tokio::spawn(async move {
-                let mut reader = BufReader::new(out_pipe_reader).lines();
-                while let Ok(Some(line)) = reader.next_line().await {
-                    let msg = SirilMessage::parse(&line);
-                    match &msg {
-                        SirilMessage::Log(text) => println!("[siril] {}", text),
-                        SirilMessage::Progress(pct) => println!("[siril] progress: {}%", pct),
-                        other => println!("[siril] {:?}", other),
-                    }
-                    if msg_tx.send(msg).await.is_err() {
-                        break; // receiver dropped
-                    }
-                }
-            });
-
-            (in_pipe_writer, reader_task)
+            (in_pipe_writer, out_pipe_reader)
         };
+
+        let reader_task = tokio::spawn(async move {
+            let mut reader = BufReader::new(out_pipe_reader).lines();
+            while let Ok(Some(line)) = reader.next_line().await {
+                let msg = SirilMessage::parse(&line);
+                match &msg {
+                    SirilMessage::Log(text) => println!("[siril] {}", text),
+                    SirilMessage::Progress(pct) => println!("[siril] progress: {}%", pct),
+                    other => println!("[siril] {:?}", other),
+                }
+                if msg_tx.send(msg).await.is_err() {
+                    break; // receiver dropped
+                }
+            }
+        });
 
         // Wait for the "ready" message
         let mut siril = Self {
