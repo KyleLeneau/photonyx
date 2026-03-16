@@ -8,7 +8,8 @@ pub async fn siril_test() -> Result<(), Box<dyn std::error::Error>> {
     // Startup and wait till process is ready for additional commands
     let _siril = Builder::default()
         // .use_directory(Path::new("/Users/kyle/Development/BortleSpace/photonyx"))
-        .build().await?;
+        .build()
+        .await?;
 
     // let mut siril = Siril::new().await?;
     // siril.command("requires 0.99.10").await?;

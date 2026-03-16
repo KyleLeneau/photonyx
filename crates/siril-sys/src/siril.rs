@@ -3,8 +3,6 @@ use std::process::Stdio;
 
 use tempfile::TempDir;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-#[cfg(unix)]
-use tokio::net::unix::pipe;
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -15,7 +13,7 @@ use crate::{FitsExt, SirilSetting};
 /// Unix FIFOs use `pipe::Sender`; Windows named pipes use `NamedPipeClient`
 /// (Siril acts as the server on Windows, we connect as a client).
 #[cfg(unix)]
-type PipeWriter = pipe::Sender;
+type PipeWriter = tokio::net::unix::pipe::Sender;
 #[cfg(windows)]
 type PipeWriter = tokio::net::windows::named_pipe::NamedPipeClient;
 
@@ -170,16 +168,6 @@ impl Siril {
             PathBuf::from(format!(r"\\.\pipe\siril_command.out")),
         );
 
-        // Unix: create FIFOs before spawning (Siril opens them after launch)
-        #[cfg(unix)]
-        {
-            use nix::sys::stat::Mode;
-            nix::unistd::mkfifo(&in_pipe_path, Mode::S_IRUSR | Mode::S_IWUSR)
-                .map_err(|e| SirilError::PipeSetup(format!("mkfifo in: {}", e)))?;
-            nix::unistd::mkfifo(&out_pipe_path, Mode::S_IRUSR | Mode::S_IWUSR)
-                .map_err(|e| SirilError::PipeSetup(format!("mkfifo out: {}", e)))?;
-        }
-
         // Spawn siril-cli in pipe mode
         let mut child = Command::new(&siril_exe)
             .arg("-d")
@@ -218,12 +206,27 @@ impl Siril {
         // until Siril opens its read end of the input FIFO.
         #[cfg(unix)]
         let (in_pipe_writer, reader_task) = {
-            let out_pipe_reader = pipe::OpenOptions::new().open_receiver(&out_pipe_path)?;
+            use tokio::net::unix::pipe::OpenOptions;
+
+            let out_pipe_reader = loop {
+                match OpenOptions::new()
+                    .unchecked(true)
+                    .open_receiver(&out_pipe_path)
+                {
+                    Ok(reciever) => break reciever,
+                    Err(e)
+                        if matches!(e.raw_os_error(), Some(libc::ENXIO) | Some(libc::ENOENT)) =>
+                    {
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    }
+                    Err(e) => return Err(SirilError::Io(e)),
+                }
+            };
 
             let in_pipe_writer = loop {
-                match pipe::OpenOptions::new().open_sender(&in_pipe_path) {
+                match OpenOptions::new().open_sender(&in_pipe_path) {
                     Ok(sender) => break sender,
-                    Err(e) if e.raw_os_error() == Some(nix::libc::ENXIO) => {
+                    Err(e) if e.raw_os_error() == Some(libc::ENXIO) => {
                         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     }
                     Err(e) => return Err(SirilError::Io(e)),

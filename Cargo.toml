@@ -16,7 +16,6 @@ siril-commands = { path = "./crates/siril-commands", version = "0.0.0" }
 
 # external crates
 xshell = "0.2.7"
-nix = { version = "0.29", features = ["fs"] }
 
 # CLI
 clap = { version = "4", features = ["derive", "env"] }
@@ -44,13 +43,14 @@ tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
 tempfile = "3"
+libc = "0.2"
 
 # String backed emums + macros
 strum = "0.28"
 strum_macros = "0.28"
 
 [workspace.lints.rust]
-# 
+#
 
 [workspace.lints.clippy]
-# 
+#
