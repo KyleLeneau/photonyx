@@ -16,7 +16,9 @@
 * [ ] siril-commands
 * [ ] xtask to generate siril-commands
 * [ ] fits crate to wrap some other fits library (cfitsio?)
-* [ ] 
+* [ ] Figure out a builder pattern for command definition
+* [ ] Siril workflows idea (jobs & workflows) like CI but for the processing engine
+* [ ]
 
 
 ### Future
