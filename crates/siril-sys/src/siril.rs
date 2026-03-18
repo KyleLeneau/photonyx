@@ -83,6 +83,9 @@ pub struct Builder<'a> {
 
     /// Default fit extension to use (default: fits)
     fits_extension: FitsExt,
+
+    /// Set's siril to use 32bit by default (default: true)
+    use_32bit: bool,
 }
 
 impl Default for Builder<'_> {
@@ -92,6 +95,7 @@ impl Default for Builder<'_> {
             cpu_limit: None, // all cpu's
             memory_limit: MemoryLimit::Ratio(0.9),
             fits_extension: FitsExt::FITS,
+            use_32bit: true,
         }
     }
 }
@@ -119,6 +123,11 @@ impl<'a> Builder<'a> {
 
     pub fn use_extension(mut self, ext: FitsExt) -> Self {
         self.fits_extension = ext;
+        self
+    }
+
+    pub fn use_32bit(mut self, value: bool) -> Self {
+        self.use_32bit = value;
         self
     }
 
@@ -168,8 +177,10 @@ pub struct Siril {
     reader_task: JoinHandle<()>,
     stdout_task: JoinHandle<()>,
     stderr_task: JoinHandle<()>,
-    #[allow(unused)] in_pipe_path: PathBuf,
-    #[allow(unused)] out_pipe_path: PathBuf,
+    #[allow(unused)]
+    in_pipe_path: PathBuf,
+    #[allow(unused)]
+    out_pipe_path: PathBuf,
     _temp_dir: TempDir,
 }
 
@@ -234,7 +245,11 @@ impl Siril {
 
             // unchecked
             let out_pipe_reader = connect_with_retry(
-                || OpenOptions::new().unchecked(true).open_receiver(&out_pipe_path),
+                || {
+                    OpenOptions::new()
+                        .unchecked(true)
+                        .open_receiver(&out_pipe_path)
+                },
                 &[libc::ENXIO, libc::ENOENT],
             )
             .await?;
@@ -330,6 +345,11 @@ impl Siril {
             self.command(&format!("setcpu {}", cores)).await?;
         }
 
+        // 16bit is default to flip to 32 is specified
+        if builder.use_32bit {
+            self.set(SirilSetting::Force16Bit, false).await?;
+        }
+
         match builder.memory_limit {
             MemoryLimit::FixedGB(gb) => {
                 self.set(SirilSetting::MemoryMode, "1").await?;
@@ -347,6 +367,13 @@ impl Siril {
             .await?;
 
         Ok(())
+    }
+
+    pub async fn execute(
+        &mut self,
+        cmd: &impl crate::commands::Command,
+    ) -> Result<Vec<String>, SirilError> {
+        self.command(&cmd.to_args_string()).await
     }
 
     /// Send a command and wait for it to complete.

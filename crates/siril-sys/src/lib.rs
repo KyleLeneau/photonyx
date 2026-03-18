@@ -1,7 +1,7 @@
 mod siril;
 mod types;
 
-pub mod command;
+pub mod commands;
 pub mod message;
 
 pub use siril::Builder;
