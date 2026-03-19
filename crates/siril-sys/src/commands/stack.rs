@@ -1,7 +1,8 @@
 use bon::Builder;
 
 use crate::{
-    SequenceFilter, StackNormFlag, StackRejection, StackRejectionMapFlag, StackType, StackWeightingFlag,
+    SequenceFilter, StackNormFlag, StackRejection, StackRejectionMapFlag, StackType,
+    StackWeightingFlag,
     commands::{Argument, Command},
 };
 
