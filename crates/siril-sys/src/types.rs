@@ -45,6 +45,7 @@ pub struct Rect {
     pub width: u8,
     pub height: u8,
 }
+
 impl Display for Rect {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} {} {} {}", self.x, self.y, self.width, self.height)
@@ -69,15 +70,6 @@ pub enum PixelInterpolation {
     Lanczos4,
     Linear,
     Area,
-}
-
-#[derive(Debug, PartialEq, EnumString, Display)]
-#[strum(serialize_all = "lowercase")]
-pub enum SequenceFraming {
-    Current,
-    Min,
-    Max,
-    Cog,
 }
 
 #[derive(Debug, PartialEq, EnumString, Display)]
@@ -111,52 +103,83 @@ pub enum StackType {
 
 /// Normalization mode for stacking. Serializes to the full Siril flag string.
 #[derive(Debug, PartialEq, EnumString, Display)]
-pub enum StackNorm {
+pub enum StackNormFlag {
     #[strum(serialize = "-nonorm")]
     NoNorm,
+
     #[strum(serialize = "-norm=add")]
     Add,
+
     #[strum(serialize = "-norm=mul")]
     Mul,
+
     #[strum(serialize = "-norm=addscale")]
     AddScale,
+
     #[strum(serialize = "-norm=mulscale")]
     MulScale,
 }
 
 #[derive(Debug, PartialEq, EnumString, Display)]
-#[strum(serialize_all = "lowercase")]
 pub enum StackRejection {
+    #[strum(serialize = "n")]
     None,
+
+    #[strum(serialize = "p")]
     Percentile,
+
+    #[strum(serialize = "s")]
     Sigma,
+
+    #[strum(serialize = "m")]
     Median,
+
+    #[strum(serialize = "w")]
     Winsorized,
+
+    #[strum(serialize = "l")]
     Linear,
+
+    #[strum(serialize = "g")]
     Generalized,
+
+    #[strum(serialize = "a")]
     Mad,
 }
 
 #[derive(Debug, PartialEq, EnumString, Display)]
 #[strum(serialize_all = "lowercase")]
-pub enum StackWeighting {
-    #[strum(serialize = "weight_from_noise")]
+pub enum StackWeightingFlag {
+    #[strum(serialize = "-weight_from_noise")]
     Noise,
-    #[strum(serialize = "weight_from_wfwhm")]
+
+    #[strum(serialize = "-weight_from_wfwhm")]
     WFwhm,
-    #[strum(serialize = "weight_from_nbstars")]
+
+    #[strum(serialize = "-weight_from_nbstars")]
     NbStars,
-    #[strum(serialize = "weight_from_nbstack")]
+
+    #[strum(serialize = "-weight_from_nbstack")]
     NbStack,
 }
 
 #[derive(Debug, PartialEq, EnumString, Display)]
 #[strum(serialize_all = "lowercase")]
-pub enum StackRejectionMap {
-    #[strum(serialize = "rejmaps")]
+pub enum StackRejectionMapFlag {
+    #[strum(serialize = "-rejmaps")]
     Two,
-    #[strum(serialize = "rejmap")]
+
+    #[strum(serialize = "-rejmap")]
     Merged,
+}
+
+#[derive(Debug, PartialEq, EnumString, Display)]
+#[strum(serialize_all = "lowercase")]
+pub enum SequenceFraming {
+    Current,
+    Min,
+    Max,
+    Cog,
 }
 
 /// Non-inclusion filter types for sequence filtering.
@@ -164,16 +187,22 @@ pub enum StackRejectionMap {
 pub enum SequenceFilterType {
     #[strum(serialize = "filter-fwhm")]
     Fwhm,
+
     #[strum(serialize = "filter-wfwhm")]
     WFwhm,
+
     #[strum(serialize = "filter-roundness")]
     Roundness,
+
     #[strum(serialize = "filter-quality")]
     Quality,
+
     #[strum(serialize = "filter-nbstars")]
     NbStars,
+
     #[strum(serialize = "filter-bkg")]
     Bkg,
+
     #[strum(serialize = "filter-nbstack")]
     NbStack,
 }
@@ -218,6 +247,7 @@ pub struct SigmaRange {
     pub low: f64,
     pub high: f64,
 }
+
 impl Display for SigmaRange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} {}", self.low, self.high)

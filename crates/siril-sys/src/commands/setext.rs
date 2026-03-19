@@ -5,8 +5,9 @@ use crate::{
     commands::{Argument, Command},
 };
 
-///
-///     setext extension
+/// ```text
+/// setext extension
+/// ```
 ///
 /// Sets the extension used and recognized by sequences.
 ///

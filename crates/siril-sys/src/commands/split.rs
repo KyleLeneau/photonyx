@@ -5,9 +5,9 @@ use crate::{
     commands::{Argument, Command},
 };
 
-/// .. code-block:: text
-///
-///     split file1 file2 file3 [-hsl | -hsv | -lab]
+/// ```text
+/// split file1 file2 file3 [-hsl | -hsv | -lab]
+/// ```
 ///
 /// Splits the loaded color image into three distinct files (one for each color) and saves them
 /// in **file1**.fit, **file2**.fit and **file3**.fit files. A last argument can optionally be

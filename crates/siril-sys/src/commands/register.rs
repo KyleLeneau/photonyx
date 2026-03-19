@@ -5,12 +5,12 @@ use crate::{
     commands::{Argument, Command},
 };
 
-/// .. code-block:: text
-///
-///     register sequencename [-2pass] [-selected] [-prefix=] [-scale=]
-///     register sequencename ... [-layer=] [-transf=] [-minpairs=] [-maxstars=] [-nostarlist] [-disto=]
-///     register sequencename ... [-interp=] [-noclamp]
-///     register sequencename ... [-drizzle [-pixfrac=] [-kernel=] [-flat=]]
+/// ```text
+/// register sequencename [-2pass] [-selected] [-prefix=] [-scale=]
+/// register sequencename ... [-layer=] [-transf=] [-minpairs=] [-maxstars=] [-nostarlist] [-disto=]
+/// register sequencename ... [-interp=] [-noclamp]
+/// register sequencename ... [-drizzle [-pixfrac=] [-kernel=] [-flat=]]
+/// ```
 ///
 /// Finds and optionally performs geometric transforms on images of the sequence given in argument so that they may be superimposed on the reference image. Using stars for registration, this algorithm only works with deep sky images. Star detection options can be changed using **SETFINDSTAR** or the *Dynamic PSF* dialog.
 ///

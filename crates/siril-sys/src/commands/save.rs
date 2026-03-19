@@ -2,9 +2,9 @@ use bon::Builder;
 
 use crate::commands::{Argument, Command};
 
-/// .. code-block:: text
-///
-///     save filename [-chksum]
+/// ```text
+/// save filename [-chksum]
+/// ```
 ///
 /// Saves current image to **filename**.fit (or .fits, depending on your preferences, see SETEXT)
 /// in the current working directory. The image remains loaded. **filename** can contain a path

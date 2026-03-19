@@ -1,16 +1,16 @@
 use bon::Builder;
 
 use crate::{
-    SequenceFilter, StackNorm, StackRejection, StackRejectionMap, StackType, StackWeighting,
+    SequenceFilter, StackNormFlag, StackRejection, StackRejectionMapFlag, StackType, StackWeightingFlag,
     commands::{Argument, Command},
 };
 
-/// .. code-block:: text
-///
-///     stack seqfilename
-///     stack seqfilename { sum | min | max } [-output_norm] [-out=filename] [-maximize] [-upscale] [-32b]
-///     stack seqfilename { med | median } [-nonorm, -norm=] [-fastnorm] [-rgb_equal] [-output_norm] [-out=filename] [-32b]
-///     stack seqfilename { rej | mean } [rejection type] [sigma_low sigma_high] [-rejmap[s]] [-nonorm, -norm=] [-fastnorm] [-overlap_norm] [-weight={noise|wfwhm|nbstars|nbstack}] [-feather=] [-rgb_equal] [-output_norm] [-out=filename] [-maximize] [-upscale] [-32b]
+/// ```text
+/// stack seqfilename
+/// stack seqfilename { sum | min | max } [-output_norm] [-out=filename] [-maximize] [-upscale] [-32b]
+/// stack seqfilename { med | median } [-nonorm, -norm=] [-fastnorm] [-rgb_equal] [-output_norm] [-out=filename] [-32b]
+/// stack seqfilename { rej | mean } [rejection type] [sigma_low sigma_high] [-rejmap[s]] [-nonorm, -norm=] [-fastnorm] [-overlap_norm] [-weight={noise|wfwhm|nbstars|nbstack}] [-feather=] [-rgb_equal] [-output_norm] [-out=filename] [-maximize] [-upscale] [-32b]
+/// ```
 ///
 /// Stacks the **sequencename** sequence, using options.
 ///
@@ -88,8 +88,8 @@ pub struct Stack {
     #[builder(default = StackType::Rej)]
     stack_type: StackType,
 
-    #[builder(default = StackNorm::NoNorm)]
-    norm: StackNorm,
+    #[builder(default = StackNormFlag::NoNorm)]
+    norm: StackNormFlag,
 
     #[builder(default = StackRejection::Winsorized)]
     rejection: StackRejection,
@@ -100,7 +100,7 @@ pub struct Stack {
     #[builder(default = 3.0)]
     higher_rej: f32,
 
-    create_rejection_maps: Option<StackRejectionMap>,
+    create_rejection_maps: Option<StackRejectionMapFlag>,
 
     filters: Option<Vec<SequenceFilter>>,
 
@@ -113,7 +113,8 @@ pub struct Stack {
     #[builder(default = false)]
     output_norm: bool,
 
-    weighting: Option<StackWeighting>,
+    weighting: Option<StackWeightingFlag>,
+
     #[builder(default = false)]
     rgb_equalization: bool,
 
@@ -139,7 +140,7 @@ impl Command for Stack {
             }
 
             if let Some(map) = &self.create_rejection_maps {
-                args.push(Argument::flag(map.to_string(), true));
+                args.push(Argument::positional(map.to_string()));
             }
         }
 
@@ -156,7 +157,7 @@ impl Command for Stack {
         ]);
 
         if let Some(weighting) = &self.weighting {
-            args.push(Argument::flag(weighting.to_string(), true));
+            args.push(Argument::positional(weighting.to_string()));
         }
 
         args.extend([

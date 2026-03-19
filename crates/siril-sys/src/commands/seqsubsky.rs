@@ -2,9 +2,9 @@ use bon::Builder;
 
 use crate::commands::{Argument, Command};
 
-/// .. code-block:: text
-///
-///     seqsubsky sequencename { -rbf | degree } [-nodither] [-samples=20] [-tolerance=1.0] [-smooth=0.5] [-prefix=]
+/// ```text
+/// seqsubsky sequencename { -rbf | degree } [-nodither] [-samples=20] [-tolerance=1.0] [-smooth=0.5] [-prefix=]
+/// ```
 ///
 /// Same command as SUBSKY but for the sequence **sequencename**.
 /// Dithering, required for low dynamic gradients, can be disabled with **-nodither**. Note that

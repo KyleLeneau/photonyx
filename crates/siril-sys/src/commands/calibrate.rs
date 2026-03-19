@@ -5,9 +5,9 @@ use crate::{
     commands::{Argument, Command},
 };
 
-/// .. code-block:: text
-///
-///     calibrate sequencename [-bias=filename] [-dark=filename] [-flat=filename] [-cc=dark [siglo sighi] || -cc=bpm bpmfile] [-cfa] [-debayer] [-fix_xtrans] [-equalize_cfa] [-opt[=exp]] [-all] [-prefix=] [-fitseq]
+/// ```text
+/// calibrate sequencename [-bias=filename] [-dark=filename] [-flat=filename] [-cc=dark [siglo sighi] || -cc=bpm bpmfile] [-cfa] [-debayer] [-fix_xtrans] [-equalize_cfa] [-opt[=exp]] [-all] [-prefix=] [-fitseq]
+/// ```
 ///
 /// Calibrates the sequence **sequencename** using bias, dark and flat given in argument.
 ///

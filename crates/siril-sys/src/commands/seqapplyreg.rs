@@ -5,12 +5,12 @@ use crate::{
     commands::{Argument, Command},
 };
 
-/// .. code-block:: text
-///
-///     seqapplyreg sequencename [-prefix=] [-scale=] [-layer=] [-framing=]
-///     seqapplyreg sequencename ... [-interp=] [-noclamp]
-///     seqapplyreg sequencename ... [-drizzle [-pixfrac=] [-kernel=] [-flat=]]
-///     seqapplyreg sequencename ... [-filter-fwhm=value[%|k]] [-filter-wfwhm=value[%|k]] [-filter-round=value[%|k]] [-filter-bkg=value[%|k]] [-filter-nbstars=value[%|k]] [-filter-quality=value[%|k]] [-filter-incl[uded]]
+/// ```text
+/// seqapplyreg sequencename [-prefix=] [-scale=] [-layer=] [-framing=]
+/// seqapplyreg sequencename ... [-interp=] [-noclamp]
+/// seqapplyreg sequencename ... [-drizzle [-pixfrac=] [-kernel=] [-flat=]]
+/// seqapplyreg sequencename ... [-filter-fwhm=value[%|k]] [-filter-wfwhm=value[%|k]] [-filter-round=value[%|k]] [-filter-bkg=value[%|k]] [-filter-nbstars=value[%|k]] [-filter-quality=value[%|k]] [-filter-incl[uded]]
+/// ```
 ///
 /// Applies geometric transforms on images of the sequence given in argument so that they may be
 /// superimposed on the reference image, using registration data previously computed (see REGISTER).

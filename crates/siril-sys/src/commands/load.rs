@@ -2,9 +2,9 @@ use bon::Builder;
 
 use crate::commands::{Argument, Command};
 
-/// .. code-block:: text
-///
-///        load filename[.ext]
+/// ```text
+/// load filename[.ext]
+/// ```
 ///
 /// Loads the image **filename** from the current working directory, which becomes the 'currently loaded image' used in many of the single-image commands.
 /// It first attempts to load **filename**, then **filename**.fit, **filename**.fits and finally all supported formats.

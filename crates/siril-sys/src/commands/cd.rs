@@ -3,9 +3,9 @@ use std::path::PathBuf;
 
 use crate::commands::{Argument, Command};
 
-/// .. code-block:: text
-///
-///     cd directory
+/// ```text
+/// cd directory
+/// ```
 ///
 /// Sets the new current working directory.
 ///
