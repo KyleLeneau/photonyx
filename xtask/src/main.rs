@@ -6,18 +6,21 @@
 //! This binary is integrated into the `cargo` command line by using an alias in
 //! `.cargo/config`.
 
+mod codegen;
+mod flags;
+
 use std::{env, path::PathBuf};
-use xshell::{Shell, cmd};
+use xshell::Shell;
 
 fn main() -> anyhow::Result<()> {
-    println!("Hello xtask helper from: {:?}", project_root());
+    let flags = flags::Xtask::from_env_or_exit();
 
     let sh = &Shell::new()?;
     sh.change_dir(project_root());
 
-    cmd!(&sh, "cargo --version").run()?;
-
-    Ok(())
+    match flags.subcommand {
+        flags::XtaskCmd::ExportSirilCommands(cmd) => cmd.run(sh),
+    }
 }
 
 /// Returns the path to the root directory of `photonyx` project.

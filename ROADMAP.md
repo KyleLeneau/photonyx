@@ -13,10 +13,10 @@
 * [x] clap to photonyx cli front end for testing more things
 * [x] siril-sys
 * [x] Windows support & check / info command for siril testing
+* [x] Figure out a builder pattern for command definition
 * [ ] siril-commands
 * [ ] xtask to generate siril-commands
 * [ ] fits crate to wrap some other fits library (cfitsio?)
-* [ ] Figure out a builder pattern for command definition
 * [ ] Siril workflows idea (jobs & workflows) like CI but for the processing engine
 * [ ]
 

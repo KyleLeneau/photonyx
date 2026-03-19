@@ -129,6 +129,6 @@ pub trait Command {
 // [x] calibrate
 // [x] save
 // [x] seqapplyreg
-// [ ] stack
+// [x] stack
 // [x] seqsubsky
-// [ ] split
+// [x] split

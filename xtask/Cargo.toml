@@ -5,5 +5,6 @@ edition = "2024"
 
 [dependencies]
 anyhow.workspace = true
+regex.workspace = true
 xflags = "0.3.2"
 xshell.workspace = true
