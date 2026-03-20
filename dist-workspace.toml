@@ -1,5 +1,7 @@
 [workspace]
-members = ["cargo:."]
+members = [
+  "cargo:crates/photonyx",
+]
 
 # Config for 'dist'
 [dist]
