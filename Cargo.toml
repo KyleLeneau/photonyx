@@ -57,4 +57,9 @@ strum_macros = "0.28"
 #
 
 [workspace.lints.clippy]
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
 #
