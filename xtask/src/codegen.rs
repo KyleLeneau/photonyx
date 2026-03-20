@@ -110,12 +110,12 @@ fn parse_commands(sh: &Shell, commands_rst: &PathBuf) -> anyhow::Result<Vec<Comm
     let re2 = Regex::new(r"\.\. include:: ([^\n]+)").unwrap();
 
     let mut results: Vec<CommandInfo> = vec![];
-    let _blocks = contents.split(".. command:: ").skip(1).for_each(|block| {
+    contents.split(".. command:: ").skip(1).for_each(|block| {
         // println!("----{}", block);
         let caps1 = re1.captures(block).unwrap();
 
         let includes: Vec<PathBuf> = re2
-            .captures_iter(&block)
+            .captures_iter(block)
             .map(|caps| commands_rst.parent().unwrap().join(caps[1].trim()))
             .collect();
 
