@@ -580,7 +580,7 @@ dependencies = [
 
 [[package]]
 name = "siril-commands"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "siril-sys"
