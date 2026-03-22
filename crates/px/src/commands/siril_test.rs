@@ -4,7 +4,7 @@ use siril_sys::Builder;
 use siril_sys::FitsExt;
 use siril_sys::commands::SetExt;
 
-pub async fn siril_test() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) async fn siril_test() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("siril_test command called");
 
     // Startup and wait till process is ready for additional commands

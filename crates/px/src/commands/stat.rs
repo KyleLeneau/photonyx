@@ -1,6 +1,6 @@
 use siril_sys::Builder;
 
-pub async fn stat(file: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) async fn stat(file: &str) -> Result<(), Box<dyn std::error::Error>> {
     // Startup and wait till process is ready for additional commands
     let mut siril = Builder::default().build().await?;
     siril.command("requires 0.99.10").await?;

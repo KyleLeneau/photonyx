@@ -15,6 +15,8 @@
 * [x] Windows support & check / info command for siril testing
 * [x] Figure out a builder pattern for command definition
 * [x] github releases and install script (`cargo-dist`)
+* [x] conside changing main crate to lib with /bin folder and named `px` instead
+* [x] create and move cli definition to `px-cli` crate, leave commands in `px`
 * [ ] siril-commands
 * [ ] xtask to generate siril-commands
 * [ ] fits crate to wrap some other fits library (cfitsio?)
@@ -27,11 +29,9 @@
 * [ ] the stdout and error streams from siril need to be exposed someplace so I consume elsewhere (like sse)
 * [ ] maybe code generate an impl SirilExt for all commands to appear first class (accept builder)
 * [ ] need to test multi pipe on windows now that MR is merged for support
-* [ ] clap_complete for shell completion
+* [ ] `clap_complete` for shell completion
 * [ ] document git tagging and release process with `cargo-dist`
 * [ ] self updating cli (like uv `px self update`) (https://docs.rs/axoupdater)
-* [ ] conside changing main crate to lib with /bin folder and named `px` instead
-* [ ] create and move cli definition to `px-cli` crate, leave commands in `px`
 * [ ]
 
 
