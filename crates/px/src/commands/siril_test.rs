@@ -1,10 +1,13 @@
 // use std::path::Path;
+use anyhow::Result;
 
 use siril_sys::Builder;
 use siril_sys::FitsExt;
 use siril_sys::commands::SetExt;
 
-pub(crate) async fn siril_test() -> Result<(), Box<dyn std::error::Error>> {
+use crate::commands::ExitStatus;
+
+pub(crate) async fn siril_test() -> Result<ExitStatus> {
     tracing::info!("siril_test command called");
 
     // Startup and wait till process is ready for additional commands
@@ -22,5 +25,5 @@ pub(crate) async fn siril_test() -> Result<(), Box<dyn std::error::Error>> {
     // siril.command("set core.force_16bit=false").await?;
     // siril.command("get -a").await?;
 
-    Ok(())
+    Ok(ExitStatus::Success)
 }

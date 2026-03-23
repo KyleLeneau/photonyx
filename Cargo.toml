@@ -12,14 +12,18 @@ repository = "https://github.com/KyleLeneau/photonyx"
 [workspace.dependencies]
 # local crates
 px-cli = { path = "./crates/px-cli", version = "0.1.0" }
+px-static = { path = "./crates/px-static", version = "0.1.0" }
 siril-sys = { path = "./crates/siril-sys", version = "0.1.0" }
 
 # external crates
 xshell = "0.2.7"
 
 # CLI
-clap = { version = "4", features = ["derive", "env"] }
+clap = { version = "4", features = ["derive", "env", "string"] }
 dotenvy = "0.15"
+owo-colors = { version = "4.1.0" }
+indicatif = { version = "0.18.0" }
+anstream = { version = "1.0.0" }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
@@ -45,6 +49,7 @@ chrono = { version = "0.4", features = ["serde"] }
 tempfile = "3"
 libc = "0.2"
 regex = "1.12.3"
+fs-err = { version = "3.2.2", features = ["tokio"] }
 
 # Automatic builders
 bon = "3.9"
@@ -52,6 +57,9 @@ bon = "3.9"
 # String backed emums + macros
 strum = "0.28"
 strum_macros = "0.28"
+
+# Testing
+insta = { version = "1.46.0", features = ["json", "filters", "redactions"] }
 
 [workspace.lints.rust]
 #

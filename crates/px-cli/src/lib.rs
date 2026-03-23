@@ -1,5 +1,19 @@
-use clap::builder::styling::{AnsiColor, Styles};
-use clap::{Parser, Subcommand, ValueEnum};
+pub mod version;
+
+use clap::builder::Styles;
+use clap::builder::styling::AnsiColor;
+use clap::{Args, Parser, Subcommand};
+use clap::{ValueEnum, ValueHint};
+
+use px_static::EnvVars;
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+pub enum VersionFormat {
+    /// Display the version as plain text.
+    Text,
+    /// Display the version as JSON.
+    Json,
+}
 
 const STYLES: Styles = Styles::styled()
     .header(AnsiColor::Green.on_default().bold())
@@ -7,7 +21,7 @@ const STYLES: Styles = Styles::styled()
     .literal(AnsiColor::Cyan.on_default().bold())
     .placeholder(AnsiColor::Cyan.on_default());
 
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(
     name = "photonyx",
     version,
@@ -30,17 +44,75 @@ pub struct Cli {
     pub command: Commands,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand)]
 pub enum Commands {
     /// Validate the configuration file and exit
     Check,
 
     /// Test if siril is installed and working
     SirilTest,
+
+    /// Manage the px executable.
+    #[command(name = "self")]
+    Self_(SelfNamespace),
+
+    /// Manage hardware profiles
+    #[command()]
+    Profile(ProfileNamespace),
 }
 
 #[derive(ValueEnum, Clone, Debug)]
 pub enum LogFormat {
     Pretty,
     Json,
+}
+
+#[derive(Args)]
+pub struct ProfileNamespace {
+    #[command(subcommand)]
+    pub command: ProfileCommand,
+}
+
+#[derive(Subcommand)]
+pub enum ProfileCommand {
+    Init,
+    List,
+    Scan,
+}
+
+#[derive(Args)]
+pub struct SelfNamespace {
+    #[command(subcommand)]
+    pub command: SelfCommand,
+}
+
+#[derive(Subcommand)]
+pub enum SelfCommand {
+    /// Update uv.
+    Update(SelfUpdateArgs),
+
+    /// Display uv's version
+    Version {
+        /// Only print the version
+        #[arg(long)]
+        short: bool,
+        #[arg(long, value_enum, default_value = "text")]
+        output_format: VersionFormat,
+    },
+}
+
+#[derive(Args, Debug)]
+pub struct SelfUpdateArgs {
+    /// Update to the specified version. If not provided, uv will update to the latest version.
+    #[arg(value_hint = ValueHint::Other)]
+    pub target_version: Option<String>,
+
+    /// A GitHub token for authentication.
+    /// A token is not required but can be used to reduce the chance of encountering rate limits.
+    #[arg(long, env = EnvVars::PX_GITHUB_TOKEN, value_hint = ValueHint::Other)]
+    pub token: Option<String>,
+
+    /// Run without performing the update.
+    #[arg(long)]
+    pub dry_run: bool,
 }

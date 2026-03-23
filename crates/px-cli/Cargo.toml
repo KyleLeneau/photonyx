@@ -8,7 +8,17 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
-clap.workspace = true
+px-static = { workspace = true }
+
+clap = { workspace = true, features = ["derive", "string"] }
+serde = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+
+[build-dependencies]
+px-static = { workspace = true }
+fs-err = { workspace = true }
 
 [lints]
 workspace = true
