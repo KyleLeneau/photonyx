@@ -5,8 +5,8 @@ use owo_colors::OwoColorize;
 
 use px_cli::VersionFormat;
 
-use crate::printer::Printer;
 use crate::commands::ExitStatus;
+use crate::printer::Printer;
 
 /// Display version information for uv itself (`px self version`)
 pub(crate) fn self_version(

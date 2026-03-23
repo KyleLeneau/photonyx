@@ -32,9 +32,7 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
                     short,
                     output_format,
                 },
-        }) => {
-            commands::self_version(short, output_format, printer)
-        }
+        }) => commands::self_version(short, output_format, printer),
 
         Commands::Self_(SelfNamespace {
             command:
