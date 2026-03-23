@@ -618,7 +618,7 @@ dependencies = [
 
 [[package]]
 name = "px"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anstream",
  "anyhow",
@@ -635,7 +635,7 @@ dependencies = [
 
 [[package]]
 name = "px-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "fs-err",
@@ -646,7 +646,7 @@ dependencies = [
 
 [[package]]
 name = "px-static"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "quote"
@@ -813,7 +813,7 @@ checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 
 [[package]]
 name = "siril-sys"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bon",
  "libc",
