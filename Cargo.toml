@@ -11,9 +11,9 @@ repository = "https://github.com/KyleLeneau/photonyx"
 
 [workspace.dependencies]
 # local crates
-px-cli = { path = "./crates/px-cli", version = "0.1.0" }
-px-static = { path = "./crates/px-static", version = "0.1.0" }
-siril-sys = { path = "./crates/siril-sys", version = "0.1.0" }
+px-cli = { path = "./crates/px-cli", version = "0.1.1" }
+px-static = { path = "./crates/px-static", version = "0.1.1" }
+siril-sys = { path = "./crates/siril-sys", version = "0.1.1" }
 
 # external crates
 xshell = "0.2.7"

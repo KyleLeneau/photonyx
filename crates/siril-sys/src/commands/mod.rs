@@ -7,6 +7,9 @@ pub use setext::SetExt;
 pub mod cd;
 pub use cd::Cd;
 
+pub mod get;
+pub use get::Get;
+
 pub mod load;
 pub use load::Load;
 
