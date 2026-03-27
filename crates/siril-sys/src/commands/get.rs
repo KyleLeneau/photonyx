@@ -28,8 +28,8 @@ pub enum Method {
 impl From<Method> for Argument  {
     fn from(value: Method) -> Self {
         match value {
-            Method::AllNames => Argument::Flag("-a".to_string(), Some(true)),
-            Method::AllDetails => Argument::Flag("-A".to_string(), Some(true)),
+            Method::AllNames => Argument::Flag("a".to_string(), Some(true)),
+            Method::AllDetails => Argument::Flag("A".to_string(), Some(true)),
             Method::Single(var) => Argument::Positional(var),
         }
     }
@@ -42,5 +42,34 @@ impl Command for Get {
 
     fn args(&self) -> Vec<Argument> {
         vec![self.method.clone().into()]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_names_flag() {
+        let cmd = Get::builder(Method::AllNames).build();
+        assert_eq!(cmd.to_args_string(), "get -a");
+    }
+
+    #[test]
+    fn all_details_flag() {
+        let cmd = Get::builder(Method::AllDetails).build();
+        assert_eq!(cmd.to_args_string(), "get -A");
+    }
+
+    #[test]
+    fn single_variable() {
+        let cmd = Get::builder(Method::Single("core.mem".to_string())).build();
+        assert_eq!(cmd.to_args_string(), "get core.mem");
+    }
+
+    #[test]
+    fn single_variable_with_spaces_is_quoted() {
+        let cmd = Get::builder(Method::Single("my var".to_string())).build();
+        assert_eq!(cmd.to_args_string(), "get 'my var'");
     }
 }

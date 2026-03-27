@@ -12,6 +12,7 @@ use crate::{
 /// Sets the extension used and recognized by sequences.
 ///
 /// The argument **extension** can be "fit", "fts" or "fits"
+///
 #[derive(Builder)]
 pub struct SetExt {
     #[builder(start_fn)]

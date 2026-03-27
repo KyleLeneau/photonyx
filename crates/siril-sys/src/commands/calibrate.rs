@@ -11,7 +11,7 @@ use crate::{
 ///
 /// Calibrates the sequence **sequencename** using bias, dark and flat given in argument.
 ///
-/// For bias, a uniform level can be specified instead of an image, by entering a quoted expression starting with an = sign, such as -bias="=256" or -bias="=64*$OFFSET".
+/// For bias, a uniform level can be specified instead of an image, by entering a quoted expression starting with an = sign, such as -bias="=256" or -bias="=64*".
 ///
 /// By default, cosmetic correction is not activated. If you wish to apply some, you will need to specify it with **-cc=** option.
 /// You can use **-cc=dark** to detect hot and cold pixels from the masterdark (a masterdark must be given with the **-dark=** option), optionally followed by **siglo** and **sighi** for cold and hot pixels respectively. A value of 0 deactivates the correction. If sigmas are not provided, only hot pixels detection with a sigma of 3 will be applied.
@@ -23,6 +23,7 @@ use crate::{
 /// By default, frames marked as excluded will not be processed. The argument **-all** can be used to force processing of all frames even if marked as excluded.
 /// The output sequence name starts with the prefix "pp\_" unless otherwise specified with option **-prefix=**.
 /// If **-fitseq** is provided, the output sequence will be a FITS sequence (single file)
+///
 #[derive(Builder)]
 pub struct Calibrate {
     #[builder(start_fn)]

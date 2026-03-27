@@ -20,6 +20,7 @@ fn main() -> anyhow::Result<()> {
 
     match flags.subcommand {
         flags::XtaskCmd::ExportSirilCommands(cmd) => cmd.run(sh),
+        flags::XtaskCmd::MergeSirilCommands(cmd) => cmd.run(sh)
     }
 }
 

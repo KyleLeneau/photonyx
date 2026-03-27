@@ -43,6 +43,7 @@ use crate::{
 /// Note: when using **-drizzle** on images taken with a color camera, the input images must not be debayered. In that case, star detection will always occur on the green pixels
 ///
 /// Links: :ref:`setfindstar <setfindstar>`, :ref:`psf <psf>`, :ref:`seqapplyreg <seqapplyreg>`
+///
 #[derive(Builder)]
 pub struct Register {
     #[builder(start_fn)]

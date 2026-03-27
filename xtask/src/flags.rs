@@ -9,6 +9,12 @@ xflags::xflags! {
             /// Clean download and generated
             optional --clean
         }
+
+        /// Merge generated siril commands with implementations and report delta
+        cmd merge-siril-commands {
+            // How the missing implementations
+            optional --show-missing
+        }
     }
 }
 
@@ -23,11 +29,17 @@ pub struct Xtask {
 #[derive(Debug)]
 pub enum XtaskCmd {
     ExportSirilCommands(ExportSirilCommands),
+    MergeSirilCommands(MergeSirilCommands),
 }
 
 #[derive(Debug)]
 pub struct ExportSirilCommands {
     pub clean: bool,
+}
+
+#[derive(Debug)]
+pub struct MergeSirilCommands {
+    pub show_missing: bool,
 }
 
 impl Xtask {

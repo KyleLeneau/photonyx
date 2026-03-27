@@ -6,12 +6,10 @@ use crate::commands::{Argument, Command};
 /// save filename [-chksum]
 /// ```
 ///
-/// Saves current image to **filename**.fit (or .fits, depending on your preferences, see SETEXT)
-/// in the current working directory. The image remains loaded. **filename** can contain a path
-/// as long as the directory already exists. The **-chksum** option stores checksum keywords
-/// (CHECKSUM and DATASUM) in the FITS header
+/// Saves current image to **filename**.fit (or .fits, depending on your preferences, see SETEXT) in the current working directory. The image remains loaded. **filename** can contain a path as long as the directory already exists. The **-chksum** option stores checksum keywords (CHECKSUM and DATASUM) in the FITS header
 ///
 /// Links: :ref:`setext <setext>`
+///
 #[derive(Builder)]
 pub struct Save {
     #[builder(start_fn)]
