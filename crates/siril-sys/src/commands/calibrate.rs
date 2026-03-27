@@ -81,14 +81,14 @@ impl Command for Calibrate {
         }
 
         args.extend([
-            Argument::flag("cfa", self.cfa),
-            Argument::flag("debayer", self.debayer),
-            Argument::flag("fix_xtrans", self.fix_xtrans),
-            Argument::flag("equalize_cfa", self.equalize_cfa),
-            Argument::flag("opt", self.dark_optimization),
-            Argument::flag("all", self.all_frames),
+            Argument::flag_option("cfa", self.cfa),
+            Argument::flag_option("debayer", self.debayer),
+            Argument::flag_option("fix_xtrans", self.fix_xtrans),
+            Argument::flag_option("equalize_cfa", self.equalize_cfa),
+            Argument::flag_option("opt", self.dark_optimization),
+            Argument::flag_option("all", self.all_frames),
             Argument::option("prefix", self.prefix.as_deref()),
-            Argument::flag("fitseq", self.create_fitsseq),
+            Argument::flag_option("fitseq", self.create_fitsseq),
         ]);
 
         args

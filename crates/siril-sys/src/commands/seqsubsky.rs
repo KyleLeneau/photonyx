@@ -38,14 +38,14 @@ impl Command for SeqSubSky {
         let mut args = vec![Argument::positional(&self.sequence)];
 
         if self.use_rbf {
-            args.push(Argument::flag("rbf", self.use_rbf));
+            args.push(Argument::flag_option("rbf", self.use_rbf));
             args.push(Argument::option("smooth", self.smooth));
         } else {
             args.push(Argument::positional(self.degree.to_string()));
         }
 
         args.extend([
-            Argument::flag("nodither", self.dither),
+            Argument::flag_option("nodither", self.dither),
             Argument::option("samples", self.samples),
             Argument::option("tolerance", self.tolerance),
             Argument::option("prefix", self.prefix.as_deref()),

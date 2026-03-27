@@ -9,7 +9,10 @@ use crate::commands::{Argument, Command};
 /// Saves current image into a PNG file: **filename**.png, with 16 bits per channel if the loaded image is 16 or 32 bits, and 8 bits per channel if the loaded image is 8 bits
 ///
 #[derive(Builder)]
-pub struct Savepng {}
+pub struct Savepng {
+    #[builder(start_fn)]
+    filename: String
+}
 
 impl Command for Savepng {
     fn name() -> &'static str {
@@ -17,8 +20,23 @@ impl Command for Savepng {
     }
 
     fn args(&self) -> Vec<Argument> {
-        vec![]
+        vec![Argument::positional(self.filename.to_string())]
     }
 }
 
-// TODO: Need command implementation
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn simple_filename() {
+        let cmd = Savepng::builder("output".to_string()).build();
+        assert_eq!(cmd.to_args_string(), "savepng output");
+    }
+
+    #[test]
+    fn filename_with_spaces_is_quoted() {
+        let cmd = Savepng::builder("my output".to_string()).build();
+        assert_eq!(cmd.to_args_string(), "savepng 'my output'");
+    }
+}

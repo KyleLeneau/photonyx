@@ -9,7 +9,10 @@ use crate::commands::{Argument, Command};
 /// Saves current image under the form of a bitmap file with 8-bit per channel: **filename**.bmp (BMP 24-bit)
 ///
 #[derive(Builder)]
-pub struct Savebmp {}
+pub struct Savebmp {
+    #[builder(start_fn)]
+    filename: String
+}
 
 impl Command for Savebmp {
     fn name() -> &'static str {
@@ -17,8 +20,23 @@ impl Command for Savebmp {
     }
 
     fn args(&self) -> Vec<Argument> {
-        vec![]
+        vec![Argument::positional(self.filename.to_string())]
     }
 }
 
-// TODO: Need command implementation
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn simple_filename() {
+        let cmd = Savebmp::builder("output".to_string()).build();
+        assert_eq!(cmd.to_args_string(), "savebmp output");
+    }
+
+    #[test]
+    fn filename_with_spaces_is_quoted() {
+        let cmd = Savebmp::builder("my output".to_string()).build();
+        assert_eq!(cmd.to_args_string(), "savebmp 'my output'");
+    }
+}

@@ -28,9 +28,9 @@ pub enum Method {
 impl From<Method> for Argument  {
     fn from(value: Method) -> Self {
         match value {
-            Method::AllNames => Argument::Flag("a".to_string(), Some(true)),
-            Method::AllDetails => Argument::Flag("A".to_string(), Some(true)),
-            Method::Single(var) => Argument::Positional(var),
+            Method::AllNames => Argument::flag("a".to_string()),
+            Method::AllDetails => Argument::flag("A".to_string()),
+            Method::Single(var) => Argument::positional(var),
         }
     }
 }

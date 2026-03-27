@@ -116,17 +116,25 @@ pub use update_key::UpdateKey;
 use std::fmt::Display;
 
 pub enum Argument {
-    Positional(String),
+    Positional(Option<String>),
     Flag(String, Option<bool>),
     Option(String, Option<String>),
 }
 
 impl Argument {
     pub fn positional(value: impl Into<String>) -> Self {
-        Argument::Positional(value.into())
+        Argument::Positional(Some(value.into()))
     }
 
-    pub fn flag(key: impl Into<String>, value: bool) -> Self {
+    pub fn positional_option(value: Option<impl Display>) -> Self {
+        Argument::Positional(value.map(|v| v.to_string()))
+    }
+
+    pub fn flag(key: impl Into<String>) -> Self {
+        Argument::Flag(key.into(), Some(true))
+    }
+
+    pub fn flag_option(key: impl Into<String>, value: bool) -> Self {
         Argument::Flag(key.into(), Some(value))
     }
 
@@ -136,7 +144,7 @@ impl Argument {
 
     fn is_valid(&self) -> bool {
         match self {
-            Argument::Positional(_) => true,
+            Argument::Positional(value) => value.is_some(),
             Argument::Flag(_, value) => value.is_some_and(|x| x),
             Argument::Option(_, value) => value.is_some(),
         }
@@ -151,13 +159,14 @@ impl Display for Argument {
         }
 
         match self {
-            Argument::Positional(value) => {
+            Argument::Positional(Some(value)) => {
                 if value.contains(" ") {
                     write!(f, "'{}'", value)?;
                 } else {
                     write!(f, "{}", value)?;
                 }
             }
+            Argument::Positional(None) => {}
             Argument::Flag(key, _) => {
                 write!(f, "-{}", key)?;
             }
@@ -180,7 +189,7 @@ pub trait Command {
     fn name() -> &'static str;
 
     fn to_args_string(&self) -> String {
-        let mut args = vec![Argument::Positional(Self::name().to_string())];
+        let mut args = vec![Argument::Positional(Some(Self::name().to_string()))];
         args.extend(self.args());
         let command = args
             .iter()
@@ -211,16 +220,31 @@ mod tests {
         assert_eq!(Argument::positional("my file").to_string(), "'my file'");
     }
 
-    // --- Argument::Flag ---
-
     #[test]
-    fn flag_true_renders_with_dash() {
-        assert_eq!(Argument::flag("v", true).to_string(), "-v");
+    fn positional_option_some_renders_value() {
+        assert_eq!(Argument::positional_option(Some(1.5_f32)).to_string(), "1.5");
     }
 
     #[test]
-    fn flag_false_renders_empty() {
-        assert_eq!(Argument::flag("v", false).to_string(), "");
+    fn positional_option_none_renders_empty() {
+        assert_eq!(Argument::positional_option(Option::<f32>::None).to_string(), "");
+    }
+
+    // --- Argument::Flag ---
+
+    #[test]
+    fn flag_renders_with_dash() {
+        assert_eq!(Argument::flag("v").to_string(), "-v");
+    }
+
+    #[test]
+    fn flag_option_true_renders_with_dash() {
+        assert_eq!(Argument::flag_option("v", true).to_string(), "-v");
+    }
+
+    #[test]
+    fn flag_option_false_renders_empty() {
+        assert_eq!(Argument::flag_option("v", false).to_string(), "");
     }
 
     // --- Argument::Option ---
@@ -252,8 +276,8 @@ mod tests {
         }
         fn args(&self) -> Vec<Argument> {
             vec![
-                Argument::flag("v", true),
-                Argument::flag("q", false),
+                Argument::flag_option("v", true),
+                Argument::flag_option("q", false),
                 Argument::positional("file.fit"),
             ]
         }

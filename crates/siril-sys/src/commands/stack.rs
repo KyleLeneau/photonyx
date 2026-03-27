@@ -1,3 +1,5 @@
+#![allow(clippy::doc_lazy_continuation)]
+
 use bon::Builder;
 
 use crate::{
@@ -131,9 +133,9 @@ impl Command for Stack {
         }
 
         args.extend([
-            Argument::flag("filter-incl", self.filter_included),
-            Argument::flag("fastnorm", self.fast_norm),
-            Argument::flag("output_norm", self.output_norm),
+            Argument::flag_option("filter-incl", self.filter_included),
+            Argument::flag_option("fastnorm", self.fast_norm),
+            Argument::flag_option("output_norm", self.output_norm),
         ]);
 
         if let Some(weighting) = &self.weighting {
@@ -141,7 +143,7 @@ impl Command for Stack {
         }
 
         args.extend([
-            Argument::flag("rgb_equal", self.rgb_equalization),
+            Argument::flag_option("rgb_equal", self.rgb_equalization),
             Argument::option("out", self.out.as_deref()),
         ]);
 

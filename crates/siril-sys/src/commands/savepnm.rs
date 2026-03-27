@@ -11,7 +11,10 @@ use crate::commands::{Argument, Command};
 /// The extension of the output will be **filename**.ppm for RGB image and **filename**.pgm for gray-level image
 ///
 #[derive(Builder)]
-pub struct Savepnm {}
+pub struct Savepnm {
+    #[builder(start_fn)]
+    filename: String
+}
 
 impl Command for Savepnm {
     fn name() -> &'static str {
@@ -19,8 +22,23 @@ impl Command for Savepnm {
     }
 
     fn args(&self) -> Vec<Argument> {
-        vec![]
+        vec![Argument::positional(self.filename.to_string())]
     }
 }
 
-// TODO: Need command implementation
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn simple_filename() {
+        let cmd = Savepnm::builder("output".to_string()).build();
+        assert_eq!(cmd.to_args_string(), "savepnm output");
+    }
+
+    #[test]
+    fn filename_with_spaces_is_quoted() {
+        let cmd = Savepnm::builder("my output".to_string()).build();
+        assert_eq!(cmd.to_args_string(), "savepnm 'my output'");
+    }
+}

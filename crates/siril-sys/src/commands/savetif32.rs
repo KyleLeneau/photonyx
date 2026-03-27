@@ -11,7 +11,10 @@ use crate::commands::{Argument, Command};
 /// Links: :ref:`savetif <savetif>`
 ///
 #[derive(Builder)]
-pub struct Savetif32 {}
+pub struct Savetif32 {
+    // #[builder(start_fn)]
+    // filename: String
+}
 
 impl Command for Savetif32 {
     fn name() -> &'static str {

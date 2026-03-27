@@ -79,15 +79,15 @@ impl Command for Register {
     fn args(&self) -> Vec<Argument> {
         let mut args = vec![
             Argument::positional(&self.base_name),
-            Argument::flag("2pass", self.two_pass),
-            Argument::flag("selected", self.selected),
+            Argument::flag_option("2pass", self.two_pass),
+            Argument::flag_option("selected", self.selected),
             Argument::option("prefix", self.prefix.as_deref()),
             Argument::option("scale", self.scale),
             Argument::option("layer", self.layer),
             Argument::option("transf", self.trans_func.as_ref()),
             Argument::option("minpairs", self.min_pairs),
             Argument::option("maxstars", self.max_stars),
-            Argument::flag("nostarlist", self.no_starlist),
+            Argument::flag_option("nostarlist", self.no_starlist),
             Argument::option("disto", self.disto.as_deref()),
         ];
 
@@ -95,11 +95,11 @@ impl Command for Register {
             args.push(Argument::option("interp", self.interp.as_ref()));
         }
 
-        args.push(Argument::flag("noclamp", self.noclamp));
+        args.push(Argument::flag_option("noclamp", self.noclamp));
 
         if self.drizzle {
             args.extend([
-                Argument::flag("drizzle", self.drizzle),
+                Argument::flag_option("drizzle", self.drizzle),
                 Argument::option("pixfrac", self.pixfrac),
                 Argument::option("kernel", self.kernel.as_deref()),
                 Argument::option("flat", self.flat.as_deref()),

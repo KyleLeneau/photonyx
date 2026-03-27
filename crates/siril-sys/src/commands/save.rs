@@ -26,7 +26,7 @@ impl Command for Save {
     fn args(&self) -> Vec<Argument> {
         vec![
             Argument::positional(&self.filename),
-            Argument::flag("chksum", self.chksum),
+            Argument::flag_option("chksum", self.chksum),
         ]
     }
 }

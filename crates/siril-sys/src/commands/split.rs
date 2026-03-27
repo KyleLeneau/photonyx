@@ -35,7 +35,7 @@ impl Command for Split {
         ];
 
         if let Some(method) = &self.method {
-            args.push(Argument::flag(method.to_string(), true));
+            args.push(Argument::flag_option(method.to_string(), true));
         }
 
         args

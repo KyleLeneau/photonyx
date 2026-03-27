@@ -11,7 +11,10 @@ use crate::commands::{Argument, Command};
 /// See also SAVETIF32 and SAVETIF8
 ///
 #[derive(Builder)]
-pub struct Savetif {}
+pub struct Savetif {
+    // #[builder(start_fn)]
+    // filename: String
+}
 
 impl Command for Savetif {
     fn name() -> &'static str {

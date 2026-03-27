@@ -25,6 +25,6 @@ impl Command for SetExt {
     }
 
     fn args(&self) -> Vec<super::Argument> {
-        vec![Argument::Positional(self.extension.to_string())]
+        vec![Argument::positional(self.extension.to_string())]
     }
 }

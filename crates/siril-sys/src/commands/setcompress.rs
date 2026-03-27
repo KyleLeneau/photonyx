@@ -1,4 +1,6 @@
 use bon::Builder;
+use strum_macros::Display;
+use strum_macros::EnumString;
 
 use crate::commands::{Argument, Command};
 
@@ -15,7 +17,20 @@ use crate::commands::{Argument, Command};
 /// For example, "setcompress 1 -type=rice 16" sets the rice compression with a quantization of 16
 ///
 #[derive(Builder)]
-pub struct Setcompress {}
+pub struct Setcompress {
+    #[builder(start_fn)]
+    enabled: bool,
+    format: Option<CompressionType>,
+    quantization: Option<u8>
+}
+
+#[derive(Debug, PartialEq, EnumString, Display, Clone)]
+#[strum(serialize_all = "lowercase")]
+pub enum CompressionType {
+    Rice,
+    Gzip1,
+    Gzip2
+}
 
 impl Command for Setcompress {
     fn name() -> &'static str {
@@ -23,8 +38,53 @@ impl Command for Setcompress {
     }
 
     fn args(&self) -> Vec<Argument> {
-        vec![]
+        vec![
+            Argument::positional((self.enabled as u8).to_string()),
+            Argument::option("type", self.format.clone()),
+            Argument::positional_option(self.quantization)
+        ]
     }
 }
 
-// TODO: Need command implementation
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn disabled_no_options() {
+        let cmd = Setcompress::builder(false).build();
+        assert_eq!(cmd.to_args_string(), "setcompress 0");
+    }
+
+    #[test]
+    fn enabled_no_options() {
+        let cmd = Setcompress::builder(true).build();
+        assert_eq!(cmd.to_args_string(), "setcompress 1");
+    }
+
+    #[test]
+    fn enabled_with_rice_and_quantization() {
+        let cmd = Setcompress::builder(true)
+            .format(CompressionType::Rice)
+            .quantization(16)
+            .build();
+        assert_eq!(cmd.to_args_string(), "setcompress 1 -type=rice 16");
+    }
+
+    #[test]
+    fn enabled_with_gzip1() {
+        let cmd = Setcompress::builder(true)
+            .format(CompressionType::Gzip1)
+            .build();
+        assert_eq!(cmd.to_args_string(), "setcompress 1 -type=gzip1");
+    }
+
+    #[test]
+    fn enabled_with_gzip2_and_quantization() {
+        let cmd = Setcompress::builder(true)
+            .format(CompressionType::Gzip2)
+            .quantization(32)
+            .build();
+        assert_eq!(cmd.to_args_string(), "setcompress 1 -type=gzip2 32");
+    }
+}

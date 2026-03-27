@@ -38,9 +38,9 @@ impl Command for Convert {
     fn args(&self) -> Vec<Argument> {
         vec![
             Argument::positional(&self.base_name),
-            Argument::flag("debayer", self.debayer),
-            Argument::flag("fitseq", self.use_fitseq),
-            Argument::flag("ser", self.use_ser),
+            Argument::flag_option("debayer", self.debayer),
+            Argument::flag_option("fitseq", self.use_fitseq),
+            Argument::flag_option("ser", self.use_ser),
             Argument::option("start", self.start_index),
             Argument::option("out", self.output_dir.as_ref().map(|v| v.display())),
         ]

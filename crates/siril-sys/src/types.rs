@@ -228,7 +228,7 @@ pub enum SequenceFilter {
 impl SequenceFilter {
     pub fn to_argument(&self) -> crate::commands::Argument {
         match self {
-            SequenceFilter::Included => crate::commands::Argument::flag("filter-incl", true),
+            SequenceFilter::Included => crate::commands::Argument::flag("filter-incl"),
             SequenceFilter::ByValue { filter_type, value } => {
                 crate::commands::Argument::option(filter_type.to_string(), Some(value.to_string()))
             }

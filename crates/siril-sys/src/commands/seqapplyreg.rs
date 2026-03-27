@@ -1,3 +1,5 @@
+#![allow(clippy::doc_lazy_continuation)]
+
 use bon::Builder;
 
 use crate::{
@@ -82,12 +84,12 @@ impl Command for SeqApplyReg {
             Argument::option("layer", self.layer),
             Argument::option("framing", self.framing.as_ref()),
             Argument::option("interp", self.interp.as_ref()),
-            Argument::flag("noclamp", self.noclamp),
+            Argument::flag_option("noclamp", self.noclamp),
         ];
 
         if self.drizzle {
             args.extend([
-                Argument::flag("drizzle", self.drizzle),
+                Argument::flag_option("drizzle", self.drizzle),
                 Argument::option("pixfrac", self.pixfrac),
                 Argument::option("kernel", self.kernel.as_ref()),
                 Argument::option("flat", self.flat.as_deref()),

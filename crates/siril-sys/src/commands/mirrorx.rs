@@ -20,6 +20,6 @@ impl Command for Mirrorx {
     }
 
     fn args(&self) -> Vec<Argument> {
-        vec![Argument::flag("bottomup", self.bottom_up)]
+        vec![Argument::flag_option("bottomup", self.bottom_up)]
     }
 }

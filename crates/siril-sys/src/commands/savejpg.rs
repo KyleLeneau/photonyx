@@ -11,7 +11,10 @@ use crate::commands::{Argument, Command};
 /// The compression quality can be adjusted using the optional **quality** value, 100 being the best and default, while a lower value increases the compression ratio
 ///
 #[derive(Builder)]
-pub struct Savejpg {}
+pub struct Savejpg {
+    // #[builder(start_fn)]
+    // filename: String,
+}
 
 impl Command for Savejpg {
     fn name() -> &'static str {
