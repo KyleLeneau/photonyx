@@ -17,13 +17,13 @@
 * [x] github releases and install script (`cargo-dist`)
 * [x] conside changing main crate to lib with /bin folder and named `px` instead
 * [x] create and move cli definition to `px-cli` crate, leave commands in `px`
-* [ ] siril-commands
-* [ ] xtask to generate siril-commands
+* [x] siril-commands
+* [x] xtask to generate siril-commands
+* [x] need to directory from the siril builder exposed to work inside of it later
+* [x] need the best_rejection helper to sink some of the settings
 * [ ] fits crate to wrap some other fits library (cfitsio?)
 * [ ] Siril workflows idea (jobs & workflows) like CI but for the processing engine
-* [ ] need to directory from the siril builder exposed to work inside of it later
 * [ ] need the conversion file helper to move files someplace else on the system
-* [ ] need the best_rejection helper to sink some of the settings
 * [ ] need some type of processing_engine with the basic workflows
 * [ ] resources should have a container aware memory and cpu limits
 * [ ] the stdout and error streams from siril need to be exposed someplace so I consume elsewhere (like sse)

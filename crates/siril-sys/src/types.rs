@@ -253,3 +253,33 @@ impl Display for SigmaRange {
         write!(f, "{} {}", self.low, self.high)
     }
 }
+
+/// Helper to find the best rejection based on number of images
+///
+pub struct BestRejection {
+    pub method: StackRejection,
+    pub low_threshold: f64,
+    pub high_threshold: f64,
+}
+
+impl BestRejection {
+    pub fn find(image_count: usize) -> Self {
+        match image_count {
+            0..=6 => Self {
+                method: StackRejection::Percentile,
+                low_threshold: 0.2,
+                high_threshold: 0.1,
+            },
+            7..=30 => Self {
+                method: StackRejection::Winsorized,
+                low_threshold: 3.0,
+                high_threshold: 3.0,
+            },
+            _ => Self {
+                method: StackRejection::Linear,
+                low_threshold: 5.0,
+                high_threshold: 5.0,
+            },
+        }
+    }
+}
