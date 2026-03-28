@@ -10,8 +10,8 @@ use crate::commands::{Argument, Command};
 ///
 #[derive(Builder)]
 pub struct Savebmp {
-    #[builder(start_fn)]
-    filename: String
+    #[builder(start_fn, into)]
+    filename: String,
 }
 
 impl Command for Savebmp {
@@ -30,13 +30,13 @@ mod tests {
 
     #[test]
     fn simple_filename() {
-        let cmd = Savebmp::builder("output".to_string()).build();
+        let cmd = Savebmp::builder("output").build();
         assert_eq!(cmd.to_args_string(), "savebmp output");
     }
 
     #[test]
     fn filename_with_spaces_is_quoted() {
-        let cmd = Savebmp::builder("my output".to_string()).build();
+        let cmd = Savebmp::builder("my output").build();
         assert_eq!(cmd.to_args_string(), "savebmp 'my output'");
     }
 }

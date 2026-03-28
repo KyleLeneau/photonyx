@@ -12,7 +12,7 @@ use crate::commands::{Argument, Command};
 ///
 #[derive(Builder)]
 pub struct Load {
-    #[builder(start_fn)]
+    #[builder(start_fn, into)]
     filename: String,
 }
 
@@ -25,3 +25,4 @@ impl Command for Load {
         vec![Argument::positional(self.filename.clone())]
     }
 }
+// TODO: Implement Tests

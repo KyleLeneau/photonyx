@@ -10,8 +10,8 @@ use crate::commands::{Argument, Command};
 ///
 #[derive(Builder)]
 pub struct Getref {
-    #[builder(start_fn)]
-    sequence: String
+    #[builder(start_fn, into)]
+    sequence: String,
 }
 
 impl Command for Getref {
@@ -30,13 +30,13 @@ mod tests {
 
     #[test]
     fn simple_sequence_name() {
-        let cmd = Getref::builder("lights".to_string()).build();
+        let cmd = Getref::builder("lights").build();
         assert_eq!(cmd.to_args_string(), "getref lights");
     }
 
     #[test]
     fn sequence_name_with_spaces_is_quoted() {
-        let cmd = Getref::builder("my lights".to_string()).build();
+        let cmd = Getref::builder("my lights").build();
         assert_eq!(cmd.to_args_string(), "getref 'my lights'");
     }
 }

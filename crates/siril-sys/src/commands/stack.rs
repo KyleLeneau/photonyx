@@ -64,7 +64,7 @@ use crate::{
 ///
 #[derive(Builder)]
 pub struct Stack {
-    #[builder(start_fn)]
+    #[builder(start_fn, into)]
     base_name: String,
 
     #[builder(default = StackType::Rej)]
@@ -100,6 +100,7 @@ pub struct Stack {
     #[builder(default = false)]
     rgb_equalization: bool,
 
+    #[builder(into)]
     out: Option<String>,
 }
 
@@ -150,3 +151,4 @@ impl Command for Stack {
         args
     }
 }
+// TODO: Implement Tests

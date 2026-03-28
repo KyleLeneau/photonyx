@@ -15,7 +15,7 @@ use crate::commands::{Argument, Command};
 #[derive(Builder)]
 pub struct Setcpu {
     #[builder(start_fn)]
-    number: u8
+    number: u8,
 }
 
 impl Command for Setcpu {

@@ -26,10 +26,13 @@ use crate::{
 ///
 #[derive(Builder)]
 pub struct Calibrate {
-    #[builder(start_fn)]
+    #[builder(start_fn, into)]
     base_name: String,
+    #[builder(into)]
     bias: Option<String>,
+    #[builder(into)]
     dark: Option<String>,
+    #[builder(into)]
     flat: Option<String>,
     #[builder(default = false)]
     cfa: bool,
@@ -43,12 +46,14 @@ pub struct Calibrate {
     dark_optimization: bool,
     #[builder(default = false)]
     all_frames: bool,
+    #[builder(into)]
     prefix: Option<String>,
     #[builder(default = false)]
     create_fitsseq: bool,
     #[builder(default = false)]
     cosmetic_correction_from_dark: bool,
     cosmetic_correction_from_dark_range: Option<SigmaRange>,
+    #[builder(into)]
     cosmetic_correction_from_bad_pixel_map: Option<String>,
 }
 
@@ -71,7 +76,8 @@ impl Command for Calibrate {
         {
             args.push(Argument::option("cc", Some("dark")));
             if let Some(range) = &self.cosmetic_correction_from_dark_range {
-                args.push(Argument::positional(range.to_string()));
+                args.push(Argument::positional(range.low.to_string()));
+                args.push(Argument::positional(range.high.to_string()));
             }
         }
 
@@ -92,5 +98,122 @@ impl Command for Calibrate {
         ]);
 
         args
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn minimal_sequence_only() {
+        let cmd = Calibrate::builder("lights").build();
+        assert_eq!(cmd.to_args_string(), "calibrate lights");
+    }
+
+    #[test]
+    fn with_bias_dark_flat() {
+        let cmd = Calibrate::builder("lights")
+            .bias("bias.fit")
+            .dark("dark.fit")
+            .flat("flat.fit")
+            .build();
+        assert_eq!(
+            cmd.to_args_string(),
+            "calibrate lights -bias=bias.fit -dark=dark.fit -flat=flat.fit"
+        );
+    }
+
+    #[test]
+    fn cosmetic_correction_from_dark_no_range() {
+        let cmd = Calibrate::builder("lights")
+            .dark("dark.fit")
+            .cosmetic_correction_from_dark(true)
+            .build();
+        assert_eq!(
+            cmd.to_args_string(),
+            "calibrate lights -dark=dark.fit -cc=dark"
+        );
+    }
+
+    #[test]
+    fn cosmetic_correction_from_dark_with_range() {
+        let cmd = Calibrate::builder("lights")
+            .dark("dark.fit")
+            .cosmetic_correction_from_dark(true)
+            .cosmetic_correction_from_dark_range(SigmaRange {
+                low: 2.0,
+                high: 3.0,
+            })
+            .build();
+        assert_eq!(
+            cmd.to_args_string(),
+            "calibrate lights -dark=dark.fit -cc=dark 2 3"
+        );
+    }
+
+    #[test]
+    fn cosmetic_correction_from_bad_pixel_map() {
+        let cmd = Calibrate::builder("lights")
+            .cosmetic_correction_from_bad_pixel_map("bpm.fit")
+            .build();
+        assert_eq!(cmd.to_args_string(), "calibrate lights -cc=bpm bpm.fit");
+    }
+
+    #[test]
+    fn cc_bpm_takes_priority_over_dark() {
+        let cmd = Calibrate::builder("lights")
+            .dark("dark.fit")
+            .cosmetic_correction_from_dark(true)
+            .cosmetic_correction_from_bad_pixel_map("bpm.fit")
+            .build();
+        let s = cmd.to_args_string();
+        assert!(s.contains("-cc=bpm bpm.fit"));
+        assert!(!s.contains("-cc=dark"));
+    }
+
+    #[test]
+    fn color_flags() {
+        let cmd = Calibrate::builder("lights")
+            .cfa(true)
+            .debayer(true)
+            .equalize_cfa(true)
+            .fix_xtrans(true)
+            .build();
+        let s = cmd.to_args_string();
+        assert!(s.contains("-cfa"));
+        assert!(s.contains("-debayer"));
+        assert!(s.contains("-equalize_cfa"));
+        assert!(s.contains("-fix_xtrans"));
+    }
+
+    #[test]
+    fn dark_optimization_flag() {
+        let cmd = Calibrate::builder("lights").dark_optimization(true).build();
+        assert!(cmd.to_args_string().contains("-opt"));
+    }
+
+    #[test]
+    fn all_frames_flag() {
+        let cmd = Calibrate::builder("lights").all_frames(true).build();
+        assert!(cmd.to_args_string().contains("-all"));
+    }
+
+    #[test]
+    fn fitseq_flag() {
+        let cmd = Calibrate::builder("lights").create_fitsseq(true).build();
+        assert!(cmd.to_args_string().contains("-fitseq"));
+    }
+
+    #[test]
+    fn custom_prefix() {
+        let cmd = Calibrate::builder("lights").prefix("cal_").build();
+        assert_eq!(cmd.to_args_string(), "calibrate lights -prefix=cal_");
+    }
+
+    #[test]
+    fn sequence_name_with_spaces_is_quoted() {
+        let cmd = Calibrate::builder("my lights").build();
+        assert_eq!(cmd.to_args_string(), "calibrate 'my lights'");
     }
 }

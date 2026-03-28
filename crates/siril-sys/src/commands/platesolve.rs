@@ -44,3 +44,4 @@ impl Command for Platesolve {
 }
 
 // TODO: Need command implementation
+// TODO: Implement Tests

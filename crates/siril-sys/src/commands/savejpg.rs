@@ -12,7 +12,7 @@ use crate::commands::{Argument, Command};
 ///
 #[derive(Builder)]
 pub struct Savejpg {
-    // #[builder(start_fn)]
+    // #[builder(start_fn, into)]
     // filename: String,
 }
 
@@ -27,3 +27,4 @@ impl Command for Savejpg {
 }
 
 // TODO: Need command implementation
+// TODO: Implement Tests

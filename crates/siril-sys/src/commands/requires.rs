@@ -12,9 +12,10 @@ use crate::commands::{Argument, Command};
 ///
 #[derive(Builder)]
 pub struct Requires {
-    #[builder(start_fn)]
+    #[builder(start_fn, into)]
     min_version: String,
-    obsolete_version: Option<String>
+    #[builder(into)]
+    obsolete_version: Option<String>,
 }
 
 impl Command for Requires {
@@ -25,7 +26,7 @@ impl Command for Requires {
     fn args(&self) -> Vec<Argument> {
         vec![
             Argument::positional(self.min_version.to_string()),
-            Argument::positional_option(self.obsolete_version.clone())
+            Argument::positional_option(self.obsolete_version.clone()),
         ]
     }
 }
@@ -36,15 +37,13 @@ mod tests {
 
     #[test]
     fn min_version_only() {
-        let cmd = Requires::builder("1.2.0".to_string()).build();
+        let cmd = Requires::builder("1.2.0").build();
         assert_eq!(cmd.to_args_string(), "requires 1.2.0");
     }
 
     #[test]
     fn min_and_obsolete_version() {
-        let cmd = Requires::builder("1.2.0".to_string())
-            .obsolete_version("1.4.0".to_string())
-            .build();
+        let cmd = Requires::builder("1.2.0").obsolete_version("1.4.0").build();
         assert_eq!(cmd.to_args_string(), "requires 1.2.0 1.4.0");
     }
 }

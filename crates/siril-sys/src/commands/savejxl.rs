@@ -12,7 +12,7 @@ use crate::commands::{Argument, Command};
 ///
 #[derive(Builder)]
 pub struct Savejxl {
-    // #[builder(start_fn)]
+    // #[builder(start_fn, into)]
     // filename: String
 }
 
@@ -27,3 +27,4 @@ impl Command for Savejxl {
 }
 
 // TODO: Need command implementation
+// TODO: Implement Tests

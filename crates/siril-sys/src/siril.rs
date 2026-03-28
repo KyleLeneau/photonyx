@@ -7,8 +7,9 @@ use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
+use crate::commands::{Capabilities, Requires, Set, Setcpu};
 use crate::message::{SirilError, SirilMessage};
-use crate::{FitsExt, SirilSetting};
+use crate::{FitsExt, SirilSetting, commands};
 
 /// Unix FIFOs use `pipe::Sender`; Windows named pipes use `NamedPipeClient`
 /// (Siril acts as the server, we connect as a client).
@@ -340,9 +341,9 @@ impl Siril {
     /// Call some helper commands on siril if the user provided a builder to us
     ///
     async fn configure<'a>(&mut self, builder: Builder<'a>) -> Result<(), SirilError> {
-        self.command("requires 0.99.10").await?;
+        self.execute(&Requires::builder("0.99.10").build()).await?;
         if let Some(cores) = builder.cpu_limit {
-            self.command(&format!("setcpu {}", cores)).await?;
+            self.execute(&Setcpu::builder(cores).build()).await?;
         }
 
         // 16bit is default to flip to 32 is specified
@@ -362,7 +363,7 @@ impl Siril {
             }
         }
 
-        self.command("capabilities").await?;
+        self.execute(&Capabilities::builder().build()).await?;
         self.set(SirilSetting::Extension, builder.fits_extension)
             .await?;
 
@@ -450,12 +451,14 @@ impl Siril {
 
     /// Sets a Siril setting by key and value (`set {key}={value}`)
     ///
-    pub async fn set(
+    async fn set(
         &mut self,
         setting: SirilSetting,
         value: impl std::fmt::Display,
     ) -> Result<(), SirilError> {
-        self.command(&format!("set {}={}", setting, value)).await?;
+        let method = commands::set::Method::Var(setting, value.to_string());
+        let cmd = Set::builder(method).build();
+        self.execute(&cmd).await?;
         Ok(())
     }
 }

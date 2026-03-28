@@ -1,6 +1,9 @@
 use bon::Builder;
 
-use crate::commands::{Argument, Command};
+use crate::{
+    SirilSetting,
+    commands::{Argument, Command},
+};
 
 /// ```text
 /// set { -import=inifilepath | variable=value }
@@ -12,7 +15,15 @@ use crate::commands::{Argument, Command};
 /// Links: :ref:`get <get>`
 ///
 #[derive(Builder)]
-pub struct Set {}
+pub struct Set {
+    #[builder(start_fn)]
+    method: Method,
+}
+
+pub enum Method {
+    Import(String),
+    Var(SirilSetting, String),
+}
 
 impl Command for Set {
     fn name() -> &'static str {
@@ -20,8 +31,13 @@ impl Command for Set {
     }
 
     fn args(&self) -> Vec<Argument> {
-        vec![]
+        match &self.method {
+            Method::Import(file) => vec![Argument::option("import".to_string(), Some(file))],
+            Method::Var(setting, value) => {
+                vec![Argument::positional(format!("{}={}", setting, value))]
+            }
+        }
     }
 }
 
-// TODO: Need command implementation
+// TODO: Implement Tests

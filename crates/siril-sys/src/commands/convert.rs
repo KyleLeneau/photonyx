@@ -18,7 +18,7 @@ use crate::commands::{Argument, Command};
 ///
 #[derive(Builder)]
 pub struct Convert {
-    #[builder(start_fn)]
+    #[builder(start_fn, into)]
     base_name: String,
     #[builder(default = false)]
     debayer: bool,
@@ -44,5 +44,68 @@ impl Command for Convert {
             Argument::option("start", self.start_index),
             Argument::option("out", self.output_dir.as_ref().map(|v| v.display())),
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn minimal_basename_only() {
+        let cmd = Convert::builder("light").build();
+        assert_eq!(cmd.to_args_string(), "convert light");
+    }
+
+    #[test]
+    fn with_debayer_flag() {
+        let cmd = Convert::builder("light").debayer(true).build();
+        assert_eq!(cmd.to_args_string(), "convert light -debayer");
+    }
+
+    #[test]
+    fn with_fitseq_flag() {
+        let cmd = Convert::builder("light").use_fitseq(true).build();
+        assert_eq!(cmd.to_args_string(), "convert light -fitseq");
+    }
+
+    #[test]
+    fn with_ser_flag() {
+        let cmd = Convert::builder("light").use_ser(true).build();
+        assert_eq!(cmd.to_args_string(), "convert light -ser");
+    }
+
+    #[test]
+    fn with_start_index() {
+        let cmd = Convert::builder("light").start_index(10u8).build();
+        assert_eq!(cmd.to_args_string(), "convert light -start=10");
+    }
+
+    #[test]
+    fn with_output_dir() {
+        let cmd = Convert::builder("light")
+            .output_dir(PathBuf::from("/tmp/out"))
+            .build();
+        assert_eq!(cmd.to_args_string(), "convert light -out=/tmp/out");
+    }
+
+    #[test]
+    fn basename_with_spaces_is_quoted() {
+        let cmd = Convert::builder("my lights").build();
+        assert_eq!(cmd.to_args_string(), "convert 'my lights'");
+    }
+
+    #[test]
+    fn all_options() {
+        let cmd = Convert::builder("light")
+            .debayer(true)
+            .start_index(5u8)
+            .output_dir(PathBuf::from("/out"))
+            .build();
+        let s = cmd.to_args_string();
+        assert!(s.starts_with("convert light"));
+        assert!(s.contains("-debayer"));
+        assert!(s.contains("-start=5"));
+        assert!(s.contains("-out=/out"));
     }
 }

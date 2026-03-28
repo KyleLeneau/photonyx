@@ -55,8 +55,9 @@ use crate::{
 ///
 #[derive(Builder)]
 pub struct SeqApplyReg {
-    #[builder(start_fn)]
+    #[builder(start_fn, into)]
     base_name: String,
+    #[builder(into)]
     prefix: Option<String>,
     scale: Option<f32>,
     layer: Option<u8>,
@@ -68,6 +69,7 @@ pub struct SeqApplyReg {
     drizzle: bool,
     pixfrac: Option<f32>,
     kernel: Option<DrizzleKernel>,
+    #[builder(into)]
     flat: Option<String>,
 }
 
@@ -99,3 +101,4 @@ impl Command for SeqApplyReg {
         args
     }
 }
+// TODO: Implement Tests

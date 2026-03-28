@@ -1,5 +1,4 @@
 use bon::Builder;
-use std::path::PathBuf;
 
 use crate::commands::{Argument, Command};
 
@@ -13,8 +12,8 @@ use crate::commands::{Argument, Command};
 ///
 #[derive(Builder)]
 pub struct Cd {
-    #[builder(start_fn)]
-    directory: PathBuf,
+    #[builder(start_fn, into)]
+    directory: String,
 }
 
 impl Command for Cd {
@@ -23,6 +22,29 @@ impl Command for Cd {
     }
 
     fn args(&self) -> Vec<Argument> {
-        vec![Argument::positional(self.directory.display().to_string())]
+        vec![Argument::positional(self.directory.to_string())]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn simple_directory() {
+        let cmd = Cd::builder("/home/user/photos").build();
+        assert_eq!(cmd.to_args_string(), "cd /home/user/photos");
+    }
+
+    #[test]
+    fn directory_with_spaces_is_quoted() {
+        let cmd = Cd::builder("/home/user/my photos").build();
+        assert_eq!(cmd.to_args_string(), "cd '/home/user/my photos'");
+    }
+
+    #[test]
+    fn home_tilde_shorthand() {
+        let cmd = Cd::builder("~/photos").build();
+        assert_eq!(cmd.to_args_string(), "cd ~/photos");
     }
 }

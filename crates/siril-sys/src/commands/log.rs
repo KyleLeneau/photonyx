@@ -20,3 +20,4 @@ impl Command for Log {
         vec![]
     }
 }
+// TODO: Implement Tests

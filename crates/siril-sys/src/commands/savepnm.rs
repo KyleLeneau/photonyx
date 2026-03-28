@@ -12,8 +12,8 @@ use crate::commands::{Argument, Command};
 ///
 #[derive(Builder)]
 pub struct Savepnm {
-    #[builder(start_fn)]
-    filename: String
+    #[builder(start_fn, into)]
+    filename: String,
 }
 
 impl Command for Savepnm {
@@ -32,13 +32,13 @@ mod tests {
 
     #[test]
     fn simple_filename() {
-        let cmd = Savepnm::builder("output".to_string()).build();
+        let cmd = Savepnm::builder("output").build();
         assert_eq!(cmd.to_args_string(), "savepnm output");
     }
 
     #[test]
     fn filename_with_spaces_is_quoted() {
-        let cmd = Savepnm::builder("my output".to_string()).build();
+        let cmd = Savepnm::builder("my output").build();
         assert_eq!(cmd.to_args_string(), "savepnm 'my output'");
     }
 }

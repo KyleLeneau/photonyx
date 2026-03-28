@@ -12,7 +12,7 @@ use crate::commands::{Argument, Command};
 ///
 #[derive(Builder)]
 pub struct Save {
-    #[builder(start_fn)]
+    #[builder(start_fn, into)]
     filename: String,
     #[builder(default = false)]
     chksum: bool,
@@ -30,3 +30,4 @@ impl Command for Save {
         ]
     }
 }
+// TODO: Implement Tests

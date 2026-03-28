@@ -21,7 +21,7 @@ pub struct Setcompress {
     #[builder(start_fn)]
     enabled: bool,
     format: Option<CompressionType>,
-    quantization: Option<u8>
+    quantization: Option<u8>,
 }
 
 #[derive(Debug, PartialEq, EnumString, Display, Clone)]
@@ -29,7 +29,7 @@ pub struct Setcompress {
 pub enum CompressionType {
     Rice,
     Gzip1,
-    Gzip2
+    Gzip2,
 }
 
 impl Command for Setcompress {
@@ -41,7 +41,7 @@ impl Command for Setcompress {
         vec![
             Argument::positional((self.enabled as u8).to_string()),
             Argument::option("type", self.format.clone()),
-            Argument::positional_option(self.quantization)
+            Argument::positional_option(self.quantization),
         ]
     }
 }

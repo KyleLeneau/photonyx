@@ -46,12 +46,13 @@ use crate::{
 ///
 #[derive(Builder)]
 pub struct Register {
-    #[builder(start_fn)]
+    #[builder(start_fn, into)]
     base_name: String,
     #[builder(default = false)]
     two_pass: bool,
     #[builder(default = false)]
     selected: bool,
+    #[builder(into)]
     prefix: Option<String>,
     scale: Option<f32>,
     layer: Option<u8>,
@@ -60,6 +61,7 @@ pub struct Register {
     max_stars: Option<u32>,
     #[builder(default = false)]
     no_starlist: bool,
+    #[builder(into)]
     disto: Option<String>,
     interp: Option<PixelInterpolation>,
     #[builder(default = false)]
@@ -67,7 +69,9 @@ pub struct Register {
     #[builder(default = false)]
     drizzle: bool,
     pixfrac: Option<f32>,
+    #[builder(into)]
     kernel: Option<String>,
+    #[builder(into)]
     flat: Option<String>,
 }
 
@@ -109,3 +113,4 @@ impl Command for Register {
         args
     }
 }
+// TODO: Implement Tests

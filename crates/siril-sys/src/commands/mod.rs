@@ -222,12 +222,18 @@ mod tests {
 
     #[test]
     fn positional_option_some_renders_value() {
-        assert_eq!(Argument::positional_option(Some(1.5_f32)).to_string(), "1.5");
+        assert_eq!(
+            Argument::positional_option(Some(1.5_f32)).to_string(),
+            "1.5"
+        );
     }
 
     #[test]
     fn positional_option_none_renders_empty() {
-        assert_eq!(Argument::positional_option(Option::<f32>::None).to_string(), "");
+        assert_eq!(
+            Argument::positional_option(Option::<f32>::None).to_string(),
+            ""
+        );
     }
 
     // --- Argument::Flag ---
@@ -251,7 +257,10 @@ mod tests {
 
     #[test]
     fn option_with_value_renders_as_key_value() {
-        assert_eq!(Argument::option("out", Some("result")).to_string(), "-out=result");
+        assert_eq!(
+            Argument::option("out", Some("result")).to_string(),
+            "-out=result"
+        );
     }
 
     #[test]
@@ -264,7 +273,10 @@ mod tests {
 
     #[test]
     fn option_with_none_renders_empty() {
-        assert_eq!(Argument::option("out", Option::<String>::None).to_string(), "");
+        assert_eq!(
+            Argument::option("out", Option::<String>::None).to_string(),
+            ""
+        );
     }
 
     // --- Command::to_args_string ---

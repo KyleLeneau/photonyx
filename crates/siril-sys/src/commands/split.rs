@@ -13,11 +13,11 @@ use crate::{
 ///
 #[derive(Builder)]
 pub struct Split {
-    #[builder(start_fn)]
+    #[builder(start_fn, into)]
     file1: String,
-    #[builder(start_fn)]
+    #[builder(start_fn, into)]
     file2: String,
-    #[builder(start_fn)]
+    #[builder(start_fn, into)]
     file3: String,
     method: Option<SplitOption>,
 }
@@ -41,3 +41,4 @@ impl Command for Split {
         args
     }
 }
+// TODO: Implement Tests

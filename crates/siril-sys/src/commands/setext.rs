@@ -28,3 +28,4 @@ impl Command for SetExt {
         vec![Argument::positional(self.extension.to_string())]
     }
 }
+// TODO: Implement Tests

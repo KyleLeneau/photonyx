@@ -22,10 +22,10 @@ pub struct Get {
 pub enum Method {
     AllNames,
     AllDetails,
-    Single(String)
+    Single(String),
 }
 
-impl From<Method> for Argument  {
+impl From<Method> for Argument {
     fn from(value: Method) -> Self {
         match value {
             Method::AllNames => Argument::flag("a".to_string()),

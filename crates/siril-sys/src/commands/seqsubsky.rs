@@ -15,7 +15,7 @@ use crate::commands::{Argument, Command};
 ///
 #[derive(Builder)]
 pub struct SeqSubSky {
-    #[builder(start_fn)]
+    #[builder(start_fn, into)]
     sequence: String,
     #[builder(default = false)]
     use_rbf: bool,
@@ -26,6 +26,7 @@ pub struct SeqSubSky {
     samples: Option<u32>,
     tolerance: Option<f32>,
     smooth: Option<f32>,
+    #[builder(into)]
     prefix: Option<String>,
 }
 
@@ -54,3 +55,4 @@ impl Command for SeqSubSky {
         args
     }
 }
+// TODO: Implement Tests
