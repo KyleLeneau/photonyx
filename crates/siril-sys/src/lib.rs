@@ -3,6 +3,7 @@ mod types;
 
 pub mod commands;
 pub mod message;
+pub mod siril_ext;
 
 pub use siril::Builder;
 pub use siril::Siril;

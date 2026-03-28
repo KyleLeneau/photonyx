@@ -76,4 +76,7 @@ pub enum SirilError {
 
     #[error("Invalid configuration: {0}")]
     InvalidConfig(String),
+
+    #[error("Parsing error: {0}")]
+    ParseError(String),
 }

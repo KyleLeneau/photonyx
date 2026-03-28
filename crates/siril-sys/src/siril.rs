@@ -370,6 +370,8 @@ impl Siril {
         Ok(())
     }
 
+    /// Execute a command from `crate::commands::*`
+    ///
     pub async fn execute(
         &mut self,
         cmd: &impl crate::commands::Command,

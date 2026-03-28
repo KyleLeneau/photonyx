@@ -40,4 +40,3 @@ impl Command for Merge {
 }
 
 // TODO: Implement Tests
-

@@ -1,13 +1,16 @@
+use std::fmt::Write;
 // use std::path::Path;
 use anyhow::Result;
 
 use siril_sys::Builder;
 use siril_sys::FitsExt;
 use siril_sys::commands::SetExt;
+use siril_sys::siril_ext::*;
 
 use crate::commands::ExitStatus;
+use crate::printer::Printer;
 
-pub(crate) async fn siril_test() -> Result<ExitStatus> {
+pub(crate) async fn siril_test(printer: Printer) -> Result<ExitStatus> {
     tracing::info!("siril_test command called");
 
     // Startup and wait till process is ready for additional commands
@@ -19,11 +22,8 @@ pub(crate) async fn siril_test() -> Result<ExitStatus> {
     let c = SetExt::builder(FitsExt::FITS).build();
     siril.execute(&c).await?;
 
-    // let mut siril = Siril::new().await?;
-    // siril.command("requires 0.99.10").await?;
-    // siril.command("set core.mem_ratio=0.9").await?;
-    // siril.command("set core.force_16bit=false").await?;
-    // siril.command("get -a").await?;
+    let dir = siril.current_directory().await?;
+    writeln!(printer.stdout(), "pwd: {:?}", dir)?;
 
     Ok(ExitStatus::Success)
 }
