@@ -1,6 +1,6 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-
 use tempfile::TempDir;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
@@ -66,7 +66,7 @@ async fn connect_with_retry<T>(
 
 enum MemoryLimit {
     /// Fixed memory limit in Gigabytes
-    FixedGB(u8),
+    FixedGB(f64),
 
     /// Percent of available memory (0.0 to 1.0)
     Ratio(f64),
@@ -102,6 +102,12 @@ impl Default for Builder<'_> {
 }
 
 impl<'a> Builder<'a> {
+    pub fn container_aware_limits(mut self) -> Self {
+        self.cpu_limit = container_aware_cpu_limit();
+        self.memory_limit = container_aware_memory_limit_gb().unwrap_or(MemoryLimit::Ratio(0.9));
+        self
+    }
+
     pub fn use_cpu_limit(mut self, cores: u8) -> Self {
         self.cpu_limit = Some(cores);
         self
@@ -112,7 +118,7 @@ impl<'a> Builder<'a> {
         self
     }
 
-    pub fn use_memory_fixed_gb(mut self, limit: u8) -> Self {
+    pub fn use_memory_fixed_gb(mut self, limit: f64) -> Self {
         self.memory_limit = MemoryLimit::FixedGB(limit);
         self
     }
@@ -477,4 +483,72 @@ impl Drop for Siril {
             let _ = std::fs::remove_file(&self.out_pipe_path);
         }
     }
+}
+
+/// Use cgroup awareness to determine max memory, useful in container envs
+///
+fn container_aware_memory_limit_gb() -> Option<MemoryLimit> {
+    let paths = [
+        "/sys/fs/cgroup/memory/memory.limit_in_bytes",
+        "/sys/fs/cgroup/memory/memory.low",
+        "/sys/fs/cgroup/memory/memory.high",
+        "/sys/fs/cgroup/memory/memory.max",
+        "/sys/fs/cgroup/memory.low",
+        "/sys/fs/cgroup/memory.high",
+        "/sys/fs/cgroup/memory.max",
+    ];
+
+    for path in &paths {
+        if let Some(bytes) = read_int(path)
+            && bytes > 0
+        {
+            let gb = bytes as f64 / 1024.0 / 1024.0 / 1024.0;
+            return Some(MemoryLimit::FixedGB(gb));
+        }
+    }
+
+    None
+}
+
+/// Use cgroup awareness to determine max cpu cores to use, useful in container envs
+///
+fn container_aware_cpu_limit() -> Option<u8> {
+    // cgroup v1
+    let cgroup1_quota = "/sys/fs/cgroup/cpu/cpu.cfs_quota_us";
+    let cgroup1_period = "/sys/fs/cgroup/cpu/cpu.cfs_period_us";
+
+    if std::path::Path::new(cgroup1_quota).exists()
+        && std::path::Path::new(cgroup1_period).exists()
+        && let (Some(quota), Some(period)) = (
+            read_int_signed(cgroup1_quota),
+            read_int_signed(cgroup1_period),
+        )
+    {
+        // -1 means no limit in cgroup v1
+        if quota > 0 && period > 0 {
+            return u8::try_from(quota / period).ok();
+        }
+    }
+
+    // cgroup v2
+    let cgroup2 = "/sys/fs/cgroup/cpu.max";
+    if let Ok(contents) = fs::read_to_string(cgroup2) {
+        let mut parts = contents.split_whitespace();
+        if let (Some(quota), Some(period)) = (parts.next(), parts.next()) {
+            // "max" means no limit in cgroup v2
+            if let (Ok(quota), Ok(period)) = (quota.parse::<u64>(), period.parse::<u64>()) {
+                return u8::try_from(quota / period).ok();
+            }
+        }
+    }
+
+    None
+}
+
+fn read_int_signed(path: &str) -> Option<i64> {
+    fs::read_to_string(path).ok()?.trim().parse().ok()
+}
+
+fn read_int(path: &str) -> Option<u32> {
+    fs::read_to_string(path).ok()?.trim().parse().ok()
 }

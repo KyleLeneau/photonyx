@@ -21,17 +21,18 @@
 * [x] xtask to generate siril-commands
 * [x] need to directory from the siril builder exposed to work inside of it later
 * [x] need the best_rejection helper to sink some of the settings
+* [x] maybe code generate an impl SirilExt for all commands to appear first class (accept builder)
+* [x] resources should have a container aware memory and cpu limits
 * [ ] fits crate to wrap some other fits library (cfitsio?)
 * [ ] Siril workflows idea (jobs & workflows) like CI but for the processing engine
 * [ ] need the conversion file helper to move files someplace else on the system
 * [ ] need some type of processing_engine with the basic workflows
-* [ ] resources should have a container aware memory and cpu limits
 * [ ] the stdout and error streams from siril need to be exposed someplace so I consume elsewhere (like sse)
-* [ ] maybe code generate an impl SirilExt for all commands to appear first class (accept builder)
-* [ ] need to test multi pipe on windows now that MR is merged for support
 * [ ] `clap_complete` for shell completion
 * [ ] document git tagging and release process with `cargo-dist`
 * [ ] self updating cli (like uv `px self update`) (https://docs.rs/axoupdater)
+* [ ]
+* [ ] need to test multi pipe on windows now that MR is merged for support
 * [ ]
 
 
