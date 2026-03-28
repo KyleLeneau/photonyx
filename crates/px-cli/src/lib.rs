@@ -88,10 +88,10 @@ pub struct SelfNamespace {
 
 #[derive(Subcommand)]
 pub enum SelfCommand {
-    /// Update uv.
+    /// Update px.
     Update(SelfUpdateArgs),
 
-    /// Display uv's version
+    /// Display px's version
     Version {
         /// Only print the version
         #[arg(long)]
@@ -103,7 +103,7 @@ pub enum SelfCommand {
 
 #[derive(Args, Debug)]
 pub struct SelfUpdateArgs {
-    /// Update to the specified version. If not provided, uv will update to the latest version.
+    /// Update to the specified version. If not provided, px will update to the latest version.
     #[arg(value_hint = ValueHint::Other)]
     pub target_version: Option<String>,
 

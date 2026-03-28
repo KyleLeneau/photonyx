@@ -23,6 +23,7 @@
 * [x] need the best_rejection helper to sink some of the settings
 * [x] maybe code generate an impl SirilExt for all commands to appear first class (accept builder)
 * [x] resources should have a container aware memory and cpu limits
+* [x] cargo-dist should install to usr/bin common folders like uv does
 * [ ] fits crate to wrap some other fits library (cfitsio?)
 * [ ] Siril workflows idea (jobs & workflows) like CI but for the processing engine
 * [ ] need the conversion file helper to move files someplace else on the system
@@ -31,7 +32,8 @@
 * [ ] `clap_complete` for shell completion
 * [ ] document git tagging and release process with `cargo-dist`
 * [ ] self updating cli (like uv `px self update`) (https://docs.rs/axoupdater)
-* [ ]
+* [ ] need a better way to bump versions for a release
+* [ ] need a `.px` folder in the user home initialized at some point to store default or common config
 * [ ] need to test multi pipe on windows now that MR is merged for support
 * [ ]
 
