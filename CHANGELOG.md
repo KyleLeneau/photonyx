@@ -6,6 +6,7 @@
 
 * Add shell completion, use `px generate-shell-completion zsh` to generate
 * Updated README.md with install, completiong and uninstall instructions
+* Add an `OutputSink` to siril builder to redirect stdout/stderr
 
 ## 0.1.3
 

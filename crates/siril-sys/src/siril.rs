@@ -9,6 +9,7 @@ use tokio::task::JoinHandle;
 
 use crate::commands::{Capabilities, Requires, Set, Setcpu};
 use crate::message::{SirilError, SirilMessage};
+use crate::output::{OutputLine, OutputSink, OutputStream};
 use crate::{FitsExt, SirilSetting, commands};
 
 /// Unix FIFOs use `pipe::Sender`; Windows named pipes use `NamedPipeClient`
@@ -87,6 +88,9 @@ pub struct Builder<'a> {
 
     /// Set's siril to use 32bit by default (default: true)
     use_32bit: bool,
+
+    /// Where to route siril-cli stdout and stderr lines (default: inherit)
+    output_sink: OutputSink,
 }
 
 impl Default for Builder<'_> {
@@ -97,6 +101,7 @@ impl Default for Builder<'_> {
             memory_limit: MemoryLimit::Ratio(0.9),
             fits_extension: FitsExt::FITS,
             use_32bit: true,
+            output_sink: OutputSink::Inherit,
         }
     }
 }
@@ -135,6 +140,11 @@ impl<'a> Builder<'a> {
 
     pub fn use_32bit(mut self, value: bool) -> Self {
         self.use_32bit = value;
+        self
+    }
+
+    pub fn output_sink(mut self, sink: OutputSink) -> Self {
+        self.output_sink = sink;
         self
     }
 
@@ -229,17 +239,36 @@ impl Siril {
         let stdout = child.stdout.take().expect("stdout not captured");
         let stderr = child.stderr.take().expect("stderr not captured");
 
+        let stdout_sink = builder.output_sink.clone();
+        let stderr_sink = builder.output_sink.clone();
+
         let stdout_task = tokio::spawn(async move {
             let mut reader = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = reader.next_line().await {
-                println!("[siril stdout] {}", line);
+                match &stdout_sink {
+                    OutputSink::Inherit => println!("[siril stdout] {}", line),
+                    OutputSink::Discard => {}
+                    OutputSink::Channel(tx) => {
+                        let _ = tx
+                            .send(OutputLine { stream: OutputStream::Stdout, line })
+                            .await;
+                    }
+                }
             }
         });
 
         let stderr_task = tokio::spawn(async move {
             let mut reader = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = reader.next_line().await {
-                eprintln!("[siril stderr] {}", line);
+                match &stderr_sink {
+                    OutputSink::Inherit => eprintln!("[siril stderr] {}", line),
+                    OutputSink::Discard => {}
+                    OutputSink::Channel(tx) => {
+                        let _ = tx
+                            .send(OutputLine { stream: OutputStream::Stderr, line })
+                            .await;
+                    }
+                }
             }
         });
 
@@ -299,15 +328,18 @@ impl Siril {
             (in_pipe_writer, out_pipe_reader)
         };
 
+        // TODO: pipe log output (SirilMessage::Log, Progress, etc.) is not yet covered by
+        // OutputSink — these prints are separate from stdout/stderr and will need their own
+        // routing when we revisit silencing reader_task output. See ADR 002.
         let reader_task = tokio::spawn(async move {
             let mut reader = BufReader::new(out_pipe_reader).lines();
             while let Ok(Some(line)) = reader.next_line().await {
                 let msg = SirilMessage::parse(&line);
-                match &msg {
-                    SirilMessage::Log(text) => println!("[siril] {}", text),
-                    SirilMessage::Progress(pct) => println!("[siril] progress: {}%", pct),
-                    other => println!("[siril] {:?}", other),
-                }
+                // match &msg {
+                //     SirilMessage::Log(text) => println!("[siril reader] {}", text),
+                //     SirilMessage::Progress(pct) => println!("[siril reader] progress: {}%", pct),
+                //     other => println!("[siril reader] {:?}", other),
+                // }
                 if msg_tx.send(msg).await.is_err() {
                     break; // receiver dropped
                 }
