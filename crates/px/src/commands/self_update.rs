@@ -3,6 +3,7 @@ use std::fmt::Write;
 use anyhow::Result;
 use axoupdater::{AxoUpdater, AxoupdateError, UpdateRequest};
 use owo_colors::OwoColorize;
+use px_fs::Simplified;
 use tracing::debug;
 
 use crate::commands::ExitStatus;
@@ -155,7 +156,7 @@ pub(crate) async fn self_update(
                     ":".bold(),
                     version_information,
                     format!(
-                        "https://github.com/KyleLeneau/photonyx/releases/tag/{}"
+                        "https://github.com/KyleLeneau/photonyx/releases/tag/{}",
                         result.new_version_tag
                     )
                     .cyan()
@@ -189,7 +190,7 @@ pub(crate) async fn self_update(
                     )?;
                     Ok(ExitStatus::Error)
                 } else {
-                    Err(WrappedReqwestError::from(err).into())
+                    Err(err.into())
                 }
             } else {
                 Err(err.into())
