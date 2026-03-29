@@ -21,6 +21,7 @@ xshell = "0.2.7"
 
 # CLI
 clap = { version = "4", features = ["derive", "env", "string"] }
+clap_complete = { version = "4" }
 dotenvy = "0.15"
 owo-colors = { version = "4.1.0" }
 indicatif = { version = "0.18.0" }

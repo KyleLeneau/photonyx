@@ -23,7 +23,7 @@ const STYLES: Styles = Styles::styled()
 
 #[derive(Parser)]
 #[command(
-    name = "photonyx",
+    name = "px",
     version,
     about = "Astrophotography CLI application",
     styles = STYLES,
@@ -46,6 +46,10 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    /// Generate shell completion
+    #[command(alias = "--generate-shell-completion", hide = true)]
+    GenerateShellCompletion(GenerateShellCompletionArgs),
+
     /// Validate the configuration file and exit
     Check,
 
@@ -115,4 +119,9 @@ pub struct SelfUpdateArgs {
     /// Run without performing the update.
     #[arg(long)]
     pub dry_run: bool,
+}
+
+#[derive(Args)]
+pub struct GenerateShellCompletionArgs {
+    pub shell: clap_complete::Shell,
 }

@@ -20,6 +20,7 @@ axoupdater = { workspace = true, features = [
     "tokio",
 ], optional = true }
 clap = { workspace = true, features = ["derive", "string"] }
+clap_complete = { workspace = true }
 http = { workspace = true }
 indicatif = { workspace = true }
 owo-colors = { workspace = true }

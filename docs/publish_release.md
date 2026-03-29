@@ -27,4 +27,6 @@ Using cargo-dist here is a PR from UV on how to test this: https://github.com/as
 
 ## Test update
 
-TODO:
+* Making sure there are two release with self-update available
+* Starting with 0.1.2 install that version or later
+* then run `px self update` to jumpt to the latest version

@@ -26,13 +26,14 @@
 * [x] cargo-dist should install to usr/bin common folders like uv does
 * [x] document git tagging and release process with `cargo-dist`
 * [x] self updating cli (like uv `px self update`) (https://docs.rs/axoupdater)
+* [x] `clap_complete` for shell completion
+* [x] update readme on how to install, update and setup shell completion
 * [ ] fits crate to wrap some other fits library (cfitsio?)
 * [ ] Siril workflows idea (jobs & workflows) like CI but for the processing engine
 * [ ] need the conversion file helper to move files someplace else on the system
 * [ ] need some type of processing_engine with the basic workflows
 * [ ] the stdout and error streams from siril need to be exposed someplace so I consume elsewhere (like sse)
-* [ ] `clap_complete` for shell completion
-* [ ] need a `.px` folder in the user home initialized at some point to store default or common config
+* [ ] need a `.px` folder in the user home initialized at some point to store default or common config (https://crates.io/crates/etcetera)
 * [ ] post-install or validation step to ensure Siril is installed and available with minimum version
 * [ ]
 

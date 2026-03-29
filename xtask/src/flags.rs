@@ -4,6 +4,12 @@ xflags::xflags! {
     /// Run custom build command.
     cmd xtask {
 
+        /// Run cargo test and cargo clippy before merge
+        cmd check {
+            /// Format the code first
+            optional --fmt
+        }
+
         /// Export all siril commands that are scriptable
         cmd export-siril-commands {
             /// Clean download and generated
@@ -28,8 +34,14 @@ pub struct Xtask {
 
 #[derive(Debug)]
 pub enum XtaskCmd {
+    Check(Check),
     ExportSirilCommands(ExportSirilCommands),
     MergeSirilCommands(MergeSirilCommands),
+}
+
+#[derive(Debug)]
+pub struct Check {
+    pub fmt: bool,
 }
 
 #[derive(Debug)]

@@ -2,6 +2,11 @@
 
 <!-- prettier-ignore-start -->
 
+## 0.1.4
+
+* Add shell completion, use `px generate-shell-completion zsh` to generate
+* Updated README.md with install, completiong and uninstall instructions
+
 ## 0.1.3
 
 Released on 2026-03-29.

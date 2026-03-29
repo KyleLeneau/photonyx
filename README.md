@@ -16,7 +16,59 @@ Photonyx is command line application that uses conventions and configuration fil
 
 ## Installation
 
-TBD - cargo, install.sh, docker
+Windows, Mac, Linux - use the install script from an available [release](https://github.com/KyleLeneau/photonyx/releases)
+
+If installed via the standalone installer, px can update itself to the latest version:
+
+```bash
+px self update
+```
+
+### Shell Completions
+
+Shell completion are available, run one of the following (use `echo $SHELL` to determine your shell):
+
+#### bash
+```bash
+echo 'eval "$(px generate-shell-completion bash)"' >> ~/.bashrc
+```
+
+#### zsh
+```bash
+echo 'eval "$(px generate-shell-completion zsh)"' >> ~/.zshrc
+```
+
+#### fish
+```bash
+echo 'px generate-shell-completion fish | source' > ~/.config/fish/completions/px.fish
+```
+
+#### Elvish
+```bash
+echo 'eval (px generate-shell-completion elvish | slurp)' >> ~/.elvish/rc.elv
+```
+
+#### PowerShell / pwsh
+```powershell
+if (!(Test-Path -Path $PROFILE)) {
+  New-Item -ItemType File -Path $PROFILE -Force
+}
+Add-Content -Path $PROFILE -Value '(& px generate-shell-completion powershell) | Out-String | Invoke-Expression'
+```
+
+## Uninstallation
+
+Remove the px binary:
+
+#### macOS and Linux
+```console
+$ rm ~/.local/bin/px
+```
+
+#### Windows
+```pwsh-session
+PS> rm $HOME\.local\bin\px.exe
+```
 
 ## Usage
 

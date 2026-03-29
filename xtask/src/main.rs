@@ -6,6 +6,7 @@
 //! This binary is integrated into the `cargo` command line by using an alias in
 //! `.cargo/config`.
 
+mod check;
 mod codegen;
 mod flags;
 
@@ -19,6 +20,7 @@ fn main() -> anyhow::Result<()> {
     sh.change_dir(project_root());
 
     match flags.subcommand {
+        flags::XtaskCmd::Check(cmd) => cmd.run(sh),
         flags::XtaskCmd::ExportSirilCommands(cmd) => cmd.run(sh),
         flags::XtaskCmd::MergeSirilCommands(cmd) => cmd.run(sh),
     }
