@@ -20,5 +20,9 @@ insta = { workspace = true }
 px-static = { workspace = true }
 fs-err = { workspace = true }
 
+[features]
+default = []
+self-update = []
+
 [lints]
 workspace = true

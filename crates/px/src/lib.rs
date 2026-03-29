@@ -4,7 +4,9 @@ mod printer;
 
 use anyhow::Result;
 use logging::init_logging;
-use px_cli::{Cli, Commands, SelfCommand, SelfNamespace, SelfUpdateArgs};
+#[cfg(feature = "self-update")]
+use px_cli::SelfUpdateArgs;
+use px_cli::{Cli, Commands, SelfCommand, SelfNamespace};
 
 pub use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -32,14 +34,21 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
                 },
         }) => commands::self_version(short, output_format, printer),
 
+        #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
             command:
                 SelfCommand::Update(SelfUpdateArgs {
-                    target_version: _,
-                    token: _,
-                    dry_run: _,
+                    target_version,
+                    token,
+                    dry_run,
                 }),
-        }) => todo!(),
+        }) => commands::self_update(target_version, token, dry_run, printer).await,
+        #[cfg(not(feature = "self-update"))]
+        Commands::Self_(_) => {
+            const BASE_MESSAGE: &str =
+                "px was not installed with the installer and cannot update itself.";
+            anyhow::bail!(BASE_MESSAGE);
+        }
 
         Commands::Profile(_profile_namespace) => todo!(),
     }

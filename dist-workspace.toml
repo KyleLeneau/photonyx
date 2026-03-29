@@ -25,3 +25,5 @@ targets = [
 install-path = ["$XDG_BIN_HOME/", "$XDG_DATA_HOME/../bin", "~/.local/bin"]
 # Whether to install an updater program
 install-updater = false
+# Specifies feature-flags that should be passed to a Cargo package when building it.
+features = ["self-update"]

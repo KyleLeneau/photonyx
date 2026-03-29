@@ -101,11 +101,11 @@ fn git_head(git_dir: &Path) -> Option<PathBuf> {
     // then let's try to attempt to read it as a worktree. If it's
     // a worktree, then its contents will look like this, e.g.:
     //
-    //     gitdir: /home/andrew/astral/uv/main/.git/worktrees/pr2
+    //     gitdir: /home/andrew/kp/uv/main/.git/worktrees/pr2
     //
     // And the HEAD file we want to watch will be at:
     //
-    //     /home/andrew/astral/uv/main/.git/worktrees/pr2/HEAD
+    //     /home/andrew/kp/uv/main/.git/worktrees/pr2/HEAD
     let contents = fs::read_to_string(git_dir).ok()?;
     let (label, worktree_path) = contents.split_once(':')?;
     if label != "gitdir" {

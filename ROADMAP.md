@@ -25,13 +25,13 @@
 * [x] resources should have a container aware memory and cpu limits
 * [x] cargo-dist should install to usr/bin common folders like uv does
 * [x] document git tagging and release process with `cargo-dist`
+* [-] self updating cli (like uv `px self update`) (https://docs.rs/axoupdater)
 * [ ] fits crate to wrap some other fits library (cfitsio?)
 * [ ] Siril workflows idea (jobs & workflows) like CI but for the processing engine
 * [ ] need the conversion file helper to move files someplace else on the system
 * [ ] need some type of processing_engine with the basic workflows
 * [ ] the stdout and error streams from siril need to be exposed someplace so I consume elsewhere (like sse)
 * [ ] `clap_complete` for shell completion
-* [ ] self updating cli (like uv `px self update`) (https://docs.rs/axoupdater)
 * [ ] need a `.px` folder in the user home initialized at some point to store default or common config
 * [ ] need to support and test multi pipes on windows now that MR is merged for support
 * [ ]

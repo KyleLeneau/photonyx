@@ -14,6 +14,10 @@ siril-sys.workspace = true
 
 anstream.workspace = true
 anyhow.workspace = true
+axoupdater = { workspace = true, features = [
+    "github_releases",
+    "tokio",
+], optional = true }
 clap = { workspace = true, features = ["derive", "string"] }
 indicatif.workspace = true
 owo-colors = { workspace = true }
@@ -21,6 +25,11 @@ serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace=true
+
+[features]
+default = []
+# Adds self-update functionality. This feature is only enabled for px's cargo-dist installer.
+self-update = ["axoupdater", "px-cli/self-update"]
 
 [lints]
 workspace = true
