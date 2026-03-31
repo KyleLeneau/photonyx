@@ -13,6 +13,7 @@ px-static = { workspace = true }
 clap = { workspace = true, features = ["derive", "string"] }
 clap_complete = { workspace = true }
 serde = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }

@@ -4,8 +4,9 @@ use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitEx
 pub fn init_logging(cli: &Cli) {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         let level = match cli.verbose {
-            0 => "info,siril_sys=debug",
-            1 => "debug",
+            0 => "error",
+            1 => "info,siril_sys=debug",
+            2 => "debug",
             _ => "trace",
         };
         EnvFilter::new(level)

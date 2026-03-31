@@ -1,16 +1,16 @@
 use std::process::ExitCode;
 
+pub(crate) use inspect::inspect_file;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 pub(crate) use siril_test::siril_test;
-pub(crate) use stat::stat;
 pub(crate) use tui::terminal_ui;
 pub(crate) use version::self_version;
 
+mod inspect;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod siril_test;
-mod stat;
 mod tui;
 mod version;
 

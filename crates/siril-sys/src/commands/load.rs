@@ -1,6 +1,13 @@
+#![allow(async_fn_in_trait)]
+use std::path::PathBuf;
+
 use bon::Builder;
 
-use crate::commands::{Argument, Command};
+use crate::{
+    Siril,
+    commands::{Argument, Command},
+    message::SirilError,
+};
 
 /// ```text
 /// load filename[.ext]
@@ -25,4 +32,17 @@ impl Command for Load {
         vec![Argument::positional(self.filename.clone())]
     }
 }
+
+pub trait LoadExt {
+    async fn load_path(&mut self, path: PathBuf) -> Result<(), SirilError>;
+}
+
+impl LoadExt for Siril {
+    async fn load_path(&mut self, path: PathBuf) -> Result<(), SirilError> {
+        let cmd = Load::builder(path.display().to_string()).build();
+        self.execute(&cmd).await?;
+        Ok(())
+    }
+}
+
 // TODO: Implement Tests

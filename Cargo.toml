@@ -57,6 +57,7 @@ regex = "1.12.3"
 fs-err = { version = "3.2.2", features = ["tokio"] }
 http = { version = "1.1.0" }
 dunce = { version = "1.0.5" }
+url = { version = "2.5.2", features = ["serde"] }
 
 # Automatic builders
 bon = "3.9"

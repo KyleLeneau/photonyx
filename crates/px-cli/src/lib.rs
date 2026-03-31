@@ -1,5 +1,7 @@
 pub mod version;
 
+use std::path::PathBuf;
+
 use clap::builder::Styles;
 use clap::builder::styling::AnsiColor;
 use clap::{Args, Parser, Subcommand};
@@ -36,7 +38,7 @@ pub struct Cli {
     #[arg(short, long, default_value = "pretty", env = "RUST_LOG_FORMAT")]
     pub log_format: LogFormat,
 
-    /// Increase log verbosity (-v = debug, -vv = trace)
+    /// Increase log verbosity (-v = info, -vv = debug, -vvv = trace)
     #[arg(short, long, action = clap::ArgAction::Count)]
     pub verbose: u8,
 
@@ -49,9 +51,6 @@ pub enum Commands {
     /// Generate shell completion
     #[command(alias = "--generate-shell-completion", hide = true)]
     GenerateShellCompletion(GenerateShellCompletionArgs),
-
-    /// Validate the configuration file and exit
-    Check,
 
     /// Test if siril is installed and working
     SirilTest,
@@ -66,6 +65,10 @@ pub enum Commands {
 
     /// Launch a terminal UI poc
     Tui,
+
+    /// Inspect a single image
+    #[command()]
+    Inspect(InspectArgs),
 }
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -127,4 +130,11 @@ pub struct SelfUpdateArgs {
 #[derive(Args)]
 pub struct GenerateShellCompletionArgs {
     pub shell: clap_complete::Shell,
+}
+
+#[derive(Args)]
+pub struct InspectArgs {
+    /// Fits file to inspect
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub file: PathBuf,
 }

@@ -1645,7 +1645,12 @@ dependencies = [
  "insta",
  "px-static",
  "serde",
+ "url",
 ]
+
+[[package]]
+name = "px-fits"
+version = "0.1.0"
 
 [[package]]
 name = "px-fs"
@@ -2740,6 +2745,7 @@ dependencies = [
  "idna",
  "percent-encoding",
  "serde",
+ "serde_derive",
 ]
 
 [[package]]
