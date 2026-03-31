@@ -61,5 +61,7 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         }
 
         Commands::Profile(_profile_namespace) => todo!(),
+
+        Commands::Tui => commands::terminal_ui(printer).await,
     }
 }

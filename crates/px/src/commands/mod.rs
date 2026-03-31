@@ -5,11 +5,13 @@ pub(crate) use self_update::self_update;
 pub(crate) use siril_test::siril_test;
 pub(crate) use stat::stat;
 pub(crate) use version::self_version;
+pub(crate) use tui::terminal_ui;
 
 #[cfg(feature = "self-update")]
 mod self_update;
 mod siril_test;
 mod stat;
+mod tui;
 mod version;
 
 #[allow(dead_code)]

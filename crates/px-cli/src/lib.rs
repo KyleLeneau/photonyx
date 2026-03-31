@@ -63,6 +63,9 @@ pub enum Commands {
     /// Manage hardware profiles
     #[command()]
     Profile(ProfileNamespace),
+
+    /// Launch a terminal UI poc
+    Tui
 }
 
 #[derive(ValueEnum, Clone, Debug)]
