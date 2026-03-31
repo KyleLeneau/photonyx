@@ -250,7 +250,10 @@ impl Siril {
                     OutputSink::Discard => {}
                     OutputSink::Channel(tx) => {
                         let _ = tx
-                            .send(OutputLine { stream: OutputStream::Stdout, line })
+                            .send(OutputLine {
+                                stream: OutputStream::Stdout,
+                                line,
+                            })
                             .await;
                     }
                 }
@@ -265,7 +268,10 @@ impl Siril {
                     OutputSink::Discard => {}
                     OutputSink::Channel(tx) => {
                         let _ = tx
-                            .send(OutputLine { stream: OutputStream::Stderr, line })
+                            .send(OutputLine {
+                                stream: OutputStream::Stderr,
+                                line,
+                            })
                             .await;
                     }
                 }

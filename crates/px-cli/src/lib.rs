@@ -65,7 +65,7 @@ pub enum Commands {
     Profile(ProfileNamespace),
 
     /// Launch a terminal UI poc
-    Tui
+    Tui,
 }
 
 #[derive(ValueEnum, Clone, Debug)]

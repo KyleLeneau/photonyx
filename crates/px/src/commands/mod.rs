@@ -4,8 +4,8 @@ use std::process::ExitCode;
 pub(crate) use self_update::self_update;
 pub(crate) use siril_test::siril_test;
 pub(crate) use stat::stat;
-pub(crate) use version::self_version;
 pub(crate) use tui::terminal_ui;
+pub(crate) use version::self_version;
 
 #[cfg(feature = "self-update")]
 mod self_update;
