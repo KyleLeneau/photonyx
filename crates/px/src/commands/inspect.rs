@@ -48,5 +48,13 @@ pub(crate) async fn inspect_file(args: InspectArgs, printer: Printer) -> Result<
     // This dumps header and image stats to a JSON file alongside the file passed in...
     // siril.command(&format!("jsonmetadata {:?}", args.file)).await?;
 
+    let file = px_fits::FitsFile::new(args.file.clone())?;
+    writeln!(printer.stdout(), "{:?}", args.file)?;
+    writeln!(printer.stdout(), "{file}")?;
+    writeln!(printer.stdout(), "IsColor: {}", file.is_color())?;
+    for key in file.headers() {
+        writeln!(printer.stdout(), "{key}")?;
+    }
+
     Ok(ExitStatus::Success)
 }
