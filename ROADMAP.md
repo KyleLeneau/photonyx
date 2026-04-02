@@ -29,7 +29,7 @@
 * [x] `clap_complete` for shell completion
 * [x] update readme on how to install, update and setup shell completion
 * [x] the stdout and error streams from siril need to be exposed someplace so I consume elsewhere (like sse)
-* [ ] fits crate to wrap some other fits library (cfitsio?)
+* [x] fits crate to wrap some other fits library
 * [ ] Siril workflows idea (jobs & workflows) like CI but for the processing engine
 * [ ] need the conversion file helper to move files someplace else on the system
 * [ ] need some type of processing_engine with the basic workflows
