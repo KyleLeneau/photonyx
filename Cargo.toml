@@ -12,6 +12,7 @@ repository = "https://github.com/KyleLeneau/photonyx"
 [workspace.dependencies]
 # local crates
 px-cli = { path = "./crates/px-cli", version = "0.1.3" }
+px-fits = { path = "./crates/px-fits", version = "0.1.3" }
 px-fs = { path = "./crates/px-fs", version = "0.1.3" }
 px-static = { path = "./crates/px-static", version = "0.1.3" }
 siril-sys = { path = "./crates/siril-sys", version = "0.1.3" }
@@ -58,6 +59,7 @@ fs-err = { version = "3.2.2", features = ["tokio"] }
 http = { version = "1.1.0" }
 dunce = { version = "1.0.5" }
 url = { version = "2.5.2", features = ["serde"] }
+
 
 # Automatic builders
 bon = "3.9"
