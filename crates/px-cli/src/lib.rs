@@ -17,6 +17,15 @@ pub enum VersionFormat {
     Json,
 }
 
+#[derive(clap::ValueEnum, Clone, Debug, Copy)]
+pub enum OutputFormat {
+    /// Display output in default format (stdout or terminal UI)
+    Pretty,
+
+    /// Display output in json format to stdout
+    Json,
+}
+
 const STYLES: Styles = Styles::styled()
     .header(AnsiColor::Green.on_default().bold())
     .usage(AnsiColor::Green.on_default().bold())
@@ -137,4 +146,8 @@ pub struct InspectArgs {
     /// Fits file to inspect
     #[arg(value_hint = ValueHint::FilePath)]
     pub file: PathBuf,
+
+    /// Output format to display
+    #[arg(short, long, default_value = "pretty")]
+    pub output: OutputFormat,
 }

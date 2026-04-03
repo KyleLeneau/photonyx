@@ -4,7 +4,11 @@
 // * doesn't write images well but that's ok
 // * can support wasm if all data loaded outside of wasm (fetch)
 
-use fitsrs::{Fits, HDU, fits, hdu::header::extension::image::Image};
+use fitsrs::card::Value;
+use fitsrs::{
+    Fits, HDU, fits,
+    hdu::header::{ValueMapIter, extension::image::Image},
+};
 use std::{
     fmt::{Debug, Display},
     fs::File,
@@ -63,6 +67,37 @@ impl FitsFile {
             .get_header()
             .keywords()
             .map(|k| k.to_string())
+            .collect()
+    }
+
+    pub fn key_values(&self) -> ValueMapIter<'_> {
+        self.primary_hdu.get_header().iter()
+    }
+
+    pub fn header_rows(&self) -> Vec<(String, String, String)> {
+        self.key_values()
+            .map(|(key, value)| {
+                let (val_str, comment) = match value {
+                    Value::Integer { value, comment } => (
+                        value.to_string(),
+                        comment.as_deref().unwrap_or("").to_string(),
+                    ),
+                    Value::Float { value, comment } => (
+                        format!("{value}"),
+                        comment.as_deref().unwrap_or("").to_string(),
+                    ),
+                    Value::Logical { value, comment } => (
+                        if *value { "T" } else { "F" }.to_string(),
+                        comment.as_deref().unwrap_or("").to_string(),
+                    ),
+                    Value::String { value, comment } => {
+                        (value.clone(), comment.as_deref().unwrap_or("").to_string())
+                    }
+                    Value::Undefined => ("undefined".to_string(), String::new()),
+                    Value::Invalid(raw) => (raw.clone(), String::new()),
+                };
+                (key.to_string(), val_str, comment)
+            })
             .collect()
     }
 }
