@@ -14,14 +14,14 @@ use px_static::EnvVars;
 pub enum CalibrationImageType {
     Bias,
     Flat,
-    Dark
+    Dark,
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
 pub enum FitFileExtension {
     Fit,
     Fits,
-    Fts
+    Fts,
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -259,5 +259,5 @@ pub struct CreateFlatMasterArgs {
 
     /// The name of the filter for the master flat
     #[arg(short, long, value_hint = ValueHint::Other)]
-    pub filter: String
+    pub filter: String,
 }

@@ -9,6 +9,8 @@ use fitsrs::{
     Fits, HDU, fits,
     hdu::header::{ValueMapIter, extension::image::Image},
 };
+use std::io;
+use std::path::Path;
 use std::{
     fmt::{Debug, Display},
     fs::File,
@@ -124,4 +126,17 @@ impl Display for FitsFile {
             self.primary_hdu.get_data_unit_byte_size()
         )
     }
+}
+
+pub fn all_fits_files(raw_folder: &Path) -> io::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for ext in &["fit", "fits"] {
+        for entry in raw_folder.read_dir()? {
+            let path = entry?.path();
+            if path.extension().and_then(|e| e.to_str()) == Some(ext) {
+                files.push(path);
+            }
+        }
+    }
+    Ok(files)
 }

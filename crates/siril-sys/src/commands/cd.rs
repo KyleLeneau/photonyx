@@ -1,6 +1,13 @@
+#![allow(async_fn_in_trait)]
+use std::path::PathBuf;
+
 use bon::Builder;
 
-use crate::commands::{Argument, Command};
+use crate::{
+    Siril,
+    commands::{Argument, Command},
+    message::SirilError,
+};
 
 /// ```text
 /// cd directory
@@ -23,6 +30,18 @@ impl Command for Cd {
 
     fn args(&self) -> Vec<Argument> {
         vec![Argument::positional(self.directory.to_string())]
+    }
+}
+
+pub trait CdExt {
+    async fn cd(&mut self, path: PathBuf) -> Result<(), SirilError>;
+}
+
+impl CdExt for Siril {
+    async fn cd(&mut self, path: PathBuf) -> Result<(), SirilError> {
+        let cmd = Cd::builder(path.display().to_string()).build();
+        self.execute(&cmd).await?;
+        Ok(())
     }
 }
 

@@ -3,7 +3,7 @@ use std::fmt::Display;
 use strum_macros::Display;
 use strum_macros::EnumString;
 
-#[derive(Debug, PartialEq, EnumString, Display)]
+#[derive(Debug, PartialEq, EnumString, Display, Clone)]
 pub enum FitsExt {
     #[strum(serialize = "fit")]
     FIT,

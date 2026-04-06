@@ -1,5 +1,7 @@
 use anstream::{eprint, print};
 use indicatif::ProgressDrawTarget;
+use owo_colors::OwoColorize;
+use std::fmt::Write;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,6 +66,26 @@ impl Printer {
             Self::Verbose => Stderr::Enabled,
             Self::NoProgress => Stderr::Enabled,
         }
+    }
+
+    #[allow(unused)]
+    pub(crate) fn error(self, msg: impl std::fmt::Display) -> std::fmt::Result {
+        writeln!(
+            self.stderr(),
+            "{}{} {msg}",
+            "error".red().bold(),
+            ":".bold()
+        )
+    }
+
+    #[allow(unused)]
+    pub(crate) fn success(self, msg: impl std::fmt::Display) -> std::fmt::Result {
+        writeln!(
+            self.stderr(),
+            "{}{} {msg}",
+            "success".green().bold(),
+            ":".bold()
+        )
     }
 }
 

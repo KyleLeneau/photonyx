@@ -1,6 +1,7 @@
 mod commands;
 mod logging;
 mod printer;
+mod utils;
 
 use anyhow::Result;
 use clap::CommandFactory;
@@ -9,7 +10,7 @@ use std::io::stdout;
 
 #[cfg(feature = "self-update")]
 use px_cli::SelfUpdateArgs;
-use px_cli::{Cli, Commands, SelfCommand, SelfNamespace};
+use px_cli::{Cli, Commands, MasterCommand, MasterNamespace, SelfCommand, SelfNamespace};
 
 pub use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -55,6 +56,25 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Tui => commands::terminal_ui(printer).await,
         Commands::Inspect(args) => commands::inspect_file(args, printer).await,
         Commands::Profile(_profile_namespace) => todo!(),
-        Commands::Master(_master_namespace) => todo!(),
+
+        Commands::Master(MasterNamespace {
+            command: MasterCommand::Best(args),
+        }) => commands::find_best_master(args, printer).await,
+
+        Commands::Master(MasterNamespace {
+            command: MasterCommand::List(args),
+        }) => commands::list_masters(args, printer).await,
+
+        Commands::Master(MasterNamespace {
+            command: MasterCommand::Bias(args),
+        }) => commands::create_master_bias(args, printer).await,
+
+        Commands::Master(MasterNamespace {
+            command: MasterCommand::Dark(args),
+        }) => commands::create_master_dark(args, printer).await,
+
+        Commands::Master(MasterNamespace {
+            command: MasterCommand::Flat(args),
+        }) => commands::create_master_flat(args, printer).await,
     }
 }

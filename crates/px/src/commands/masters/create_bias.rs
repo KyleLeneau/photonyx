@@ -1,0 +1,81 @@
+use std::path::PathBuf;
+
+use crate::{ExitStatus, printer::Printer, utils::to_fits_ext};
+use anyhow::Result;
+use px_cli::CreateBiasMasterArgs;
+use px_fits::all_fits_files;
+use siril_sys::{
+    Builder,
+    commands::{Convert, Stack},
+    siril_ext::CdExt,
+};
+
+pub(crate) async fn create_master_bias(
+    args: CreateBiasMasterArgs,
+    printer: Printer,
+) -> Result<ExitStatus> {
+    // Guard to make sure the input folder exists first
+    if !args.raw_folder.exists() {
+        printer.error("Raw bias folder does not exist")?;
+        return Ok(ExitStatus::Error);
+    }
+
+    // Check that all files in raw folder are fits
+    let raw_files = all_fits_files(&args.raw_folder)?;
+    if raw_files.is_empty() {
+        printer.error("raw_folder contains no files")?;
+        return Ok(ExitStatus::Error);
+    }
+
+    // Guard to make sure the output folder exists
+    if !args.out_folder.exists() {
+        printer.error("Output bias folder does not exist")?;
+        return Ok(ExitStatus::Error);
+    }
+
+    // Setup the output file
+    // TODO: need to get observation date here
+    let output_file = args.out_folder.join("PX_BIAS_master").display().to_string();
+
+    // Setup siril
+    let ext = to_fits_ext(args.ext);
+    let mut siril = Builder::default()
+        .output_sink(siril_sys::OutputSink::Discard)
+        .use_extension(ext.clone())
+        .build()
+        .await?;
+
+    // Move to the raw folder to convert into a sequence
+    siril.cd(args.raw_folder).await?;
+    siril
+        .execute(
+            &Convert::builder("bias_")
+                .output_dir(siril.initial_directory())
+                .build(),
+        )
+        .await?;
+
+    // Return to working directory
+    siril.cd(siril.initial_directory()).await?;
+
+    // Stack with defaults
+    siril
+        .execute(
+            &Stack::builder("bias_")
+                .stack_type(siril_sys::StackType::Med)
+                .out(&output_file)
+                .build(),
+        )
+        .await?;
+
+    // Confirm the output file exists now
+    let result = PathBuf::from(output_file).with_added_extension(ext.to_string());
+    if !result.exists() {
+        printer.error(format!("Output file is missing: {:?}", result))?;
+        return Ok(ExitStatus::Error);
+    }
+
+    // Pretty print the result
+    printer.success(format!("Master BIAS stacking completed: {:?}", result))?;
+    Ok(ExitStatus::Success)
+}

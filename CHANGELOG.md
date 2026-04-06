@@ -9,6 +9,7 @@
 * Add an `OutputSink` to siril builder to redirect stdout/stderr
 * Removed `stat` command and replaced with `inspect`
 * Turned off logging by default and moved to `-v, -vv, -vvv` global cli options
+* Add `px master bias` implementation to create master bias
 
 ## 0.1.3
 

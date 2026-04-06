@@ -199,6 +199,7 @@ pub struct Siril {
     #[allow(unused)]
     out_pipe_path: PathBuf,
     _temp_dir: TempDir,
+    starting_dir: PathBuf,
 }
 
 impl Siril {
@@ -212,9 +213,9 @@ impl Siril {
         // Always create temp directory to work in but start in builder supplied
         let temp_dir = TempDir::with_prefix("photonyx-")?;
         let dir = if let Some(startup_dir) = builder.directory {
-            startup_dir
+            startup_dir.to_path_buf()
         } else {
-            temp_dir.path()
+            temp_dir.path().to_path_buf()
         };
         tracing::debug!("starting in directory: {:?}", dir);
 
@@ -224,7 +225,7 @@ impl Siril {
         // Spawn siril-cli in pipe mode
         let mut child = Command::new(&siril_exe)
             .arg("-d")
-            .arg(dir)
+            .arg(&dir)
             .arg("-p")
             .arg("-r")
             .arg(&in_pipe_path)
@@ -363,6 +364,7 @@ impl Siril {
             in_pipe_path,
             out_pipe_path,
             _temp_dir: temp_dir,
+            starting_dir: dir,
         };
 
         loop {
@@ -408,8 +410,11 @@ impl Siril {
         }
 
         self.execute(&Capabilities::builder().build()).await?;
-        self.set(SirilSetting::Extension, builder.fits_extension)
-            .await?;
+        self.set(
+            SirilSetting::Extension,
+            format!(".{}", builder.fits_extension),
+        )
+        .await?;
 
         Ok(())
     }
@@ -506,6 +511,12 @@ impl Siril {
         let cmd = Set::builder(method).build();
         self.execute(&cmd).await?;
         Ok(())
+    }
+
+    /// Return the initial directory we started siril in
+    ///
+    pub fn initial_directory(&self) -> PathBuf {
+        self.starting_dir.clone()
     }
 }
 

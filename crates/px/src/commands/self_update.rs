@@ -93,7 +93,7 @@ pub(crate) async fn self_update(
     updater.configure_version_specifier(update_request.clone());
 
     if dry_run {
-        // TODO(charlie): `updater.fetch_release` isn't public, so we can't say what the latest
+        // TODO: `updater.fetch_release` isn't public, so we can't say what the latest
         // version is.
         if updater.is_update_needed().await? {
             let version = match update_request {

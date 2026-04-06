@@ -1,6 +1,11 @@
 use std::process::ExitCode;
 
 pub(crate) use inspect::inspect_file;
+pub(crate) use masters::create_bias::create_master_bias;
+pub(crate) use masters::create_dark::create_master_dark;
+pub(crate) use masters::create_flat::create_master_flat;
+pub(crate) use masters::find_best::find_best_master;
+pub(crate) use masters::list::list_masters;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 pub(crate) use siril_test::siril_test;
@@ -8,6 +13,7 @@ pub(crate) use tui::terminal_ui;
 pub(crate) use version::self_version;
 
 mod inspect;
+mod masters;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod siril_test;

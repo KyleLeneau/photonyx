@@ -35,6 +35,7 @@
 * [ ] need some type of processing_engine with the basic workflows
 * [ ] need a `.px` folder in the user home initialized at some point to store default or common config (https://crates.io/crates/etcetera)
 * [ ] post-install or validation step to ensure Siril is installed and available with minimum version
+* [ ] Config file support and order loading so that a user can specify less on the command line for their profile
 * [ ]
 
 
