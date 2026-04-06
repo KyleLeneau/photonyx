@@ -1,5 +1,6 @@
 pub mod version;
 
+use core::str;
 use std::path::PathBuf;
 
 use clap::builder::Styles;
@@ -8,6 +9,16 @@ use clap::{Args, Parser, Subcommand};
 use clap::{ValueEnum, ValueHint};
 
 use px_static::EnvVars;
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+pub enum CalibrationImageType {
+    /// Bias frames
+    Bias,
+    /// Flat frames
+    Flat,
+    /// Dark frames
+    Dark
+}
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
 pub enum VersionFormat {
@@ -78,6 +89,10 @@ pub enum Commands {
     /// Inspect a single image
     #[command()]
     Inspect(InspectArgs),
+
+    /// Manage and create master calibration frames
+    #[command()]
+    Master(MasterNamespace),
 }
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -150,4 +165,48 @@ pub struct InspectArgs {
     /// Output format to display
     #[arg(short, long, default_value = "pretty")]
     pub output: OutputFormat,
+}
+
+#[derive(Args)]
+pub struct MasterNamespace {
+    #[command(subcommand)]
+    pub command: MasterCommand,
+}
+
+#[derive(Subcommand)]
+pub enum MasterCommand {
+    /// find best master <type> based on query
+    Best(FindBestMasterArgs),
+
+    /// show all the master for a profile
+    List(ListMasterArgs),
+
+    /// create a new master bias for profile
+    Bias(CreateBiasMasterArgs),
+
+    /// create a new master dark for profile
+    Dark(CreateDarkMasterArgs),
+
+    /// create a new master flat for profile
+    Flat(CreateFlatMasterArgs),
+}
+
+#[derive(Args)]
+pub struct FindBestMasterArgs {
+}
+
+#[derive(Args)]
+pub struct ListMasterArgs {
+}
+
+#[derive(Args)]
+pub struct CreateBiasMasterArgs {
+}
+
+#[derive(Args)]
+pub struct CreateDarkMasterArgs {
+}
+
+#[derive(Args)]
+pub struct CreateFlatMasterArgs {
 }

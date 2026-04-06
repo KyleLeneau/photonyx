@@ -29,9 +29,7 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
             clap_complete::generate(args.shell, &mut cmd, &bin_name, &mut stdout());
             Ok(ExitStatus::Success)
         }
-
         Commands::SirilTest => commands::siril_test(printer).await,
-
         Commands::Self_(SelfNamespace {
             command:
                 SelfCommand::Version {
@@ -39,7 +37,6 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
                     output_format,
                 },
         }) => commands::self_version(short, output_format, printer),
-
         #[cfg(feature = "self-update")]
         Commands::Self_(SelfNamespace {
             command:
@@ -55,11 +52,9 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
                 "px was not installed with the installer and cannot update itself.";
             anyhow::bail!(BASE_MESSAGE);
         }
-
-        Commands::Profile(_profile_namespace) => todo!(),
-
         Commands::Tui => commands::terminal_ui(printer).await,
-
         Commands::Inspect(args) => commands::inspect_file(args, printer).await,
+        Commands::Profile(_profile_namespace) => todo!(),
+        Commands::Master(_master_namespace) => todo!(),
     }
 }
