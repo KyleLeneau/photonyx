@@ -12,12 +12,16 @@ use px_static::EnvVars;
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
 pub enum CalibrationImageType {
-    /// Bias frames
     Bias,
-    /// Flat frames
     Flat,
-    /// Dark frames
     Dark
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+pub enum FitFileExtension {
+    Fit,
+    Fits,
+    Fts
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -193,20 +197,67 @@ pub enum MasterCommand {
 
 #[derive(Args)]
 pub struct FindBestMasterArgs {
+    /// Image type to look for
+    #[arg(short, long)]
+    pub image_type: CalibrationImageType,
 }
 
 #[derive(Args)]
 pub struct ListMasterArgs {
+    /// Image types to display (default: none, all)
+    #[arg(short, long)]
+    pub image_type: Vec<CalibrationImageType>,
 }
 
 #[derive(Args)]
 pub struct CreateBiasMasterArgs {
+    /// Path to the raw folder of bias frames
+    #[arg(value_hint = ValueHint::DirPath)]
+    pub raw_folder: PathBuf,
+
+    /// Output file extension
+    #[arg(short, long, default_value = "fit", env = EnvVars::PX_DEFAULT_FIT_EXT)]
+    pub ext: FitFileExtension,
+
+    /// Output location for the new master bias
+    #[arg(value_hint = ValueHint::DirPath)]
+    pub out_folder: PathBuf,
 }
 
 #[derive(Args)]
 pub struct CreateDarkMasterArgs {
+    /// Path to the raw folder of dark frames
+    #[arg(value_hint = ValueHint::DirPath)]
+    pub raw_folder: PathBuf,
+
+    /// Output file extension
+    #[arg(short, long, default_value = "fit", env = EnvVars::PX_DEFAULT_FIT_EXT)]
+    pub ext: FitFileExtension,
+
+    /// Output location for the new master dark
+    #[arg(value_hint = ValueHint::DirPath)]
+    pub out_folder: PathBuf,
 }
 
 #[derive(Args)]
 pub struct CreateFlatMasterArgs {
+    /// Path to the raw folder of flat frames
+    #[arg(value_hint = ValueHint::DirPath)]
+    pub raw_folder: PathBuf,
+
+    /// Output file extension
+    #[arg(short, long, default_value = "fit", env = EnvVars::PX_DEFAULT_FIT_EXT)]
+    pub ext: FitFileExtension,
+
+    /// Output location for the new master flat
+    #[arg(value_hint = ValueHint::DirPath)]
+    pub out_folder: PathBuf,
+
+    /// Location of the master BIAS
+    #[arg(short, long, value_hint = ValueHint::FilePath)]
+    pub bias: PathBuf,
+
+    /// The name of the filter for the master flat
+    #[arg(short, long, value_hint = ValueHint::Other)]
+    pub filter: String
 }
