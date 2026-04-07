@@ -13,7 +13,7 @@ pub struct Stat {
     #[builder(default = false)]
     by_cfa: bool,
     #[builder(into)]
-    main: Option<String>
+    main: Option<String>,
 }
 
 impl Command for Stat {

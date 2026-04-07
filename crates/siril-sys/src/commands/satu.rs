@@ -1,6 +1,9 @@
 use bon::Builder;
 
-use crate::{SaturationHueRange, commands::{Argument, Command}};
+use crate::{
+    SaturationHueRange,
+    commands::{Argument, Command},
+};
 
 /// ```text
 /// satu amount [background_factor [hue_range_index]]

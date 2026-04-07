@@ -1,6 +1,11 @@
+#![allow(async_fn_in_trait)]
+use crate::{
+    Siril,
+    commands::{Argument, Command},
+    message::SirilError,
+};
 use bon::Builder;
-
-use crate::commands::{Argument, Command};
+use std::path::PathBuf;
 
 /// ```text
 /// save filename [-chksum]
@@ -28,6 +33,18 @@ impl Command for Save {
             Argument::positional(&self.filename),
             Argument::flag_option("chksum", self.chksum),
         ]
+    }
+}
+
+pub trait SaveExt {
+    async fn save(&mut self, file: PathBuf) -> Result<(), SirilError>;
+}
+
+impl SaveExt for Siril {
+    async fn save(&mut self, file: PathBuf) -> Result<(), SirilError> {
+        let cmd = Save::builder(file.display().to_string()).build();
+        self.execute(&cmd).await?;
+        Ok(())
     }
 }
 

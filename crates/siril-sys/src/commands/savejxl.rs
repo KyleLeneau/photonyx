@@ -12,8 +12,12 @@ use crate::commands::{Argument, Command};
 ///
 #[derive(Builder)]
 pub struct Savejxl {
-    // #[builder(start_fn, into)]
-    // filename: String
+    #[builder(start_fn, into)]
+    filename: String,
+    effort: Option<i8>,
+    quality: Option<f32>,
+    #[builder(default = false)]
+    eight_bit: bool,
 }
 
 impl Command for Savejxl {
@@ -22,9 +26,65 @@ impl Command for Savejxl {
     }
 
     fn args(&self) -> Vec<Argument> {
-        vec![]
+        vec![
+            Argument::positional(self.filename.clone()),
+            Argument::option("effort", self.effort),
+            Argument::option("quality", self.quality),
+            Argument::flag_option("8bit", self.eight_bit),
+        ]
     }
 }
 
-// TODO: Need command implementation
-// TODO: Implement Tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn filename_only() {
+        let cmd = Savejxl::builder("output").build();
+        assert_eq!(cmd.to_args_string(), "savejxl output");
+    }
+
+    #[test]
+    fn with_effort() {
+        let cmd = Savejxl::builder("output").effort(7).build();
+        assert_eq!(cmd.to_args_string(), "savejxl output -effort=7");
+    }
+
+    #[test]
+    fn with_quality() {
+        let cmd = Savejxl::builder("output").quality(9.0).build();
+        assert_eq!(cmd.to_args_string(), "savejxl output -quality=9");
+    }
+
+    #[test]
+    fn eight_bit_flag() {
+        let cmd = Savejxl::builder("output").eight_bit(true).build();
+        assert_eq!(cmd.to_args_string(), "savejxl output -8bit");
+    }
+
+    #[test]
+    fn eight_bit_false_omitted() {
+        let cmd = Savejxl::builder("output").eight_bit(false).build();
+        assert!(!cmd.to_args_string().contains("8bit"));
+    }
+
+    #[test]
+    fn all_options() {
+        let cmd = Savejxl::builder("output")
+            .effort(7)
+            .quality(9.0)
+            .eight_bit(true)
+            .build();
+        assert_eq!(
+            cmd.to_args_string(),
+            "savejxl output -effort=7 -quality=9 -8bit"
+        );
+    }
+
+    #[test]
+    fn filename_with_spaces_is_quoted() {
+        let cmd = Savejxl::builder("my image").build();
+        assert_eq!(cmd.to_args_string(), "savejxl 'my image'");
+    }
+}

@@ -41,4 +41,44 @@ impl Command for Split {
         args
     }
 }
-// TODO: Implement Tests
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn three_files_no_method() {
+        let cmd = Split::builder("red", "green", "blue").build();
+        assert_eq!(cmd.to_args_string(), "split red green blue");
+    }
+
+    #[test]
+    fn hsl_method() {
+        let cmd = Split::builder("h", "s", "l")
+            .method(SplitOption::Hsl)
+            .build();
+        assert_eq!(cmd.to_args_string(), "split h s l -hsl");
+    }
+
+    #[test]
+    fn hsv_method() {
+        let cmd = Split::builder("h", "s", "v")
+            .method(SplitOption::Hsv)
+            .build();
+        assert_eq!(cmd.to_args_string(), "split h s v -hsv");
+    }
+
+    #[test]
+    fn lab_method() {
+        let cmd = Split::builder("l", "a", "b")
+            .method(SplitOption::Lab)
+            .build();
+        assert_eq!(cmd.to_args_string(), "split l a b -lab");
+    }
+
+    #[test]
+    fn filenames_with_spaces_are_quoted() {
+        let cmd = Split::builder("my red", "my green", "my blue").build();
+        assert_eq!(cmd.to_args_string(), "split 'my red' 'my green' 'my blue'");
+    }
+}

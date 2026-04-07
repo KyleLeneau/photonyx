@@ -148,9 +148,7 @@ mod tests {
 
     #[test]
     fn image_center_decimal() {
-        let cmd = Platesolve::builder()
-            .image_center("83.822,22.0145")
-            .build();
+        let cmd = Platesolve::builder().image_center("83.822,22.0145").build();
         assert_eq!(cmd.to_args_string(), "platesolve 83.822,22.0145");
     }
 
@@ -256,10 +254,7 @@ mod tests {
 
     #[test]
     fn blindpos_blindres_ignored_without_local_asnet() {
-        let cmd = Platesolve::builder()
-            .blindpos(true)
-            .blindres(true)
-            .build();
+        let cmd = Platesolve::builder().blindpos(true).blindres(true).build();
         let s = cmd.to_args_string();
         assert!(!s.contains("blindpos"));
         assert!(!s.contains("blindres"));

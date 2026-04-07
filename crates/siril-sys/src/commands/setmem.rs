@@ -15,7 +15,7 @@ use crate::commands::{Argument, Command};
 #[derive(Builder)]
 pub struct Setmem {
     #[builder(start_fn)]
-    ratio: f64
+    ratio: f64,
 }
 
 impl Command for Setmem {

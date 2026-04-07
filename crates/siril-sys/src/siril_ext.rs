@@ -10,4 +10,5 @@ pub use crate::commands::load::LoadExt;
 pub use crate::commands::mirrorx::MirrorxExt;
 pub use crate::commands::mirrory::MirroryxExt;
 pub use crate::commands::pwd::PwdExt;
+pub use crate::commands::save::SaveExt;
 pub use crate::commands::set::SetExt;

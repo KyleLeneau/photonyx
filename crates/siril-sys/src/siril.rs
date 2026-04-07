@@ -7,8 +7,8 @@ use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-use crate::commands::setcpu::SetcpuExt;
 use crate::commands::Requires;
+use crate::commands::setcpu::SetcpuExt;
 use crate::message::{SirilError, SirilMessage};
 use crate::output::{OutputLine, OutputSink, OutputStream};
 use crate::siril_ext::{CapabilitiesExt, ExitExt, SetExt};

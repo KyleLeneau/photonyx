@@ -151,4 +151,268 @@ impl Command for Stack {
         args
     }
 }
-// TODO: Implement Tests
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::SequenceFilterType;
+
+    // --- Stack type variants ---
+
+    #[test]
+    fn default_is_rej_winsorized() {
+        let cmd = Stack::builder("lights").build();
+        let s = cmd.to_args_string();
+        assert!(s.starts_with("stack lights rej w "));
+        assert!(s.contains("-nonorm"));
+    }
+
+    #[test]
+    fn sum_stacking() {
+        let cmd = Stack::builder("lights").stack_type(StackType::Sum).build();
+        let s = cmd.to_args_string();
+        assert!(s.starts_with("stack lights sum"));
+        assert!(!s.contains("rej"));
+    }
+
+    #[test]
+    fn min_stacking() {
+        let cmd = Stack::builder("lights").stack_type(StackType::Min).build();
+        assert!(cmd.to_args_string().starts_with("stack lights min"));
+    }
+
+    #[test]
+    fn max_stacking() {
+        let cmd = Stack::builder("lights").stack_type(StackType::Max).build();
+        assert!(cmd.to_args_string().starts_with("stack lights max"));
+    }
+
+    #[test]
+    fn med_stacking() {
+        let cmd = Stack::builder("lights").stack_type(StackType::Med).build();
+        let s = cmd.to_args_string();
+        assert!(s.starts_with("stack lights med"));
+        assert!(!s.contains("rej"));
+    }
+
+    // --- Rejection ---
+
+    #[test]
+    fn rejection_none_omits_sigma_values() {
+        let cmd = Stack::builder("lights")
+            .rejection(StackRejection::None)
+            .build();
+        let s = cmd.to_args_string();
+        assert!(s.contains(" n "), "expected rejection type 'n' in: {s}");
+        // sigma values should not follow
+        assert!(!s.contains(" n 3"));
+    }
+
+    #[test]
+    fn rejection_sigma_with_custom_values() {
+        let cmd = Stack::builder("lights")
+            .rejection(StackRejection::Sigma)
+            .lower_rej(2.5)
+            .higher_rej(3.5)
+            .build();
+        let s = cmd.to_args_string();
+        assert!(s.contains("rej s 2.5 3.5"), "got: {s}");
+    }
+
+    #[test]
+    fn rejection_linear() {
+        let cmd = Stack::builder("lights")
+            .rejection(StackRejection::Linear)
+            .build();
+        assert!(cmd.to_args_string().contains("rej l "));
+    }
+
+    #[test]
+    fn rejection_generalized() {
+        let cmd = Stack::builder("lights")
+            .rejection(StackRejection::Generalized)
+            .build();
+        assert!(cmd.to_args_string().contains("rej g "));
+    }
+
+    #[test]
+    fn rejection_mad() {
+        let cmd = Stack::builder("lights")
+            .rejection(StackRejection::Mad)
+            .build();
+        assert!(cmd.to_args_string().contains("rej a "));
+    }
+
+    // --- Rejection maps ---
+
+    #[test]
+    fn rejection_map_merged() {
+        let cmd = Stack::builder("lights")
+            .create_rejection_maps(StackRejectionMapFlag::Merged)
+            .build();
+        assert!(cmd.to_args_string().contains("-rejmap"));
+    }
+
+    #[test]
+    fn rejection_map_two() {
+        let cmd = Stack::builder("lights")
+            .create_rejection_maps(StackRejectionMapFlag::Two)
+            .build();
+        assert!(cmd.to_args_string().contains("-rejmaps"));
+    }
+
+    // --- Normalization ---
+
+    #[test]
+    fn norm_add() {
+        let cmd = Stack::builder("lights").norm(StackNormFlag::Add).build();
+        assert!(cmd.to_args_string().contains("-norm=add"));
+    }
+
+    #[test]
+    fn norm_mul() {
+        let cmd = Stack::builder("lights").norm(StackNormFlag::Mul).build();
+        assert!(cmd.to_args_string().contains("-norm=mul"));
+    }
+
+    #[test]
+    fn norm_addscale() {
+        let cmd = Stack::builder("lights")
+            .norm(StackNormFlag::AddScale)
+            .build();
+        assert!(cmd.to_args_string().contains("-norm=addscale"));
+    }
+
+    #[test]
+    fn norm_mulscale() {
+        let cmd = Stack::builder("lights")
+            .norm(StackNormFlag::MulScale)
+            .build();
+        assert!(cmd.to_args_string().contains("-norm=mulscale"));
+    }
+
+    #[test]
+    fn nonorm_default() {
+        let cmd = Stack::builder("lights").build();
+        assert!(cmd.to_args_string().contains("-nonorm"));
+    }
+
+    // --- Flags ---
+
+    #[test]
+    fn fast_norm_flag() {
+        let cmd = Stack::builder("lights").fast_norm(true).build();
+        assert!(cmd.to_args_string().contains("-fastnorm"));
+    }
+
+    #[test]
+    fn output_norm_flag() {
+        let cmd = Stack::builder("lights").output_norm(true).build();
+        assert!(cmd.to_args_string().contains("-output_norm"));
+    }
+
+    #[test]
+    fn rgb_equalization_flag() {
+        let cmd = Stack::builder("lights").rgb_equalization(true).build();
+        assert!(cmd.to_args_string().contains("-rgb_equal"));
+    }
+
+    #[test]
+    fn filter_included_flag() {
+        let cmd = Stack::builder("lights").filter_included(true).build();
+        assert!(cmd.to_args_string().contains("-filter-incl"));
+    }
+
+    // --- Weighting ---
+
+    #[test]
+    fn weighting_noise() {
+        let cmd = Stack::builder("lights")
+            .weighting(StackWeightingFlag::Noise)
+            .build();
+        assert!(cmd.to_args_string().contains("-weight_from_noise"));
+    }
+
+    #[test]
+    fn weighting_wfwhm() {
+        let cmd = Stack::builder("lights")
+            .weighting(StackWeightingFlag::WFwhm)
+            .build();
+        assert!(cmd.to_args_string().contains("-weight_from_wfwhm"));
+    }
+
+    #[test]
+    fn weighting_nbstars() {
+        let cmd = Stack::builder("lights")
+            .weighting(StackWeightingFlag::NbStars)
+            .build();
+        assert!(cmd.to_args_string().contains("-weight_from_nbstars"));
+    }
+
+    #[test]
+    fn weighting_nbstack() {
+        let cmd = Stack::builder("lights")
+            .weighting(StackWeightingFlag::NbStack)
+            .build();
+        assert!(cmd.to_args_string().contains("-weight_from_nbstack"));
+    }
+
+    // --- Out option ---
+
+    #[test]
+    fn out_option() {
+        let cmd = Stack::builder("lights").out("result").build();
+        assert!(cmd.to_args_string().contains("-out=result"));
+    }
+
+    // --- Filters ---
+
+    #[test]
+    fn filter_by_percent() {
+        let cmd = Stack::builder("lights")
+            .filters(vec![SequenceFilter::ByPercent {
+                filter_type: SequenceFilterType::Fwhm,
+                percent: 80.0,
+            }])
+            .build();
+        assert!(cmd.to_args_string().contains("-filter-fwhm=80%"));
+    }
+
+    #[test]
+    fn filter_by_value() {
+        let cmd = Stack::builder("lights")
+            .filters(vec![SequenceFilter::ByValue {
+                filter_type: SequenceFilterType::Quality,
+                value: 0.5,
+            }])
+            .build();
+        assert!(cmd.to_args_string().contains("-filter-quality=0.5"));
+    }
+
+    #[test]
+    fn multiple_filters() {
+        let cmd = Stack::builder("lights")
+            .filters(vec![
+                SequenceFilter::ByPercent {
+                    filter_type: SequenceFilterType::Fwhm,
+                    percent: 80.0,
+                },
+                SequenceFilter::ByPercent {
+                    filter_type: SequenceFilterType::Roundness,
+                    percent: 90.0,
+                },
+            ])
+            .build();
+        let s = cmd.to_args_string();
+        assert!(s.contains("-filter-fwhm=80%"));
+        assert!(s.contains("-filter-roundness=90%"));
+    }
+
+    // --- Base name ---
+
+    #[test]
+    fn base_name_with_spaces_is_quoted() {
+        let cmd = Stack::builder("my lights").build();
+        assert!(cmd.to_args_string().starts_with("stack 'my lights'"));
+    }
+}

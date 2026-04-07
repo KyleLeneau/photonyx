@@ -1,6 +1,9 @@
 use bon::Builder;
 
-use crate::{RmgreenProtection, commands::{Argument, Command}};
+use crate::{
+    RmgreenProtection,
+    commands::{Argument, Command},
+};
 
 /// ```text
 /// rmgreen [-nopreserve] [type] [amount]

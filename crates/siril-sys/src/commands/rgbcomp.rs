@@ -1,6 +1,9 @@
 use bon::Builder;
 
-use crate::{RGBImage, commands::{Argument, Command}};
+use crate::{
+    RGBImage,
+    commands::{Argument, Command},
+};
 
 /// ```text
 /// rgbcomp red green blue [-out=result_filename] [-nosum]
@@ -32,12 +35,12 @@ impl Command for Rgbcomp {
         match &self.rgb_image {
             RGBImage::Single(rgb) => {
                 args.push(Argument::positional(rgb));
-            },
+            }
             RGBImage::RGB(red, green, blue) => {
                 args.push(Argument::positional(red));
                 args.push(Argument::positional(green));
                 args.push(Argument::positional(blue));
-            },
+            }
         }
 
         args.push(Argument::option("out", self.out.clone()));

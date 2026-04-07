@@ -1,7 +1,11 @@
 #![allow(async_fn_in_trait)]
 use bon::Builder;
 
-use crate::{Siril, commands::{Argument, Command}, message::SirilError};
+use crate::{
+    Siril,
+    commands::{Argument, Command},
+    message::SirilError,
+};
 
 /// ```text
 /// setcpu number

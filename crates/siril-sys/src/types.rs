@@ -299,6 +299,25 @@ pub enum SaturationHueRange {
     ALL = 6,
 }
 
+#[derive(Debug, PartialEq, EnumString, Display, Clone, Copy)]
+#[strum(serialize_all = "lowercase")]
+pub enum StatOption {
+    Basic,
+    Full,
+    Main,
+}
+
+pub enum UpdateKeyMethod {
+    /// Set key, value and optional comment
+    Set(String, String, Option<String>),
+    /// Delete by key
+    Delete(String),
+    /// Rename key to newkey
+    Rename(String, String),
+    /// Add a comment
+    Comment(String),
+}
+
 pub struct SigmaRange {
     pub low: f64,
     pub high: f64,
