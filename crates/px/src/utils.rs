@@ -12,10 +12,13 @@ pub(crate) async fn wait_for_confirm(printer: Printer) {
     reader.read_line(&mut line).await.ok();
 }
 
-pub(crate) fn to_fits_ext(ext: px_cli::FitFileExtension) -> siril_sys::FitsExt {
+/// Map the cli FitExtension to siril_sys type, default to FIT if none
+///
+pub(crate) fn to_fits_ext(ext: Option<px_cli::FitFileExtension>) -> siril_sys::FitsExt {
     match ext {
-        px_cli::FitFileExtension::Fit => siril_sys::FitsExt::FIT,
-        px_cli::FitFileExtension::Fits => siril_sys::FitsExt::FITS,
-        px_cli::FitFileExtension::Fts => siril_sys::FitsExt::FTS,
+        Some(px_cli::FitFileExtension::Fit) => siril_sys::FitsExt::FIT,
+        Some(px_cli::FitFileExtension::Fits) => siril_sys::FitsExt::FITS,
+        Some(px_cli::FitFileExtension::Fts) => siril_sys::FitsExt::FTS,
+        None => siril_sys::FitsExt::FIT,
     }
 }

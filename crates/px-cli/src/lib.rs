@@ -217,7 +217,7 @@ pub struct CreateBiasMasterArgs {
 
     /// Output file extension
     #[arg(short, long, default_value = "fit", env = EnvVars::PX_DEFAULT_FIT_EXT)]
-    pub ext: FitFileExtension,
+    pub ext: Option<FitFileExtension>,
 
     /// Output location for the new master bias
     #[arg(value_hint = ValueHint::DirPath)]
@@ -232,7 +232,7 @@ pub struct CreateDarkMasterArgs {
 
     /// Output file extension
     #[arg(short, long, default_value = "fit", env = EnvVars::PX_DEFAULT_FIT_EXT)]
-    pub ext: FitFileExtension,
+    pub ext: Option<FitFileExtension>,
 
     /// Output location for the new master dark
     #[arg(value_hint = ValueHint::DirPath)]
@@ -247,7 +247,7 @@ pub struct CreateFlatMasterArgs {
 
     /// Output file extension
     #[arg(short, long, default_value = "fit", env = EnvVars::PX_DEFAULT_FIT_EXT)]
-    pub ext: FitFileExtension,
+    pub ext: Option<FitFileExtension>,
 
     /// Output location for the new master flat
     #[arg(value_hint = ValueHint::DirPath)]
