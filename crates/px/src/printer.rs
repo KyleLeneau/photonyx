@@ -1,7 +1,7 @@
 use anstream::{eprint, print};
-use indicatif::ProgressDrawTarget;
+use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use owo_colors::OwoColorize;
-use std::fmt::Write;
+use std::{fmt::Write, time::Duration};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,6 +86,20 @@ impl Printer {
             "success".green().bold(),
             ":".bold()
         )
+    }
+
+    pub(crate) fn spinner(&self, msg: impl Into<String>) -> ProgressBar {
+        let pb = ProgressBar::new_spinner();
+        pb.set_draw_target(self.target());
+        pb.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.cyan} {msg}")
+                .unwrap()
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+        );
+        pb.set_message(msg.into());
+        pb.enable_steady_tick(Duration::from_millis(80));
+        pb
     }
 }
 

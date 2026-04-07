@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use crate::{ExitStatus, printer::Printer, utils::to_fits_ext};
 use anyhow::Result;
 use px_cli::CreateBiasMasterArgs;
-use px_fits::all_fits_files;
+use px_fits::{CalibrationMetadata, all_fits_files};
 use siril_sys::{
     Builder,
     commands::{Convert, Stack},
@@ -34,8 +34,8 @@ pub(crate) async fn create_master_bias(
     }
 
     // Setup the output file
-    // TODO: need to get observation date here
-    let output_file = args.out_folder.join("PX_BIAS_master").display().to_string();
+    let name = CalibrationMetadata::from(raw_files.first().unwrap())?.master_bias_name();
+    let output_file = args.out_folder.join(name).display().to_string();
 
     // Setup siril
     let ext = to_fits_ext(args.ext);

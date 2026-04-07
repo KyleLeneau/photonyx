@@ -4,11 +4,13 @@
 // * doesn't write images well but that's ok
 // * can support wasm if all data loaded outside of wasm (fetch)
 
+use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeZone, Utc};
 use fitsrs::card::Value;
 use fitsrs::{
     Fits, HDU, fits,
     hdu::header::{ValueMapIter, extension::image::Image},
 };
+use regex::Regex;
 use std::io;
 use std::path::Path;
 use std::{
@@ -139,4 +141,105 @@ pub fn all_fits_files(raw_folder: &Path) -> io::Result<Vec<PathBuf>> {
         }
     }
     Ok(files)
+}
+
+#[derive(Debug)]
+pub struct CalibrationMetadata {
+    obs_date_utc: Option<DateTime<FixedOffset>>,
+    obs_date_local: Option<NaiveDateTime>,
+    exposure: Option<f64>,
+    temperature: Option<f64>,
+    filter: Option<String>,
+    _offset: Option<i64>,
+    _gain: Option<i64>,
+    // TODO: binning
+}
+
+impl CalibrationMetadata {
+    pub fn from(path: &Path) -> Result<Self, FitsError> {
+        let file = FitsFile::new(path.to_path_buf())?;
+        let header = file.primary_hdu.get_header();
+
+        let get_string = |key: &str| -> Option<String> {
+            match header.get(key)? {
+                Value::String { value, .. } => Some(value.clone()),
+                _ => None,
+            }
+        };
+
+        let get_float = |key: &str| -> Option<f64> {
+            match header.get(key)? {
+                Value::Float { value, .. } => Some(*value),
+                Value::Integer { value, .. } => Some(*value as f64),
+                _ => None,
+            }
+        };
+
+        let get_int = |key: &str| -> Option<i64> {
+            match header.get(key)? {
+                Value::Integer { value, .. } => Some(*value),
+                _ => None,
+            }
+        };
+
+        let obs_date_local = path.file_stem().and_then(|s| s.to_str()).and_then(|stem| {
+            Regex::new(r"(\d{8}-\d{6})")
+                .ok()?
+                .captures(stem)
+                .and_then(|caps| NaiveDateTime::parse_from_str(&caps[1], "%Y%m%d-%H%M%S").ok())
+        });
+
+        Ok(Self {
+            obs_date_local,
+            obs_date_utc: get_string("DATE-OBS").and_then(|s| {
+                DateTime::parse_from_rfc3339(&s).ok().or_else(|| {
+                    NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.f")
+                        .ok()
+                        .map(|ndt| Utc.from_utc_datetime(&ndt).fixed_offset())
+                })
+            }),
+            exposure: get_float("EXPOSURE"),
+            temperature: get_float("SET-TEMP"),
+            filter: get_string("FILTER"),
+            _offset: get_int("OFFSET"),
+            _gain: get_int("GAIN"),
+        })
+    }
+
+    fn best_obs_date(&self) -> Option<NaiveDateTime> {
+        self.obs_date_local
+            .or_else(|| self.obs_date_utc.map(|dt| dt.naive_local()))
+    }
+
+    /// Returns a formatted master bias name that matches this metadata
+    ///
+    pub fn master_bias_name(&self) -> String {
+        let date = self.best_obs_date().unwrap().format("%Y-%m-%d").to_string();
+        format!(
+            "{date}_BIAS_master_{}C",
+            self.temperature.unwrap_or_default()
+        )
+    }
+
+    /// Returns a formatted master dark name that matches this metadata
+    ///
+    pub fn master_dark_name(&self) -> String {
+        let date = self.best_obs_date().unwrap().format("%Y-%m-%d").to_string();
+        format!(
+            "{date}_DARK_master_{}s_{}C",
+            self.exposure.unwrap_or_default(),
+            self.temperature.unwrap_or_default()
+        )
+    }
+
+    /// Returns a formatted master flat name that matches this metadata
+    ///
+    pub fn master_flat_name(&self, filter: String) -> String {
+        let date = self.best_obs_date().unwrap().format("%Y-%m-%d").to_string();
+        format!(
+            "{date}_FLAT_master_{}C_{}",
+            self.temperature.unwrap_or_default(),
+            self.filter.clone().unwrap_or(filter)
+        )
+    }
 }

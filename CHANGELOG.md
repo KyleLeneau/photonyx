@@ -10,6 +10,9 @@
 * Removed `stat` command and replaced with `inspect`
 * Turned off logging by default and moved to `-v, -vv, -vvv` global cli options
 * Add `px master bias` implementation to create master bias
+* Add `px master dark` implementation to create master bias
+* Added master file naming convention
+* Add `px master flat` implementation to create master flat
 
 ## 0.1.3
 
