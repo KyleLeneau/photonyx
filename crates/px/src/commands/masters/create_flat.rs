@@ -61,7 +61,8 @@ pub(crate) async fn create_master_flat(
                 .output_dir(siril.initial_directory())
                 .build(),
         )
-        .await?;
+        .await
+        .inspect_err(|_| sp.abandon_with_message("✗ Convert failed"))?;
 
     // Return to working directory
     siril.cd(siril.initial_directory()).await?;
@@ -75,7 +76,8 @@ pub(crate) async fn create_master_flat(
                 .bias(args.bias.display().to_string())
                 .build(),
         )
-        .await?;
+        .await
+        .inspect_err(|_| sp.abandon_with_message("✗ Calibration failed"))?;
     sp.finish_with_message("[2/3] Calibrated flat frames");
 
     // Stack with defaults
@@ -88,7 +90,8 @@ pub(crate) async fn create_master_flat(
                 .out(&output_file)
                 .build(),
         )
-        .await?;
+        .await
+        .inspect_err(|_| sp.abandon_with_message("✗ Stacking failed"))?;
     sp.finish_with_message("[3/3] Stacked flat frames");
 
     // Confirm the output file exists now
