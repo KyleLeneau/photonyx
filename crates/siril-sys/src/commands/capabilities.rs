@@ -1,6 +1,11 @@
+#![allow(async_fn_in_trait)]
 use bon::Builder;
 
-use crate::commands::{Argument, Command};
+use crate::{
+    Siril,
+    commands::{Argument, Command},
+    message::SirilError,
+};
 
 /// ```text
 /// capabilities
@@ -21,4 +26,24 @@ impl Command for Capabilities {
     }
 }
 
-// TODO: Implement Tests
+pub trait CapabilitiesExt {
+    async fn capabilities(&mut self) -> Result<Vec<String>, SirilError>;
+}
+
+impl CapabilitiesExt for Siril {
+    async fn capabilities(&mut self) -> Result<Vec<String>, SirilError> {
+        let cmd = Capabilities::builder().build();
+        self.execute(&cmd).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_args_renders_command_name() {
+        let cmd = Capabilities::builder().build();
+        assert_eq!(cmd.to_args_string(), "capabilities");
+    }
+}

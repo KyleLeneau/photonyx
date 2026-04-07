@@ -101,4 +101,76 @@ impl Command for SeqApplyReg {
         args
     }
 }
-// TODO: Implement Tests
+
+#[cfg(test)]
+mod tests {
+    use crate::{DrizzleKernel, PixelInterpolation, SequenceFraming};
+
+    use super::*;
+
+    #[test]
+    fn minimal_sequence_only() {
+        let cmd = SeqApplyReg::builder("lights").build();
+        assert_eq!(cmd.to_args_string(), "seqapplyreg lights");
+    }
+
+    #[test]
+    fn prefix_and_scale() {
+        let cmd = SeqApplyReg::builder("lights")
+            .prefix("r_")
+            .scale(1.5_f32)
+            .build();
+        let s = cmd.to_args_string();
+        assert!(s.contains("-prefix=r_"));
+        assert!(s.contains("-scale=1.5"));
+    }
+
+    #[test]
+    fn framing_option() {
+        let cmd = SeqApplyReg::builder("lights")
+            .framing(SequenceFraming::Max)
+            .build();
+        assert!(cmd.to_args_string().contains("-framing=max"));
+    }
+
+    #[test]
+    fn interpolation_option() {
+        let cmd = SeqApplyReg::builder("lights")
+            .interp(PixelInterpolation::Linear)
+            .build();
+        assert!(cmd.to_args_string().contains("-interp=linear"));
+    }
+
+    #[test]
+    fn noclamp_flag() {
+        let cmd = SeqApplyReg::builder("lights").noclamp(true).build();
+        assert!(cmd.to_args_string().contains("-noclamp"));
+    }
+
+    #[test]
+    fn drizzle_with_options() {
+        let cmd = SeqApplyReg::builder("lights")
+            .drizzle(true)
+            .pixfrac(0.9_f32)
+            .kernel(DrizzleKernel::Turbo)
+            .flat("master_flat.fit")
+            .build();
+        let s = cmd.to_args_string();
+        assert!(s.contains("-drizzle"));
+        assert!(s.contains("-pixfrac=0.9"));
+        assert!(s.contains("-kernel=turbo"));
+        assert!(s.contains("-flat=master_flat.fit"));
+    }
+
+    #[test]
+    fn drizzle_args_excluded_when_drizzle_false() {
+        let cmd = SeqApplyReg::builder("lights")
+            .pixfrac(0.9_f32)
+            .kernel(DrizzleKernel::Turbo)
+            .build();
+        let s = cmd.to_args_string();
+        assert!(!s.contains("-drizzle"));
+        assert!(!s.contains("-pixfrac="));
+        assert!(!s.contains("-kernel="));
+    }
+}

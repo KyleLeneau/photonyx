@@ -16,6 +16,7 @@ pub struct Merge {
     sequence2: String,
     #[builder(start_fn, into)]
     output: String,
+    #[builder(default)]
     extras: Vec<String>,
 }
 
@@ -39,4 +40,27 @@ impl Command for Merge {
     }
 }
 
-// TODO: Implement Tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn two_sequences_and_output() {
+        let cmd = Merge::builder("seq1", "seq2", "merged").build();
+        assert_eq!(cmd.to_args_string(), "merge seq1 seq2 merged");
+    }
+
+    #[test]
+    fn extra_sequences_inserted_before_output() {
+        let cmd = Merge::builder("seq1", "seq2", "merged")
+            .extras(vec!["seq3".into(), "seq4".into()])
+            .build();
+        assert_eq!(cmd.to_args_string(), "merge seq1 seq2 seq3 seq4 merged");
+    }
+
+    #[test]
+    fn sequence_with_spaces_is_quoted() {
+        let cmd = Merge::builder("my seq1", "seq2", "out seq").build();
+        assert_eq!(cmd.to_args_string(), "merge 'my seq1' seq2 'out seq'");
+    }
+}

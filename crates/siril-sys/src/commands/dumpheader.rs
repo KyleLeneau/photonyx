@@ -1,6 +1,11 @@
+#![allow(async_fn_in_trait)]
 use bon::Builder;
 
-use crate::commands::{Argument, Command};
+use crate::{
+    Siril,
+    commands::{Argument, Command},
+    message::SirilError,
+};
 
 /// ```text
 /// dumpheader
@@ -20,4 +25,24 @@ impl Command for Dumpheader {
         vec![]
     }
 }
-// TODO: Implement Tests
+
+pub trait DumpheaderExt {
+    async fn dumpheader(&mut self) -> Result<Vec<String>, SirilError>;
+}
+
+impl DumpheaderExt for Siril {
+    async fn dumpheader(&mut self) -> Result<Vec<String>, SirilError> {
+        let cmd = Dumpheader::builder().build();
+        self.execute(&cmd).await
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_args_renders_command_name() {
+        let cmd = Dumpheader::builder().build();
+        assert_eq!(cmd.to_args_string(), "dumpheader");
+    }
+}

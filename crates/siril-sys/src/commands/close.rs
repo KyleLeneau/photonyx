@@ -1,6 +1,11 @@
+#![allow(async_fn_in_trait)]
 use bon::Builder;
 
-use crate::commands::{Argument, Command};
+use crate::{
+    Siril,
+    commands::{Argument, Command},
+    message::SirilError,
+};
 
 /// ```text
 /// close
@@ -20,4 +25,25 @@ impl Command for Close {
         vec![]
     }
 }
-// TODO: Implement Tests
+
+pub trait CloseExt {
+    async fn close(&mut self) -> Result<(), SirilError>;
+}
+
+impl CloseExt for Siril {
+    async fn close(&mut self) -> Result<(), SirilError> {
+        let cmd = Close::builder().build();
+        self.execute(&cmd).await?;
+        Ok(())
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_args_renders_command_name() {
+        let cmd = Close::builder().build();
+        assert_eq!(cmd.to_args_string(), "close");
+    }
+}

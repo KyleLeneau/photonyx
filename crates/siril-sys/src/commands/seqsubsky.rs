@@ -55,4 +55,62 @@ impl Command for SeqSubSky {
         args
     }
 }
-// TODO: Implement Tests
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_degree_one() {
+        let cmd = SeqSubSky::builder("lights").build();
+        assert_eq!(cmd.to_args_string(), "seqsubsky lights 1");
+    }
+
+    #[test]
+    fn custom_degree() {
+        let cmd = SeqSubSky::builder("lights").degree(2).build();
+        assert_eq!(cmd.to_args_string(), "seqsubsky lights 2");
+    }
+
+    #[test]
+    fn rbf_replaces_degree() {
+        let cmd = SeqSubSky::builder("lights").use_rbf(true).build();
+        let s = cmd.to_args_string();
+        assert!(s.contains("-rbf"));
+        assert!(!s.contains(" 1"));
+    }
+
+    #[test]
+    fn rbf_with_smooth() {
+        let cmd = SeqSubSky::builder("lights")
+            .use_rbf(true)
+            .smooth(0.5_f32)
+            .build();
+        let s = cmd.to_args_string();
+        assert!(s.contains("-rbf"));
+        assert!(s.contains("-smooth=0.5"));
+    }
+
+    #[test]
+    fn nodither_flag() {
+        let cmd = SeqSubSky::builder("lights").dither(true).build();
+        assert!(cmd.to_args_string().contains("-nodither"));
+    }
+
+    #[test]
+    fn samples_and_tolerance() {
+        let cmd = SeqSubSky::builder("lights")
+            .samples(30)
+            .tolerance(1.5_f32)
+            .build();
+        let s = cmd.to_args_string();
+        assert!(s.contains("-samples=30"));
+        assert!(s.contains("-tolerance=1.5"));
+    }
+
+    #[test]
+    fn custom_prefix() {
+        let cmd = SeqSubSky::builder("lights").prefix("bkg2_").build();
+        assert!(cmd.to_args_string().contains("-prefix=bkg2_"));
+    }
+}

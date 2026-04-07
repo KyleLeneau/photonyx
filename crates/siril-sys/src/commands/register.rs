@@ -113,4 +113,90 @@ impl Command for Register {
         args
     }
 }
-// TODO: Implement Tests
+
+#[cfg(test)]
+mod tests {
+    use crate::{PixelInterpolation, RegistrationTransformation};
+
+    use super::*;
+
+    #[test]
+    fn minimal_sequence_only() {
+        let cmd = Register::builder("lights").build();
+        assert_eq!(cmd.to_args_string(), "register lights");
+    }
+
+    #[test]
+    fn two_pass_flag() {
+        let cmd = Register::builder("lights").two_pass(true).build();
+        assert!(cmd.to_args_string().contains("-2pass"));
+    }
+
+    #[test]
+    fn selected_flag() {
+        let cmd = Register::builder("lights").selected(true).build();
+        assert!(cmd.to_args_string().contains("-selected"));
+    }
+
+    #[test]
+    fn prefix_and_scale() {
+        let cmd = Register::builder("lights")
+            .prefix("r_")
+            .scale(2.0_f32)
+            .build();
+        let s = cmd.to_args_string();
+        assert!(s.contains("-prefix=r_"));
+        assert!(s.contains("-scale=2"));
+    }
+
+    #[test]
+    fn transformation_type() {
+        let cmd = Register::builder("lights")
+            .trans_func(RegistrationTransformation::Affine)
+            .build();
+        assert!(cmd.to_args_string().contains("-transf=affine"));
+    }
+
+    #[test]
+    fn interpolation_included_when_not_two_pass() {
+        let cmd = Register::builder("lights")
+            .interp(PixelInterpolation::Cubic)
+            .build();
+        assert!(cmd.to_args_string().contains("-interp=cubic"));
+    }
+
+    #[test]
+    fn interpolation_excluded_when_two_pass() {
+        let cmd = Register::builder("lights")
+            .two_pass(true)
+            .interp(PixelInterpolation::Cubic)
+            .build();
+        assert!(!cmd.to_args_string().contains("-interp="));
+    }
+
+    #[test]
+    fn drizzle_with_options() {
+        let cmd = Register::builder("lights")
+            .drizzle(true)
+            .pixfrac(0.8_f32)
+            .kernel("square".to_string())
+            .flat("master_flat.fit".to_string())
+            .build();
+        let s = cmd.to_args_string();
+        assert!(s.contains("-drizzle"));
+        assert!(s.contains("-pixfrac=0.8"));
+        assert!(s.contains("-kernel=square"));
+        assert!(s.contains("-flat=master_flat.fit"));
+    }
+
+    #[test]
+    fn drizzle_args_excluded_when_drizzle_false() {
+        let cmd = Register::builder("lights")
+            .pixfrac(0.8_f32)
+            .kernel("square".to_string())
+            .build();
+        let s = cmd.to_args_string();
+        assert!(!s.contains("-drizzle"));
+        assert!(!s.contains("-pixfrac="));
+    }
+}

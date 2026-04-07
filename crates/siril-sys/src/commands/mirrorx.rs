@@ -1,6 +1,11 @@
+#![allow(async_fn_in_trait)]
 use bon::Builder;
 
-use crate::commands::{Argument, Command};
+use crate::{
+    Siril,
+    commands::{Argument, Command},
+    message::SirilError,
+};
 
 /// ```text
 /// mirrorx [-bottomup]
@@ -23,4 +28,38 @@ impl Command for Mirrorx {
         vec![Argument::flag_option("bottomup", self.bottom_up)]
     }
 }
-// TODO: Implement Tests
+
+pub trait MirrorxExt {
+    async fn mirrorx(&mut self, bottom_up: bool) -> Result<(), SirilError>;
+}
+
+impl MirrorxExt for Siril {
+    async fn mirrorx(&mut self, bottom_up: bool) -> Result<(), SirilError> {
+        let cmd = Mirrorx::builder().bottom_up(bottom_up).build();
+        self.execute(&cmd).await?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_includes_bottomup_flag() {
+        let cmd = Mirrorx::builder().build();
+        assert_eq!(cmd.to_args_string(), "mirrorx -bottomup");
+    }
+
+    #[test]
+    fn bottomup_false_omits_flag() {
+        let cmd = Mirrorx::builder().bottom_up(false).build();
+        assert_eq!(cmd.to_args_string(), "mirrorx");
+    }
+
+    #[test]
+    fn bottomup_true_includes_flag() {
+        let cmd = Mirrorx::builder().bottom_up(true).build();
+        assert_eq!(cmd.to_args_string(), "mirrorx -bottomup");
+    }
+}

@@ -45,4 +45,19 @@ impl LoadExt for Siril {
     }
 }
 
-// TODO: Implement Tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn simple_filename() {
+        let cmd = Load::builder("light.fit").build();
+        assert_eq!(cmd.to_args_string(), "load light.fit");
+    }
+
+    #[test]
+    fn filename_with_spaces_is_quoted() {
+        let cmd = Load::builder("my light.fit").build();
+        assert_eq!(cmd.to_args_string(), "load 'my light.fit'");
+    }
+}

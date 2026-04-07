@@ -44,4 +44,13 @@ impl PwdExt for Siril {
     }
 }
 
-// TODO: Implement Tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_args_renders_command_name() {
+        let cmd = Pwd::builder().build();
+        assert_eq!(cmd.to_args_string(), "pwd");
+    }
+}

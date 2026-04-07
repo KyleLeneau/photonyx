@@ -15,7 +15,7 @@ pub(crate) async fn siril_test(printer: Printer) -> Result<ExitStatus> {
 
     // Startup and wait till process is ready for additional commands
     let mut siril = Builder::default()
-        .output_sink(siril_sys::OutputSink::Discard)
+        .output_sink(siril_sys::OutputSink::Inherit)
         // .use_directory(Path::new("/Users/kyle/Development/BortleSpace/photonyx"))
         .build()
         .await?;

@@ -20,4 +20,14 @@ impl Command for Log {
         vec![]
     }
 }
-// TODO: Implement Tests
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_args_renders_command_name() {
+        let cmd = Log::builder().build();
+        assert_eq!(cmd.to_args_string(), "log");
+    }
+}

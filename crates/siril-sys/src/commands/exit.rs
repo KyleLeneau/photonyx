@@ -1,6 +1,11 @@
+#![allow(async_fn_in_trait)]
 use bon::Builder;
 
-use crate::commands::{Argument, Command};
+use crate::{
+    Siril,
+    commands::{Argument, Command},
+    message::SirilError,
+};
 
 /// ```text
 /// exit
@@ -20,4 +25,26 @@ impl Command for Exit {
         vec![]
     }
 }
-// TODO: Implement Tests
+
+pub trait ExitExt {
+    async fn exit(&mut self) -> Result<(), SirilError>;
+}
+
+impl ExitExt for Siril {
+    async fn exit(&mut self) -> Result<(), SirilError> {
+        let cmd = Exit::builder().build();
+        self.execute(&cmd).await?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_args_renders_command_name() {
+        let cmd = Exit::builder().build();
+        assert_eq!(cmd.to_args_string(), "exit");
+    }
+}

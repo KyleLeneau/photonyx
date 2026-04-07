@@ -7,10 +7,11 @@ use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-use crate::commands::{Capabilities, Requires, Set, Setcpu};
+use crate::commands::{Capabilities, Requires, Setcpu};
 use crate::message::{SirilError, SirilMessage};
 use crate::output::{OutputLine, OutputSink, OutputStream};
-use crate::{FitsExt, SirilSetting, commands};
+use crate::siril_ext::{ExitExt, SetExt};
+use crate::{FitsExt, SirilSetting};
 
 /// Unix FIFOs use `pipe::Sender`; Windows named pipes use `NamedPipeClient`
 /// (Siril acts as the server, we connect as a client).
@@ -477,7 +478,7 @@ impl Siril {
     ///
     pub async fn close(mut self) -> Result<(), SirilError> {
         // Send exit command
-        let _ = self.command("exit").await;
+        let _ = self.exit().await;
 
         // Wait briefly for the process to exit cleanly
         match tokio::time::timeout(std::time::Duration::from_secs(5), self.child.wait()).await {
@@ -497,19 +498,6 @@ impl Siril {
             let _ = std::fs::remove_file(&self.out_pipe_path);
         }
 
-        Ok(())
-    }
-
-    /// Sets a Siril setting by key and value (`set {key}={value}`)
-    ///
-    async fn set(
-        &mut self,
-        setting: SirilSetting,
-        value: impl std::fmt::Display,
-    ) -> Result<(), SirilError> {
-        let method = commands::set::Method::Var(setting, value.to_string());
-        let cmd = Set::builder(method).build();
-        self.execute(&cmd).await?;
         Ok(())
     }
 
