@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use strum_macros::Display;
 use strum_macros::EnumString;
+use strum_macros::FromRepr;
 
 #[derive(Debug, PartialEq, EnumString, Display, Clone)]
 pub enum FitsExt {
@@ -50,6 +51,15 @@ impl Display for Rect {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} {} {} {}", self.x, self.y, self.width, self.height)
     }
+}
+
+#[allow(dead_code)]
+#[derive(Debug)]
+pub enum RGBImage {
+    /// A single RGB image to combine with
+    Single(String),
+    /// Specify all 3 layers independently
+    RGB(String, String, String),
 }
 
 #[derive(Debug, PartialEq, EnumString, Display)]
@@ -241,6 +251,52 @@ impl SequenceFilter {
             ),
         }
     }
+}
+
+/// Star catalog used for plate solving.
+#[derive(Debug, PartialEq, EnumString, Display, Clone)]
+#[strum(serialize_all = "lowercase")]
+pub enum StarCatalog {
+    Tycho2,
+    Nomad,
+    Gaia,
+    Ppmxl,
+    BrightStars,
+    Apass,
+}
+
+/// Limit magnitude mode for plate solving.
+///
+/// - `Default`: automatically computed from field of view (no `-limitmag` flag)
+/// - `Offset(f64)`: relative offset from auto magnitude; positive values use `+`, e.g. `-limitmag=+1.5`
+/// - `Absolute(f64)`: absolute magnitude limit, e.g. `-limitmag=12.5`
+#[derive(Debug, PartialEq, Clone, Default)]
+pub enum LimitMag {
+    #[default]
+    Default,
+    Offset(f64),
+    Absolute(f64),
+}
+
+#[derive(Debug, PartialEq, FromRepr, Clone, Display, Copy)]
+#[repr(u8)]
+pub enum RmgreenProtection {
+    AverageNeutral = 0,
+    MaximumNeutral = 1,
+    MaximumMask = 2,
+    AdditiveMask = 3,
+}
+
+#[derive(Debug, PartialEq, FromRepr, Clone, Display, Copy)]
+#[repr(u8)]
+pub enum SaturationHueRange {
+    PinkOrange = 0,
+    OrangeYellow = 1,
+    YellowCyan = 2,
+    Cyan = 3,
+    CyanMagenta = 4,
+    MagentaPink = 5,
+    ALL = 6,
 }
 
 pub struct SigmaRange {

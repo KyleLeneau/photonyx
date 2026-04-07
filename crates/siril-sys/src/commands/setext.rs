@@ -28,4 +28,26 @@ impl Command for SetExt {
         vec![Argument::positional(self.extension.to_string())]
     }
 }
-// TODO: Implement Tests
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fit_extension() {
+        let cmd = SetExt::builder(FitsExt::FIT).build();
+        assert_eq!(cmd.to_args_string(), "setext fit");
+    }
+
+    #[test]
+    fn fits_extension() {
+        let cmd = SetExt::builder(FitsExt::FITS).build();
+        assert_eq!(cmd.to_args_string(), "setext fits");
+    }
+
+    #[test]
+    fn fts_extension() {
+        let cmd = SetExt::builder(FitsExt::FTS).build();
+        assert_eq!(cmd.to_args_string(), "setext fts");
+    }
+}

@@ -13,7 +13,10 @@ use crate::commands::{Argument, Command};
 /// Links: :ref:`set <set>`
 ///
 #[derive(Builder)]
-pub struct Setmem {}
+pub struct Setmem {
+    #[builder(start_fn)]
+    ratio: f64
+}
 
 impl Command for Setmem {
     fn name() -> &'static str {
@@ -21,9 +24,29 @@ impl Command for Setmem {
     }
 
     fn args(&self) -> Vec<Argument> {
-        vec![]
+        vec![Argument::positional(format!("{:.2}", self.ratio))]
     }
 }
 
-// TODO: Need command implementation
-// TODO: Implement Tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn low_ratio() {
+        let cmd = Setmem::builder(0.05).build();
+        assert_eq!(cmd.to_args_string(), "setmem 0.05");
+    }
+
+    #[test]
+    fn normal_ratio() {
+        let cmd = Setmem::builder(0.9).build();
+        assert_eq!(cmd.to_args_string(), "setmem 0.90");
+    }
+
+    #[test]
+    fn high_ratio() {
+        let cmd = Setmem::builder(2.0).build();
+        assert_eq!(cmd.to_args_string(), "setmem 2.00");
+    }
+}

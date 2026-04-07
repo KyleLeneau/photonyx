@@ -1,6 +1,9 @@
 use bon::Builder;
 
-use crate::commands::{Argument, Command};
+use crate::{
+    LimitMag, StarCatalog,
+    commands::{Argument, Command},
+};
 
 /// ```text
 /// platesolve [-force] [image_center_coords] [-focal=] [-pixelsize=]
@@ -31,7 +34,48 @@ use crate::commands::{Argument, Command};
 /// Passing options **-blindpos** and/or **-blindres** enables to solve blindly for position and for resolution respectively. You can use these when solving an image with a completely unknown location and sampling
 ///
 #[derive(Builder)]
-pub struct Platesolve {}
+pub struct Platesolve {
+    /// Force a new plate solve even if the image is already solved.
+    #[builder(default = false)]
+    force: bool,
+    /// Approximate image center coordinates (decimal degrees or HMS/DMS with colon separators).
+    #[builder(into)]
+    image_center: Option<String>,
+    /// Focal length in mm.
+    focal: Option<f64>,
+    /// Pixel size in microns.
+    pixelsize: Option<f64>,
+    /// Downscale the image before star detection for faster solving on large images.
+    #[builder(default = false)]
+    downscale: bool,
+    /// Disable automatic image flip when the image is detected as upside-down.
+    #[builder(default = false)]
+    noflip: bool,
+    /// SIP polynomial order for distortion (1–5).
+    order: Option<u8>,
+    /// Search cone radius for near-field retry.
+    radius: Option<f64>,
+    /// Path to save or load the distortion file.
+    #[builder(into)]
+    disto: Option<String>,
+    /// Limit magnitude mode. Defaults to automatic computation from field of view.
+    #[builder(default)]
+    limit_mag: LimitMag,
+    /// Star catalog to use. Ignored when `local_asnet` is true.
+    catalog: Option<StarCatalog>,
+    /// Disable cropping for large fields of view (>5 degrees).
+    #[builder(default = false)]
+    nocrop: bool,
+    /// Use local Astrometry.net solver instead of the built-in Siril solver.
+    #[builder(default = false)]
+    local_asnet: bool,
+    /// Solve blindly for position (only valid with `local_asnet`).
+    #[builder(default = false)]
+    blindpos: bool,
+    /// Solve blindly for resolution (only valid with `local_asnet`).
+    #[builder(default = false)]
+    blindres: bool,
+}
 
 impl Command for Platesolve {
     fn name() -> &'static str {
@@ -39,9 +83,203 @@ impl Command for Platesolve {
     }
 
     fn args(&self) -> Vec<Argument> {
-        vec![]
+        let mut args = vec![
+            Argument::flag_option("force", self.force),
+            Argument::positional_option(self.image_center.as_deref()),
+            Argument::option("focal", self.focal),
+            Argument::option("pixelsize", self.pixelsize),
+            Argument::flag_option("downscale", self.downscale),
+            Argument::flag_option("noflip", self.noflip),
+            Argument::option("order", self.order),
+            Argument::option("radius", self.radius),
+            Argument::option("disto", self.disto.as_deref()),
+        ];
+
+        match &self.limit_mag {
+            LimitMag::Default => {}
+            LimitMag::Offset(v) if *v != 0.0 => {
+                let s = if *v > 0.0 {
+                    format!("+{}", v)
+                } else {
+                    v.to_string()
+                };
+                args.push(Argument::option("limitmag", Some(s)));
+            }
+            LimitMag::Offset(_) => {}
+            LimitMag::Absolute(v) => {
+                args.push(Argument::option("limitmag", Some(v.to_string())));
+            }
+        }
+
+        if !self.local_asnet {
+            args.push(Argument::option(
+                "catalog",
+                self.catalog.as_ref().map(|c| c.to_string()),
+            ));
+        }
+
+        args.push(Argument::flag_option("nocrop", self.nocrop));
+
+        if self.local_asnet {
+            args.push(Argument::flag("localasnet"));
+            args.push(Argument::flag_option("blindpos", self.blindpos));
+            args.push(Argument::flag_option("blindres", self.blindres));
+        }
+
+        args
     }
 }
 
-// TODO: Need command implementation
-// TODO: Implement Tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn minimal_no_args() {
+        let cmd = Platesolve::builder().build();
+        assert_eq!(cmd.to_args_string(), "platesolve");
+    }
+
+    #[test]
+    fn force_flag() {
+        let cmd = Platesolve::builder().force(true).build();
+        assert_eq!(cmd.to_args_string(), "platesolve -force");
+    }
+
+    #[test]
+    fn image_center_decimal() {
+        let cmd = Platesolve::builder()
+            .image_center("83.822,22.0145")
+            .build();
+        assert_eq!(cmd.to_args_string(), "platesolve 83.822,22.0145");
+    }
+
+    #[test]
+    fn focal_and_pixelsize() {
+        let cmd = Platesolve::builder().focal(500.0).pixelsize(3.8).build();
+        assert_eq!(cmd.to_args_string(), "platesolve -focal=500 -pixelsize=3.8");
+    }
+
+    #[test]
+    fn downscale_and_noflip() {
+        let cmd = Platesolve::builder().downscale(true).noflip(true).build();
+        let s = cmd.to_args_string();
+        assert!(s.contains("-downscale"));
+        assert!(s.contains("-noflip"));
+    }
+
+    #[test]
+    fn order_and_radius() {
+        let cmd = Platesolve::builder().order(3).radius(10.0).build();
+        assert_eq!(cmd.to_args_string(), "platesolve -order=3 -radius=10");
+    }
+
+    #[test]
+    fn disto_option() {
+        let cmd = Platesolve::builder().disto("my_disto.dat").build();
+        assert_eq!(cmd.to_args_string(), "platesolve -disto=my_disto.dat");
+    }
+
+    #[test]
+    fn limitmag_default_emits_nothing() {
+        let cmd = Platesolve::builder().limit_mag(LimitMag::Default).build();
+        assert!(!cmd.to_args_string().contains("limitmag"));
+    }
+
+    #[test]
+    fn limitmag_positive_offset() {
+        let cmd = Platesolve::builder()
+            .limit_mag(LimitMag::Offset(1.5))
+            .build();
+        assert_eq!(cmd.to_args_string(), "platesolve -limitmag=+1.5");
+    }
+
+    #[test]
+    fn limitmag_negative_offset() {
+        let cmd = Platesolve::builder()
+            .limit_mag(LimitMag::Offset(-1.5))
+            .build();
+        assert_eq!(cmd.to_args_string(), "platesolve -limitmag=-1.5");
+    }
+
+    #[test]
+    fn limitmag_zero_offset_emits_nothing() {
+        let cmd = Platesolve::builder()
+            .limit_mag(LimitMag::Offset(0.0))
+            .build();
+        assert!(!cmd.to_args_string().contains("limitmag"));
+    }
+
+    #[test]
+    fn limitmag_absolute() {
+        let cmd = Platesolve::builder()
+            .limit_mag(LimitMag::Absolute(12.5))
+            .build();
+        assert_eq!(cmd.to_args_string(), "platesolve -limitmag=12.5");
+    }
+
+    #[test]
+    fn catalog_gaia() {
+        let cmd = Platesolve::builder().catalog(StarCatalog::Gaia).build();
+        assert_eq!(cmd.to_args_string(), "platesolve -catalog=gaia");
+    }
+
+    #[test]
+    fn catalog_ignored_when_local_asnet() {
+        let cmd = Platesolve::builder()
+            .catalog(StarCatalog::Gaia)
+            .local_asnet(true)
+            .build();
+        let s = cmd.to_args_string();
+        assert!(!s.contains("catalog"));
+        assert!(s.contains("-localasnet"));
+    }
+
+    #[test]
+    fn nocrop_flag() {
+        let cmd = Platesolve::builder().nocrop(true).build();
+        assert_eq!(cmd.to_args_string(), "platesolve -nocrop");
+    }
+
+    #[test]
+    fn local_asnet_with_blind_options() {
+        let cmd = Platesolve::builder()
+            .local_asnet(true)
+            .blindpos(true)
+            .blindres(true)
+            .build();
+        assert_eq!(
+            cmd.to_args_string(),
+            "platesolve -localasnet -blindpos -blindres"
+        );
+    }
+
+    #[test]
+    fn blindpos_blindres_ignored_without_local_asnet() {
+        let cmd = Platesolve::builder()
+            .blindpos(true)
+            .blindres(true)
+            .build();
+        let s = cmd.to_args_string();
+        assert!(!s.contains("blindpos"));
+        assert!(!s.contains("blindres"));
+    }
+
+    #[test]
+    fn full_siril_solver_invocation() {
+        let cmd = Platesolve::builder()
+            .force(true)
+            .image_center("83.822,22.0145")
+            .focal(500.0)
+            .pixelsize(3.8)
+            .downscale(true)
+            .order(3)
+            .limit_mag(LimitMag::Offset(1.0))
+            .catalog(StarCatalog::Gaia)
+            .build();
+        assert_eq!(
+            cmd.to_args_string(),
+            "platesolve -force 83.822,22.0145 -focal=500 -pixelsize=3.8 -downscale -order=3 -limitmag=+1 -catalog=gaia"
+        );
+    }
+}

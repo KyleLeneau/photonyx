@@ -21,5 +21,13 @@ impl Command for SplitCfa {
     }
 }
 
-// TODO: Need command implementation
-// TODO: Implement Tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_args() {
+        let cmd = SplitCfa::builder().build();
+        assert_eq!(cmd.to_args_string(), "split_cfa");
+    }
+}

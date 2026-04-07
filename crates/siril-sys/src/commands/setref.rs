@@ -1,3 +1,4 @@
+#![allow(async_fn_in_trait)]
 use bon::Builder;
 
 use crate::commands::{Argument, Command};

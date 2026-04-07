@@ -20,4 +20,14 @@ impl Command for Set32bits {
         vec![]
     }
 }
-// TODO: Implement Tests
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_args() {
+        let cmd = Set32bits::builder().build();
+        assert_eq!(cmd.to_args_string(), "set32bits");
+    }
+}

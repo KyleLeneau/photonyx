@@ -7,10 +7,11 @@ use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-use crate::commands::{Capabilities, Requires, Setcpu};
+use crate::commands::setcpu::SetcpuExt;
+use crate::commands::Requires;
 use crate::message::{SirilError, SirilMessage};
 use crate::output::{OutputLine, OutputSink, OutputStream};
-use crate::siril_ext::{ExitExt, SetExt};
+use crate::siril_ext::{CapabilitiesExt, ExitExt, SetExt};
 use crate::{FitsExt, SirilSetting};
 
 /// Unix FIFOs use `pipe::Sender`; Windows named pipes use `NamedPipeClient`
@@ -390,7 +391,7 @@ impl Siril {
     async fn configure<'a>(&mut self, builder: Builder<'a>) -> Result<(), SirilError> {
         self.execute(&Requires::builder("0.99.10").build()).await?;
         if let Some(cores) = builder.cpu_limit {
-            self.execute(&Setcpu::builder(cores).build()).await?;
+            self.set_cpu_cores(cores).await?;
         }
 
         // 16bit is default to flip to 32 is specified
@@ -410,7 +411,7 @@ impl Siril {
             }
         }
 
-        self.execute(&Capabilities::builder().build()).await?;
+        self.capabilities().await?;
         self.set(
             SirilSetting::Extension,
             format!(".{}", builder.fits_extension),

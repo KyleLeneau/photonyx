@@ -1,6 +1,7 @@
+#![allow(async_fn_in_trait)]
 use bon::Builder;
 
-use crate::commands::{Argument, Command};
+use crate::{Siril, commands::{Argument, Command}, message::SirilError};
 
 /// ```text
 /// setcpu number
@@ -25,6 +26,18 @@ impl Command for Setcpu {
 
     fn args(&self) -> Vec<Argument> {
         vec![Argument::positional(self.number.to_string())]
+    }
+}
+
+pub trait SetcpuExt {
+    async fn set_cpu_cores(&mut self, cores: u8) -> Result<(), SirilError>;
+}
+
+impl SetcpuExt for Siril {
+    async fn set_cpu_cores(&mut self, cores: u8) -> Result<(), SirilError> {
+        let cmd = Setcpu::builder(cores).build();
+        self.execute(&cmd).await?;
+        Ok(())
     }
 }
 
