@@ -11,7 +11,8 @@ use std::io::stdout;
 #[cfg(feature = "self-update")]
 use px_cli::SelfUpdateArgs;
 use px_cli::{
-    Cli, Commands, MasterCommand, MasterNamespace, ObservationCommand, ObservationNamespace, ProfileCommand, ProfileNamespace, SelfCommand, SelfNamespace
+    Cli, Commands, MasterCommand, MasterNamespace, ObservationCommand, ObservationNamespace,
+    ProfileCommand, ProfileNamespace, SelfCommand, SelfNamespace,
 };
 
 pub use crate::commands::ExitStatus;
@@ -60,19 +61,19 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
 
         // Profile
         Commands::Profile(ProfileNamespace {
-            command: ProfileCommand::Show(args)
+            command: ProfileCommand::Show(args),
         }) => commands::show_profile(args, printer).await,
 
         Commands::Profile(ProfileNamespace {
-            command: ProfileCommand::Init(args)
+            command: ProfileCommand::Init(args),
         }) => commands::init_profile(args, printer).await,
 
         Commands::Profile(ProfileNamespace {
-            command: ProfileCommand::List(args)
+            command: ProfileCommand::List(args),
         }) => commands::list_profiles(args, printer).await,
 
         Commands::Profile(ProfileNamespace {
-            command: ProfileCommand::Scan(args)
+            command: ProfileCommand::Scan(args),
         }) => commands::scan_profile(args, printer).await,
 
         // Masters

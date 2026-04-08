@@ -6,9 +6,6 @@ use px_cli::ShowProfileArgs;
 
 use crate::{ExitStatus, printer::Printer};
 
-pub(crate) async fn show_profile(
-    _args: ShowProfileArgs,
-    _printer: Printer,
-) -> Result<ExitStatus> {
+pub(crate) async fn show_profile(_args: ShowProfileArgs, _printer: Printer) -> Result<ExitStatus> {
     Ok(ExitStatus::Success)
 }
