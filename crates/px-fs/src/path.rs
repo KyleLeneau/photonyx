@@ -96,3 +96,18 @@ impl<T: AsRef<Path>> Simplified for T {
         path.display()
     }
 }
+
+pub trait OptionPath {
+    fn some_display(&self) -> Option<impl std::fmt::Display>;
+    fn some_string(&self) -> Option<String>;
+}
+
+impl<T: AsRef<Path>> OptionPath for Option<T> {
+    fn some_display(&self) -> Option<impl std::fmt::Display> {
+        self.as_ref().map(|p| p.as_ref().display())
+    }
+
+    fn some_string(&self) -> Option<String> {
+        self.some_display().map(|d| d.to_string())
+    }
+}

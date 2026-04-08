@@ -13,6 +13,8 @@
 * Add `px master dark` implementation to create master bias
 * Added master file naming convention
 * Add `px master flat` implementation to create master flat
+* Add `ConversionFile` type to siril-sys to track file movements with siril
+* Add `px observation calibrate` implementation for processing light frames
 
 ## 0.1.3
 

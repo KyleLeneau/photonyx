@@ -2435,6 +2435,7 @@ version = "0.1.3"
 dependencies = [
  "bon",
  "libc",
+ "regex",
  "strum 0.28.0",
  "strum_macros 0.28.0",
  "tempfile",

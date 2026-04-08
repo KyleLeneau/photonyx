@@ -309,8 +309,41 @@ pub enum ObservationCommand {
 #[derive(Args)]
 pub struct ListObservationArgs {}
 
-#[derive(Args)]
-pub struct CalibrateObservationArgs {}
+#[derive(Args, Debug)]
+pub struct CalibrateObservationArgs {
+    /// Path to the raw folder of light frames
+    #[arg(value_hint = ValueHint::DirPath)]
+    pub raw_folder: PathBuf,
+
+    /// Clean or remove the match calibrated folder from a previous run
+    #[arg(long)]
+    pub clean: bool,
+
+    /// Output file extension
+    #[arg(short, long, default_value = "fit", env = EnvVars::PX_DEFAULT_FIT_EXT)]
+    pub ext: Option<FitFileExtension>,
+
+    /// Output location for the calibrated folder (default: peer to input)
+    #[arg(value_hint = ValueHint::DirPath)]
+    pub out_folder: Option<PathBuf>,
+
+    /// Specify a filter for the observation if unable to find
+    #[arg(short, long)]
+    pub filter: Option<String>,
+
+    // TODO: find best matching masters flag and override the input
+    /// Location of the master BIAS
+    #[arg(long, value_hint = ValueHint::FilePath)]
+    pub bias: Option<PathBuf>,
+
+    /// Location of the master DARK
+    #[arg(long, value_hint = ValueHint::FilePath)]
+    pub dark: Option<PathBuf>,
+
+    /// Location of the master FLAT
+    #[arg(long, value_hint = ValueHint::FilePath)]
+    pub flat: Option<PathBuf>,
+}
 
 #[derive(Args, Debug)]
 pub struct ProjectNamespace {

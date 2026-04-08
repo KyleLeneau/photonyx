@@ -79,6 +79,16 @@ impl Printer {
     }
 
     #[allow(unused)]
+    pub(crate) fn warn(self, msg: impl std::fmt::Display) -> std::fmt::Result {
+        writeln!(
+            self.stdout(),
+            "{}{} {msg}",
+            "warn".yellow().bold(),
+            ":".bold()
+        )
+    }
+
+    #[allow(unused)]
     pub(crate) fn success(self, msg: impl std::fmt::Display) -> std::fmt::Result {
         writeln!(
             self.stdout(),

@@ -143,6 +143,18 @@ pub fn all_fits_files(raw_folder: &Path) -> io::Result<Vec<PathBuf>> {
     Ok(files)
 }
 
+pub fn all_color_raw_frames(raw_files: &Vec<PathBuf>) -> Result<bool, FitsError> {
+    let mut all_color = true;
+    for raw_file in raw_files {
+        if !FitsFile::new(raw_file.clone())?.is_color() {
+            all_color = false;
+            break;
+        }
+    }
+
+    Ok(all_color)
+}
+
 #[derive(Debug)]
 pub struct CalibrationMetadata {
     obs_date_utc: Option<DateTime<FixedOffset>>,
