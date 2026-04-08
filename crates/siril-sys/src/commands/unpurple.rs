@@ -14,7 +14,12 @@ use crate::commands::{Argument, Command};
 /// Links: :ref:`psf <psf>`
 ///
 #[derive(Builder)]
-pub struct Unpurple {}
+pub struct Unpurple {
+    #[builder(default = false)]
+    starmask: bool,
+    blue: Option<f64>,
+    threshold: Option<f64>,
+}
 
 impl Command for Unpurple {
     fn name() -> &'static str {
@@ -22,9 +27,58 @@ impl Command for Unpurple {
     }
 
     fn args(&self) -> Vec<Argument> {
-        vec![]
+        vec![
+            Argument::flag_option("starmask", self.starmask),
+            Argument::option("blue", self.blue),
+            Argument::option("thresh", self.threshold)
+        ]
     }
 }
 
-// TODO: Need command implementation
-// TODO: Implement Tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_no_starmask_no_optional_args() {
+        let cmd = Unpurple::builder().build();
+        assert_eq!(cmd.to_args_string(), "unpurple");
+    }
+
+    #[test]
+    fn starmask_flag_included_when_true() {
+        let cmd = Unpurple::builder().starmask(true).build();
+        assert_eq!(cmd.to_args_string(), "unpurple -starmask");
+    }
+
+    #[test]
+    fn blue_option_only() {
+        let cmd = Unpurple::builder().blue(0.14_f64).build();
+        assert_eq!(cmd.to_args_string(), "unpurple -blue=0.14");
+    }
+
+    #[test]
+    fn threshold_option_only() {
+        let cmd = Unpurple::builder().threshold(0.5_f64).build();
+        assert_eq!(cmd.to_args_string(), "unpurple -thresh=0.5");
+    }
+
+    #[test]
+    fn starmask_with_all_options() {
+        let cmd = Unpurple::builder()
+            .starmask(true)
+            .blue(0.14_f64)
+            .threshold(0.5_f64)
+            .build();
+        assert_eq!(cmd.to_args_string(), "unpurple -starmask -blue=0.14 -thresh=0.5");
+    }
+
+    #[test]
+    fn blue_and_threshold_without_starmask() {
+        let cmd = Unpurple::builder()
+            .blue(0.1_f64)
+            .threshold(0.3_f64)
+            .build();
+        assert_eq!(cmd.to_args_string(), "unpurple -blue=0.1 -thresh=0.3");
+    }
+}
