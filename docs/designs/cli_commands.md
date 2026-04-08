@@ -26,7 +26,17 @@ px profile list     # list all profiles knonw to system
 px profile init     # make a new profile (dir, layout, config, etc)
 px profile show     # show the current profile or a specified one
 px profile scan     # scan for changes in current or specified profile
+```
 
+### Manage Data / Remote
+```bash
+px remote add       # add a new remote
+px remote delete    # delete an added remote
+px remote list      # list all the remotes configured (like rclone)
+px remote push      # push data to a remote like to a NAS
+px remote pull      # pull data from remote like sfro computer
+
+px remote monitor   # some sort of profile monitoring UI?
 ```
 
 ### Manage Calibration master
@@ -46,14 +56,20 @@ px project calibrate  # calibrate new light frames
 px project stack    # linear stack by filter
 px project align    # aka register a bunch of linear stacks
 px project sample   # produce color samples using linear stacks
+
+px project live     # start producing a livestack by watching for observations
 ```
 
-### Manage Lights / Sessions
+### Manage Observations (Lights) (alias: obs)
 ```bash
-```
+px observation list
+px observation calibrate        # calibrate a set of raw light frames
 
-### Livestacking (kind of based on monitor and projects?)
-```bash
+# Other ideas?
+cull      # some kind of UI to remove bad frames
+blink     # video of frames to reject
+sample    # autostretch and produce sample to show (or preview)
+thumbnail # produce thumbnails of all the images
 ```
 
 ### Monitor
