@@ -57,12 +57,8 @@ mod tests {
 
     #[test]
     fn set_key_and_value() {
-        let cmd = UpdateKey::builder(UpdateKeyMethod::Set(
-            "OBJECT".into(),
-            "M42".into(),
-            None,
-        ))
-        .build();
+        let cmd =
+            UpdateKey::builder(UpdateKeyMethod::Set("OBJECT".into(), "M42".into(), None)).build();
         assert_eq!(cmd.to_args_string(), "update_key OBJECT M42");
     }
 
@@ -74,7 +70,10 @@ mod tests {
             Some("Target object".into()),
         ))
         .build();
-        assert_eq!(cmd.to_args_string(), "update_key OBJECT M42 'Target object'");
+        assert_eq!(
+            cmd.to_args_string(),
+            "update_key OBJECT M42 'Target object'"
+        );
     }
 
     #[test]

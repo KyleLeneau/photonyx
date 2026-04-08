@@ -147,7 +147,9 @@ mod tests {
 
     #[test]
     fn force_flag() {
-        let cmd = Seqplatesolve::builder("lights".to_string()).force(true).build();
+        let cmd = Seqplatesolve::builder("lights".to_string())
+            .force(true)
+            .build();
         assert_eq!(cmd.to_args_string(), "seqplatesolve lights -force");
     }
 
@@ -199,7 +201,10 @@ mod tests {
         let cmd = Seqplatesolve::builder("lights".to_string())
             .disto("my_disto.dat")
             .build();
-        assert_eq!(cmd.to_args_string(), "seqplatesolve lights -disto=my_disto.dat");
+        assert_eq!(
+            cmd.to_args_string(),
+            "seqplatesolve lights -disto=my_disto.dat"
+        );
     }
 
     #[test]

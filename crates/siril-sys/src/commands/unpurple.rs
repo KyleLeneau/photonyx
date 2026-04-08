@@ -30,7 +30,7 @@ impl Command for Unpurple {
         vec![
             Argument::flag_option("starmask", self.starmask),
             Argument::option("blue", self.blue),
-            Argument::option("thresh", self.threshold)
+            Argument::option("thresh", self.threshold),
         ]
     }
 }
@@ -70,15 +70,15 @@ mod tests {
             .blue(0.14_f64)
             .threshold(0.5_f64)
             .build();
-        assert_eq!(cmd.to_args_string(), "unpurple -starmask -blue=0.14 -thresh=0.5");
+        assert_eq!(
+            cmd.to_args_string(),
+            "unpurple -starmask -blue=0.14 -thresh=0.5"
+        );
     }
 
     #[test]
     fn blue_and_threshold_without_starmask() {
-        let cmd = Unpurple::builder()
-            .blue(0.1_f64)
-            .threshold(0.3_f64)
-            .build();
+        let cmd = Unpurple::builder().blue(0.1_f64).threshold(0.3_f64).build();
         assert_eq!(cmd.to_args_string(), "unpurple -blue=0.1 -thresh=0.3");
     }
 }

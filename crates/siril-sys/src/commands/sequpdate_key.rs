@@ -98,23 +98,29 @@ mod tests {
             UpdateKeyMethod::Rename("OLDKEY".into(), "NEWKEY".into()),
         )
         .build();
-        assert_eq!(cmd.to_args_string(), "sequpdate_key lights -modify OLDKEY NEWKEY");
+        assert_eq!(
+            cmd.to_args_string(),
+            "sequpdate_key lights -modify OLDKEY NEWKEY"
+        );
     }
 
     #[test]
     fn add_comment() {
         let cmd =
             SequpdateKey::builder("lights", UpdateKeyMethod::Comment("my comment".into())).build();
-        assert_eq!(cmd.to_args_string(), "sequpdate_key lights -comment 'my comment'");
+        assert_eq!(
+            cmd.to_args_string(),
+            "sequpdate_key lights -comment 'my comment'"
+        );
     }
 
     #[test]
     fn sequence_with_spaces_is_quoted() {
-        let cmd = SequpdateKey::builder(
-            "my lights",
-            UpdateKeyMethod::Delete("OBJECT".into()),
-        )
-        .build();
-        assert_eq!(cmd.to_args_string(), "sequpdate_key 'my lights' -delete OBJECT");
+        let cmd =
+            SequpdateKey::builder("my lights", UpdateKeyMethod::Delete("OBJECT".into())).build();
+        assert_eq!(
+            cmd.to_args_string(),
+            "sequpdate_key 'my lights' -delete OBJECT"
+        );
     }
 }

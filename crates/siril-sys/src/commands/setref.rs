@@ -14,7 +14,7 @@ pub struct Setref {
     #[builder(start_fn, into)]
     sequence: String,
     #[builder(start_fn)]
-    image_number: i32
+    image_number: i32,
 }
 
 impl Command for Setref {

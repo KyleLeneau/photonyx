@@ -10,7 +10,9 @@ use std::io::stdout;
 
 #[cfg(feature = "self-update")]
 use px_cli::SelfUpdateArgs;
-use px_cli::{Cli, Commands, MasterCommand, MasterNamespace, SelfCommand, SelfNamespace};
+use px_cli::{
+    Cli, Commands, MasterCommand, MasterNamespace, ObservationCommand, ObservationNamespace, ProfileCommand, ProfileNamespace, SelfCommand, SelfNamespace
+};
 
 pub use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -55,8 +57,25 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Tui => commands::terminal_ui(printer).await,
         Commands::Inspect(args) => commands::inspect_file(args, printer).await,
-        Commands::Profile(_profile_namespace) => todo!(),
 
+        // Profile
+        Commands::Profile(ProfileNamespace {
+            command: ProfileCommand::Show(args)
+        }) => commands::show_profile(args, printer).await,
+
+        Commands::Profile(ProfileNamespace {
+            command: ProfileCommand::Init(args)
+        }) => commands::init_profile(args, printer).await,
+
+        Commands::Profile(ProfileNamespace {
+            command: ProfileCommand::List(args)
+        }) => commands::list_profiles(args, printer).await,
+
+        Commands::Profile(ProfileNamespace {
+            command: ProfileCommand::Scan(args)
+        }) => commands::scan_profile(args, printer).await,
+
+        // Masters
         Commands::Master(MasterNamespace {
             command: MasterCommand::Best(args),
         }) => commands::find_best_master(args, printer).await,
@@ -76,5 +95,14 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Master(MasterNamespace {
             command: MasterCommand::Flat(args),
         }) => commands::create_master_flat(args, printer).await,
+
+        // Observations
+        Commands::Observation(ObservationNamespace {
+            command: ObservationCommand::List(args),
+        }) => commands::list_observations(args, printer).await,
+
+        Commands::Observation(ObservationNamespace {
+            command: ObservationCommand::Calibrate(args),
+        }) => commands::calibrate_observation(args, printer).await,
     }
 }

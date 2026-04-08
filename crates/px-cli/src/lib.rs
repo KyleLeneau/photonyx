@@ -97,6 +97,10 @@ pub enum Commands {
     /// Manage and create master calibration frames
     #[command()]
     Master(MasterNamespace),
+
+    /// Manage and calibrate observation (light) frames
+    #[command(alias = "obs")]
+    Observation(ObservationNamespace),
 }
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -113,10 +117,30 @@ pub struct ProfileNamespace {
 
 #[derive(Subcommand)]
 pub enum ProfileCommand {
-    Init,
-    List,
-    Scan,
+    /// show details on a profile (current or specified)
+    Show(ShowProfileArgs),
+
+    /// make a new profile (dir, layout, config, etc)
+    Init(InitProfileArgs),
+
+    /// list all profiles known to system
+    List(ListProfileArgs),
+
+    /// scan for changes in current or specified profile
+    Scan(ScanProfileArgs),
 }
+
+#[derive(Args, Debug)]
+pub struct ShowProfileArgs {}
+
+#[derive(Args, Debug)]
+pub struct InitProfileArgs {}
+
+#[derive(Args, Debug)]
+pub struct ListProfileArgs {}
+
+#[derive(Args, Debug)]
+pub struct ScanProfileArgs {}
 
 #[derive(Args)]
 pub struct SelfNamespace {
@@ -261,3 +285,25 @@ pub struct CreateFlatMasterArgs {
     #[arg(short, long, value_hint = ValueHint::Other)]
     pub filter: String,
 }
+
+#[derive(Args)]
+pub struct ObservationNamespace {
+    #[command(subcommand)]
+    pub command: ObservationCommand,
+}
+
+#[derive(Subcommand)]
+pub enum ObservationCommand {
+    /// show all the light frame observations for a profile
+    List(ListObservationArgs),
+
+    /// calibration a single raw observation
+    #[command(alias = "process")]
+    Calibrate(CalibrateObservationArgs),
+}
+
+#[derive(Args)]
+pub struct ListObservationArgs {}
+
+#[derive(Args)]
+pub struct CalibrateObservationArgs {}

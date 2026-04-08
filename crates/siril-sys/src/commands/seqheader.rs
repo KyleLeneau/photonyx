@@ -58,7 +58,10 @@ mod tests {
         let cmd = Seqheader::builder("lights".to_string(), "EXPTIME".to_string())
             .extra_keywords(vec!["DATE-OBS".to_string(), "OBJECT".to_string()])
             .build();
-        assert_eq!(cmd.to_args_string(), "seqheader lights EXPTIME DATE-OBS OBJECT");
+        assert_eq!(
+            cmd.to_args_string(),
+            "seqheader lights EXPTIME DATE-OBS OBJECT"
+        );
     }
 
     #[test]
@@ -82,7 +85,10 @@ mod tests {
         let cmd = Seqheader::builder("lights".to_string(), "EXPTIME".to_string())
             .output_csv("results.csv")
             .build();
-        assert_eq!(cmd.to_args_string(), "seqheader lights EXPTIME -out=results.csv");
+        assert_eq!(
+            cmd.to_args_string(),
+            "seqheader lights EXPTIME -out=results.csv"
+        );
     }
 
     #[test]
