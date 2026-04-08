@@ -1,14 +1,12 @@
-// use std::fmt::Write;
-
 use anyhow::Result;
-// use owo_colors::OwoColorize;
 use px_cli::FindBestMasterArgs;
 
 use crate::{ExitStatus, printer::Printer};
 
 pub(crate) async fn find_best_master(
     _args: FindBestMasterArgs,
-    _printer: Printer,
+    printer: Printer,
 ) -> Result<ExitStatus> {
+    printer.info("WIP, comming soon")?;
     Ok(ExitStatus::Success)
 }

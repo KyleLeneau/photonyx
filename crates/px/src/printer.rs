@@ -81,9 +81,19 @@ impl Printer {
     #[allow(unused)]
     pub(crate) fn success(self, msg: impl std::fmt::Display) -> std::fmt::Result {
         writeln!(
-            self.stderr(),
+            self.stdout(),
             "{}{} {msg}",
             "success".green().bold(),
+            ":".bold()
+        )
+    }
+
+    #[allow(unused)]
+    pub(crate) fn info(self, msg: impl std::fmt::Display) -> std::fmt::Result {
+        writeln!(
+            self.stdout(),
+            "{}{} {msg}",
+            "info".cyan().bold(),
             ":".bold()
         )
     }
