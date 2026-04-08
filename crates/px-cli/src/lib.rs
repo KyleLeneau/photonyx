@@ -76,19 +76,19 @@ pub enum Commands {
     #[command(alias = "--generate-shell-completion", hide = true)]
     GenerateShellCompletion(GenerateShellCompletionArgs),
 
-    /// Test if siril is installed and working
-    SirilTest,
-
     /// Manage the px executable.
     #[command(name = "self")]
     Self_(SelfNamespace),
 
-    /// Manage hardware profiles
-    #[command()]
-    Profile(ProfileNamespace),
+    /// Test if siril is installed and working
+    SirilTest,
 
     /// Launch a terminal UI poc
     Tui,
+
+    /// Manage hardware profiles
+    #[command()]
+    Profile(ProfileNamespace),
 
     /// Inspect a single image
     #[command()]
@@ -101,6 +101,10 @@ pub enum Commands {
     /// Manage and calibrate observation (light) frames
     #[command(alias = "obs")]
     Observation(ObservationNamespace),
+
+    /// Manage and create projects from observations
+    #[command()]
+    Project(ProjectNamespace),
 }
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -307,3 +311,48 @@ pub struct ListObservationArgs {}
 
 #[derive(Args)]
 pub struct CalibrateObservationArgs {}
+
+#[derive(Args, Debug)]
+pub struct ProjectNamespace {
+    #[command(subcommand)]
+    pub command: ProjectCommand,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ProjectCommand {
+    /// new project setup
+    Init(InitProjectArgs),
+
+    /// list all the projects for the profile
+    List(ListProjectArgs),
+
+    /// Calibrate needed observations of the project
+    Calibrate(CalibrateProjectArgs),
+
+    /// Create linear stacks of the observation + profile + filter combos
+    Stack(StackProjectArgs),
+
+    /// Register all the linear stacks to one another
+    Align(AlignProjectArgs),
+
+    /// Preview color samples of the project
+    Sample(SampleProjectArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct InitProjectArgs {}
+
+#[derive(Args, Debug)]
+pub struct ListProjectArgs {}
+
+#[derive(Args, Debug)]
+pub struct CalibrateProjectArgs {}
+
+#[derive(Args, Debug)]
+pub struct StackProjectArgs {}
+
+#[derive(Args, Debug)]
+pub struct AlignProjectArgs {}
+
+#[derive(Args, Debug)]
+pub struct SampleProjectArgs {}

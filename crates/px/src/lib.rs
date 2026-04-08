@@ -12,7 +12,7 @@ use std::io::stdout;
 use px_cli::SelfUpdateArgs;
 use px_cli::{
     Cli, Commands, MasterCommand, MasterNamespace, ObservationCommand, ObservationNamespace,
-    ProfileCommand, ProfileNamespace, SelfCommand, SelfNamespace,
+    ProfileCommand, ProfileNamespace, ProjectCommand, ProjectNamespace, SelfCommand, SelfNamespace,
 };
 
 pub use crate::commands::ExitStatus;
@@ -105,5 +105,30 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Observation(ObservationNamespace {
             command: ObservationCommand::Calibrate(args),
         }) => commands::calibrate_observation(args, printer).await,
+
+        // Project
+        Commands::Project(ProjectNamespace {
+            command: ProjectCommand::Init(args),
+        }) => commands::init_project(args, printer).await,
+
+        Commands::Project(ProjectNamespace {
+            command: ProjectCommand::List(args),
+        }) => commands::list_projects(args, printer).await,
+
+        Commands::Project(ProjectNamespace {
+            command: ProjectCommand::Calibrate(args),
+        }) => commands::calibrate_project(args, printer).await,
+
+        Commands::Project(ProjectNamespace {
+            command: ProjectCommand::Stack(args),
+        }) => commands::stack_project_observations(args, printer).await,
+
+        Commands::Project(ProjectNamespace {
+            command: ProjectCommand::Align(args),
+        }) => commands::align_project(args, printer).await,
+
+        Commands::Project(ProjectNamespace {
+            command: ProjectCommand::Sample(args),
+        }) => commands::create_project_samples(args, printer).await,
     }
 }
