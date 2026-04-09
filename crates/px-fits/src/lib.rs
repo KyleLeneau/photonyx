@@ -57,13 +57,16 @@ impl FitsFile {
     }
 
     pub fn is_color(&self) -> bool {
-        self.primary_hdu
-            .get_header()
-            .get_xtension()
-            .get_naxis()
-            .iter()
-            .count()
-            > 2
+        let header = self.primary_hdu.get_header();
+
+        let bayer = match header.get("BAYERPAT") {
+            Some(Value::String { value, .. }) => !value.is_empty(),
+            _ => false,
+        };
+
+        let three_dim = header.get_xtension().get_naxis().iter().count() > 2;
+
+        bayer || three_dim
     }
 
     pub fn headers(&self) -> Vec<String> {
@@ -154,7 +157,8 @@ pub fn all_fits_files(raw_folder: &Path) -> io::Result<Vec<PathBuf>> {
 pub fn all_color_raw_frames(raw_files: &Vec<PathBuf>) -> Result<bool, FitsError> {
     let mut all_color = true;
     for raw_file in raw_files {
-        if !FitsFile::new(raw_file.clone())?.is_color() {
+        let file = FitsFile::new(raw_file.clone())?;
+        if !file.is_color() {
             all_color = false;
             break;
         }
