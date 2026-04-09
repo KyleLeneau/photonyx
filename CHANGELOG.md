@@ -15,6 +15,8 @@
 * Add `px master flat` implementation to create master flat
 * Add `ConversionFile` type to siril-sys to track file movements with siril
 * Add `px observation calibrate` implementation for processing light frames
+* Add `px project init` to create a folder and config file
+* Add `px project add` to add an observation to the project and start filling out linear stack creation
 
 ## 0.1.3
 

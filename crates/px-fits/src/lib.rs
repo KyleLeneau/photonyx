@@ -104,6 +104,14 @@ impl FitsFile {
             })
             .collect()
     }
+
+    pub fn filter(&self) -> Option<String> {
+        self.header_rows()
+            .into_iter()
+            .find(|(key, _, _)| key == "FILTER")
+            .map(|(_, value, _)| value)
+            .filter(|v| !v.is_empty())
+    }
 }
 
 impl Display for FitsFile {

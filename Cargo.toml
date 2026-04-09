@@ -12,6 +12,7 @@ repository = "https://github.com/KyleLeneau/photonyx"
 [workspace.dependencies]
 # local crates
 px-cli = { path = "./crates/px-cli", version = "0.1.3" }
+px-configuration = { path = "./crates/px-configuration", version = "0.1.3" }
 px-fits = { path = "./crates/px-fits", version = "0.1.3" }
 px-fs = { path = "./crates/px-fs", version = "0.1.3" }
 px-static = { path = "./crates/px-static", version = "0.1.3" }

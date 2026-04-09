@@ -1,3 +1,4 @@
+pub(crate) mod add;
 pub(crate) mod align;
 pub(crate) mod calibrate;
 pub(crate) mod init;

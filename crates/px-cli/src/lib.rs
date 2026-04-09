@@ -356,6 +356,9 @@ pub enum ProjectCommand {
     /// new project setup
     Init(InitProjectArgs),
 
+    /// Add observation to the project
+    Add(AddProjectArgs),
+
     /// list all the projects for the profile
     List(ListProjectArgs),
 
@@ -373,19 +376,66 @@ pub enum ProjectCommand {
 }
 
 #[derive(Args, Debug)]
-pub struct InitProjectArgs {}
+pub struct InitProjectArgs {
+    /// The path to use for the project (created if it does not exist)
+    #[arg(value_hint = ValueHint::DirPath)]
+    pub path: PathBuf,
+
+    /// The name of the project (defaults to the directory name)
+    #[arg(long)]
+    pub name: Option<String>,
+
+    /// Set the project description
+    #[arg(long)]
+    pub description: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct AddProjectArgs {
+    /// The path to the project; defaults to searching the current directory and its parents
+    #[arg(short, long, value_hint = ValueHint::DirPath)]
+    pub project: Option<PathBuf>,
+
+    /// The path to the RAW observation folder to add
+    #[arg(value_hint = ValueHint::DirPath)]
+    pub obs_path: PathBuf,
+
+    /// Override the filter for this observation (auto-detected from FITS headers if not set)
+    #[arg(short, long)]
+    pub filter: Option<String>,
+
+    /// Mosaic panel identifier for this observation
+    #[arg(long)]
+    pub panel: Option<String>,
+}
 
 #[derive(Args, Debug)]
 pub struct ListProjectArgs {}
 
 #[derive(Args, Debug)]
-pub struct CalibrateProjectArgs {}
+pub struct CalibrateProjectArgs {
+    /// The path to the project; defaults to searching the current directory and its parents
+    #[arg(short, long, value_hint = ValueHint::DirPath)]
+    pub project: Option<PathBuf>,
+}
 
 #[derive(Args, Debug)]
-pub struct StackProjectArgs {}
+pub struct StackProjectArgs {
+    /// The path to the project; defaults to searching the current directory and its parents
+    #[arg(short, long, value_hint = ValueHint::DirPath)]
+    pub project: Option<PathBuf>,
+}
 
 #[derive(Args, Debug)]
-pub struct AlignProjectArgs {}
+pub struct AlignProjectArgs {
+    /// The path to the project; defaults to searching the current directory and its parents
+    #[arg(short, long, value_hint = ValueHint::DirPath)]
+    pub project: Option<PathBuf>,
+}
 
 #[derive(Args, Debug)]
-pub struct SampleProjectArgs {}
+pub struct SampleProjectArgs {
+    /// The path to the project; defaults to searching the current directory and its parents
+    #[arg(short, long, value_hint = ValueHint::DirPath)]
+    pub project: Option<PathBuf>,
+}

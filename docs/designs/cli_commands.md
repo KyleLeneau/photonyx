@@ -51,6 +51,7 @@ px master flat      # create a new master flat for profile
 ### Manage Projects
 ```bash
 px project init     # new project setup
+px project add      # add an observation to the project
 px project list     # list all the projects for the profile
 px project calibrate  # calibrate new light frames
 px project stack    # linear stack by filter
