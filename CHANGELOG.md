@@ -17,6 +17,7 @@
 * Add `px observation calibrate` implementation for processing light frames
 * Add `px project init` to create a folder and config file
 * Add `px project add` to add an observation to the project and start filling out linear stack creation
+* Add `px project stack` and basic implementation with a number of todo's
 
 ## 0.1.3
 

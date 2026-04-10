@@ -34,7 +34,7 @@ fn find_and_load_project(
         Some(p) => p,
         None => {
             let cwd = std::env::current_dir()?;
-            find_project_dir(&cwd).ok_or_else(|| ProjectConfigError::NotFound(cwd))?
+            find_project_dir(&cwd).ok_or(ProjectConfigError::NotFound(cwd))?
         }
     };
 

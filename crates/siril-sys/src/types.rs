@@ -331,10 +331,11 @@ impl Display for SigmaRange {
 
 /// Helper to find the best rejection based on number of images
 ///
+#[derive(Debug)]
 pub struct BestRejection {
     pub method: StackRejection,
-    pub low_threshold: f64,
-    pub high_threshold: f64,
+    pub low_threshold: f32,
+    pub high_threshold: f32,
 }
 
 impl BestRejection {
