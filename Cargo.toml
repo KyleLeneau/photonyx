@@ -28,6 +28,7 @@ dotenvy = "0.15"
 owo-colors = { version = "4.1.0" }
 indicatif = { version = "0.18.0" }
 anstream = { version = "1.0.0" }
+inquire = { version = "0.7" }
 
 # Update for self-update
 axoupdater = { version = "0.9.0", default-features = false }

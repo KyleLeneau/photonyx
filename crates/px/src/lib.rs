@@ -1,6 +1,7 @@
 mod commands;
 mod logging;
 mod printer;
+mod resolve;
 mod utils;
 
 use anyhow::Result;
