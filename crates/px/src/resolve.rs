@@ -19,7 +19,7 @@ pub(crate) fn resolve_chain<'a, T>(
 ///
 /// # Example
 ///
-/// ```rust
+/// ```ignore
 /// let filter = first_some![
 ///     || Ok(args.filter.clone()),
 ///     || detect_filter_from_fits(&obs_path),

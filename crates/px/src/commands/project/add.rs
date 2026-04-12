@@ -45,7 +45,7 @@ pub(crate) async fn add_project_observation(
         || Ok(args.filter.clone()),
         || detect_filter_from_fits(&obs_path),
         || detect_filter_from_filename(&obs_path),
-        || prompt_filter(),
+        prompt_filter,
     ]? {
         Some(f) => f,
         None => {
@@ -151,22 +151,18 @@ fn prompt_filter() -> Result<Option<String>> {
 
     let choice = match Select::new("Could not detect filter. Select one:", options).prompt() {
         Ok(c) => c,
-        Err(
-            InquireError::NotTTY
-            | InquireError::OperationCanceled
-            | InquireError::OperationInterrupted,
-        ) => return Ok(None),
+        Err(InquireError::NotTTY | InquireError::OperationCanceled | InquireError::OperationInterrupted) => {
+            return Ok(None)
+        }
         Err(e) => return Err(e.into()),
     };
 
     if choice == "Other..." {
         match Text::new("Enter filter name:").prompt() {
             Ok(f) => Ok(Some(f)),
-            Err(
-                InquireError::NotTTY
-                | InquireError::OperationCanceled
-                | InquireError::OperationInterrupted,
-            ) => Ok(None),
+            Err(InquireError::NotTTY | InquireError::OperationCanceled | InquireError::OperationInterrupted) => {
+                Ok(None)
+            }
             Err(e) => Err(e.into()),
         }
     } else {

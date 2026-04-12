@@ -150,6 +150,10 @@ impl<'a> Builder<'a> {
         self
     }
 
+    pub fn ext(&self) -> FitsExt {
+        self.fits_extension.clone()
+    }
+
     fn pipe_paths(&self) -> (PathBuf, PathBuf) {
         // Linux/Unix of siril support custom named pipes, windows does not
         #[cfg(unix)]
