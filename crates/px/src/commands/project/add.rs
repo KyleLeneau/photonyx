@@ -4,7 +4,7 @@ use anyhow::Result;
 use inquire::{InquireError, Select, Text};
 use px_cli::AddProjectArgs;
 use px_configuration::AddObservationOutcome;
-use px_conventions::project::ProjectPath;
+use px_conventions::{observation::ObservationPath, project::ProjectPath};
 use px_fits::{FitsFile, all_fits_files};
 
 use crate::{ExitStatus, printer::Printer, resolve::first_some};
@@ -93,9 +93,6 @@ pub(crate) async fn add_project_observation(
     Ok(ExitStatus::Success)
 }
 
-/// Common astrophotography filter names — used for both filename detection and quick-picks.
-const KNOWN_FILTERS: &[&str] = &["Ha", "OIII", "SII", "Lum", "Red", "Green", "Blue"];
-
 /// Walk up `obs_path` components to find the directory named `LIGHT/`, then return its parent
 /// as the hardware profile root (e.g. `.../PX_Radian75/LIGHT/...` → `.../PX_Radian75`).
 fn derive_profile_root(obs_path: &Path) -> Option<PathBuf> {
@@ -119,32 +116,20 @@ fn detect_filter_from_fits(obs_path: &Path) -> Result<Option<String>> {
     Ok(filter)
 }
 
-/// Scan path components for a known filter name (case-insensitive).
+/// Fetch the matching filter from the ObservationPath convention
 ///
-/// Matches paths like `.../LIGHT/Ha/`, `.../Ha_LIGHT/`, or `.../NGC1499_Ha_300s/`.
 fn detect_filter_from_filename(obs_path: &Path) -> Result<Option<String>> {
-    let components: Vec<&str> = obs_path
-        .components()
-        .filter_map(|c| c.as_os_str().to_str())
-        .collect();
+    let obs = ObservationPath::single(obs_path)?;
 
-    for filter in KNOWN_FILTERS {
-        let upper = filter.to_uppercase();
-        let found = components.iter().any(|segment| {
-            let seg_upper = segment.to_uppercase();
-            // Match exact component or as a word within a compound name (e.g. "Ha_300s")
-            seg_upper == upper
-                || seg_upper.starts_with(&format!("{upper}_"))
-                || seg_upper.ends_with(&format!("_{upper}"))
-                || seg_upper.contains(&format!("_{upper}_"))
-        });
-        if found {
-            return Ok(Some(filter.to_string()));
-        }
+    if let Some(filter) = obs.filter() {
+        return Ok(Some(filter.to_string()));
     }
 
     Ok(None)
 }
+
+/// Common astrophotography filter names — used for both filename detection and quick-picks.
+const KNOWN_FILTERS: &[&str] = &["Ha", "OIII", "SII", "Lum", "Red", "Green", "Blue"];
 
 /// Prompt the user to pick or type a filter name interactively.
 /// Returns `None` if stdin is not a TTY or the user cancels.

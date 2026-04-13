@@ -362,9 +362,6 @@ pub enum ProjectCommand {
     /// list all the projects for the profile
     List(ListProjectArgs),
 
-    /// Calibrate needed observations of the project
-    Calibrate(CalibrateProjectArgs),
-
     /// Create linear stacks of the observation + profile + filter combos
     Stack(StackProjectArgs),
 
@@ -411,13 +408,6 @@ pub struct AddProjectArgs {
 
 #[derive(Args, Debug)]
 pub struct ListProjectArgs {}
-
-#[derive(Args, Debug)]
-pub struct CalibrateProjectArgs {
-    /// The path to the project; defaults to searching the current directory and its parents
-    #[arg(short, long, value_hint = ValueHint::DirPath)]
-    pub project: Option<PathBuf>,
-}
 
 #[derive(Args, Debug)]
 pub struct StackProjectArgs {

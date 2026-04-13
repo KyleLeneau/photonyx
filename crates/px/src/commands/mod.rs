@@ -14,7 +14,6 @@ pub(crate) use profile::scan::scan_profile;
 pub(crate) use profile::show::show_profile;
 pub(crate) use project::add::add_project_observation;
 pub(crate) use project::align::align_project;
-pub(crate) use project::calibrate::calibrate_project;
 pub(crate) use project::init::init_project;
 pub(crate) use project::list::list_projects;
 pub(crate) use project::sample::create_project_samples;

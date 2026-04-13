@@ -121,10 +121,6 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         }) => commands::list_projects(args, printer).await,
 
         Commands::Project(ProjectNamespace {
-            command: ProjectCommand::Calibrate(args),
-        }) => commands::calibrate_project(args, printer).await,
-
-        Commands::Project(ProjectNamespace {
             command: ProjectCommand::Stack(args),
         }) => commands::stack_project_observations(args, printer).await,
 
