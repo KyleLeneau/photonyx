@@ -1908,6 +1908,7 @@ dependencies = [
  "owo-colors",
  "px-cli",
  "px-configuration",
+ "px-conventions",
  "px-fits",
  "px-fs",
  "ratatui",
@@ -1943,6 +1944,13 @@ dependencies = [
 [[package]]
 name = "px-conventions"
 version = "0.1.3"
+dependencies = [
+ "chrono",
+ "regex",
+ "serde",
+ "tempfile",
+ "thiserror 1.0.69",
+]
 
 [[package]]
 name = "px-fits"

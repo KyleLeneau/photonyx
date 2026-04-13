@@ -1,8 +1,10 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::Result;
 use px_cli::StackProjectArgs;
 use px_configuration::ProjectLinearStack;
+use px_conventions::observation::ObservationPath;
+use px_fs::Glob;
 use siril_sys::{
     BestRejection, Builder, FitsExt,
     commands::{Convert, Load, Register, SeqApplyReg, Stack},
@@ -59,16 +61,9 @@ async fn stack_linear<'a>(
     // convert each input directory
     let mut start_idx = 1;
     for obs in stack.observations {
-        let obs_path = raw_input_to_output_folder(&obs.path);
-        let count = std::fs::read_dir(&obs_path)?
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.path()
-                    .extension()
-                    .is_some_and(|x| x.eq_ignore_ascii_case(ext.to_string().as_str()))
-            })
-            .count();
-        siril.cd(obs_path).await?;
+        let observation = ObservationPath::single(&obs.path)?;
+        let count = observation.pp_path().count_by_ext(ext.to_string())?;
+        siril.cd(observation.pp_path().to_path_buf()).await?;
         siril
             .execute(
                 &Convert::builder(&prefix)
@@ -137,14 +132,4 @@ async fn stack_linear<'a>(
     printer.success(format!("{} linear stack complete", stack.filter))?;
 
     Ok(())
-}
-
-fn raw_input_to_output_folder(path: &Path) -> PathBuf {
-    let new_name = path
-        .file_name()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .replacen("RAW_", "PP_", 1);
-    path.with_file_name(new_name)
 }

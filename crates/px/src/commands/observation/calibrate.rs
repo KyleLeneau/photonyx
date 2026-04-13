@@ -1,7 +1,6 @@
-use std::path::{Path, PathBuf};
-
 use anyhow::Result;
 use px_cli::CalibrateObservationArgs;
+use px_conventions::observation::ObservationPath;
 use px_fits::{all_color_raw_frames, all_fits_files};
 use px_fs::OptionPath;
 use siril_sys::{
@@ -24,11 +23,14 @@ pub(crate) async fn calibrate_observation(
     printer.info(format!("flat: {:?}", args.flat))?;
     printer.info(format!("bias: {:?}", args.bias))?;
 
-    // Guard to make sure the input folder exists first
-    if !args.raw_folder.exists() {
-        printer.error("Raw bias folder does not exist")?;
-        return Ok(ExitStatus::Error);
-    }
+    // Use convetions to find observation path
+    let obs = match ObservationPath::single(&args.raw_folder) {
+        Ok(o) => o,
+        Err(_) => {
+            printer.error("Error finding observation RAW folder")?;
+            return Ok(ExitStatus::Error);
+        }
+    };
 
     // Check that all files in raw folder are fits
     let raw_files = all_fits_files(&args.raw_folder)?;
@@ -40,10 +42,7 @@ pub(crate) async fn calibrate_observation(
     // Get the output folder or compute it
     let resolved_out_folder = match args.out_folder.clone() {
         Some(folder) => folder,
-        None => {
-            // Compute the out folder based on input
-            raw_input_to_output_folder(&args.raw_folder)
-        }
+        None => obs.pp_path().to_path_buf(),
     };
 
     // Clean output if specified and exists
@@ -140,14 +139,4 @@ pub(crate) async fn calibrate_observation(
         resolved_out_folder
     ))?;
     Ok(ExitStatus::Success)
-}
-
-fn raw_input_to_output_folder(path: &Path) -> PathBuf {
-    let new_name = path
-        .file_name()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .replacen("RAW_", "PP_", 1);
-    path.with_file_name(new_name)
 }
