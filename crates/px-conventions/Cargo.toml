@@ -8,6 +8,9 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+px-configuration = { workspace = true }
+px-fs = {workspace = true }
+
 chrono = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }

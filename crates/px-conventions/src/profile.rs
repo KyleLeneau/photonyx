@@ -1,7 +1,4 @@
 #[derive(Debug)]
-pub struct ProfilePath {
-}
+pub struct ProfilePath {}
 
-impl ProfilePath {
-
-}
+impl ProfilePath {}

@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::Result;
 use px_cli::StackProjectArgs;
 use px_configuration::ProjectLinearStack;
-use px_conventions::observation::ObservationPath;
+use px_conventions::{observation::ObservationPath, project::ProjectPath};
 use px_fs::Glob;
 use siril_sys::{
     BestRejection, Builder, FitsExt,
@@ -18,17 +18,18 @@ pub(crate) async fn stack_project_observations(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Find the project dir and config to work with
-    let (project_dir, config) = match super::find_and_load_project(args.project) {
-        Ok(tuple) => tuple,
+    let project = match ProjectPath::find(args.project) {
+        Ok(path) => path,
         Err(e) => {
             printer.error(format!("{e}"))?;
             return Ok(ExitStatus::Failure);
         }
     };
 
+    let config = project.load_config()?;
     printer.info(format!(
         "project_dir: {:?}, config: {:?}",
-        project_dir.display(),
+        project.dir().display(),
         config
     ))?;
 
@@ -38,7 +39,7 @@ pub(crate) async fn stack_project_observations(
             .output_sink(siril_sys::OutputSink::Inherit)
             .use_extension(ext.clone());
 
-        stack_linear(builder, stack, &project_dir, printer).await?;
+        stack_linear(builder, &stack, &project.dir(), printer).await?;
         // utils::wait_for_confirm(printer).await;
     }
 
@@ -47,7 +48,7 @@ pub(crate) async fn stack_project_observations(
 
 async fn stack_linear<'a>(
     siril_builder: Builder<'a>,
-    stack: ProjectLinearStack,
+    stack: &ProjectLinearStack,
     project_dir: &Path,
     printer: Printer,
 ) -> Result<()> {
@@ -60,7 +61,7 @@ async fn stack_linear<'a>(
 
     // convert each input directory
     let mut start_idx = 1;
-    for obs in stack.observations {
+    for obs in &stack.observations {
         let observation = ObservationPath::single(&obs.path)?;
         let count = observation.pp_path().count_by_ext(ext.to_string())?;
         siril.cd(observation.pp_path().to_path_buf()).await?;

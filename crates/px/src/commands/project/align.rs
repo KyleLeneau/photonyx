@@ -1,12 +1,13 @@
 use anyhow::Result;
 use px_cli::AlignProjectArgs;
+use px_conventions::project::ProjectPath;
 
 use crate::{ExitStatus, printer::Printer};
 
 pub(crate) async fn align_project(args: AlignProjectArgs, printer: Printer) -> Result<ExitStatus> {
     // Find the project dir and config to work with
-    let (project_dir, config) = match super::find_and_load_project(args.project) {
-        Ok(tuple) => tuple,
+    let project = match ProjectPath::find(args.project) {
+        Ok(path) => path,
         Err(e) => {
             printer.error(format!("{e}"))?;
             return Ok(ExitStatus::Failure);
@@ -15,8 +16,8 @@ pub(crate) async fn align_project(args: AlignProjectArgs, printer: Printer) -> R
 
     printer.info(format!(
         "project_dir: {:?}, config: {:?}",
-        project_dir.display(),
-        config
+        project.dir().display(),
+        project.load_config()?
     ))?;
 
     Ok(ExitStatus::Success)

@@ -1946,6 +1946,8 @@ name = "px-conventions"
 version = "0.1.3"
 dependencies = [
  "chrono",
+ "px-configuration",
+ "px-fs",
  "regex",
  "serde",
  "tempfile",

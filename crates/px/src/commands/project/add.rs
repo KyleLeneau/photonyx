@@ -4,6 +4,7 @@ use anyhow::Result;
 use inquire::{InquireError, Select, Text};
 use px_cli::AddProjectArgs;
 use px_configuration::AddObservationOutcome;
+use px_conventions::project::ProjectPath;
 use px_fits::{FitsFile, all_fits_files};
 
 use crate::{ExitStatus, printer::Printer, resolve::first_some};
@@ -16,13 +17,15 @@ pub(crate) async fn add_project_observation(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Find the project dir and config to work with
-    let (project_dir, mut config) = match super::find_and_load_project(args.project) {
-        Ok(tuple) => tuple,
+    let project = match ProjectPath::find(args.project) {
+        Ok(path) => path,
         Err(e) => {
             printer.error(format!("{e}"))?;
             return Ok(ExitStatus::Failure);
         }
     };
+
+    let mut config = project.load_config()?;
 
     // Canonicalize so stored paths are absolute and stable
     let obs_path = args.obs_path.canonicalize()?;
@@ -71,7 +74,7 @@ pub(crate) async fn add_project_observation(
         return Ok(ExitStatus::Success);
     }
 
-    config.save(&project_dir)?;
+    config.save(&project.dir())?;
 
     let profile_name = profile_root
         .file_name()
