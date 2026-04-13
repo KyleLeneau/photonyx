@@ -39,7 +39,7 @@ pub(crate) async fn stack_project_observations(
             .output_sink(siril_sys::OutputSink::Inherit)
             .use_extension(ext.clone());
 
-        stack_linear(builder, &stack, &project.dir(), printer).await?;
+        stack_linear(builder, &stack, project.dir(), printer).await?;
         // utils::wait_for_confirm(printer).await;
     }
 
