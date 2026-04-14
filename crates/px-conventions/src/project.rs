@@ -6,12 +6,30 @@ use px_fs::CWD;
 #[derive(Debug)]
 pub struct ProjectPath {
     /// The root directory for a project
-    directory: PathBuf,
+    pub root: PathBuf,
 }
 
 impl ProjectPath {
-    pub fn dir(&self) -> &Path {
-        &self.directory
+    /// Create a new project rooted at `parent / name`.
+    ///
+    /// Creates the root directory, all 5 sub-folders, and writes a fresh
+    /// `px_profile.yaml`. Returns `AlreadyExists` if the root already exists.
+    ///
+    pub fn new(root: PathBuf) -> Result<Self, ProjectConfigError> {
+        if root.exists() {
+            return Err(ProjectConfigError::AlreadyExists(root));
+        }
+
+        for dir in [&root] {
+            std::fs::create_dir_all(dir)?;
+        }
+
+        let name = root.file_name().unwrap().display().to_string();
+        let desc = format!("Photonyx project for: {}", &name);
+        let config = ProjectConfig::new(name, Some(desc));
+        config.save(&root)?;
+
+        Ok(Self { root })
     }
 
     /// Find the project directory and load the config file
@@ -24,15 +42,19 @@ impl ProjectPath {
                 .ok_or(ProjectConfigError::NotFound(CWD.to_path_buf()))?,
         };
 
-        Ok(Self {
-            directory: project_dir,
-        })
+        Ok(Self { root: project_dir })
     }
 
     /// Lazy load the project config in the path
     ///
     pub fn load_config(&self) -> Result<ProjectConfig, ProjectConfigError> {
-        ProjectConfig::load(&self.directory)
+        ProjectConfig::load(&self.root)
+    }
+
+    /// Save the project config to the root
+    ///
+    pub fn save_config(&self, config: &ProjectConfig) -> Result<(), ProjectConfigError> {
+        config.save(&self.root)
     }
 
     /// Walk up from `start` looking for `px_project.yaml`, returning the containing directory.

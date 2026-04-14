@@ -20,31 +20,6 @@ pub enum ProjectConfigError {
     Parse(#[from] serde_yaml::Error),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ObservationEntry {
-    pub path: PathBuf,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProjectLinearStack {
-    /// The grouping of hardware_profiles for this stack
-    pub profile: PathBuf,
-
-    /// The filter that represents this stack
-    pub filter: String,
-
-    /// A panel identifier if the project is a mosiac
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub panel: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub comments: Option<String>,
-
-    /// Observations registered with this project
-    #[serde(default)]
-    pub observations: Vec<ObservationEntry>,
-}
-
 /// Top-level configuration stored in `px_project.yaml` at the project root.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectConfig {
@@ -62,11 +37,37 @@ pub struct ProjectConfig {
     pub linear_stacks: Vec<ProjectLinearStack>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectLinearStack {
+    /// The grouping of hardware_profiles for this stack
+    pub profile: PathBuf,
+
+    /// The name that represents this linear stack. Will be used as the output name.
+    pub name: String,
+
+    /// A panel identifier if the project is a mosiac
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub panel: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comments: Option<String>,
+
+    /// Observations registered with this project
+    #[serde(default)]
+    pub observations: Vec<ObservationEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObservationEntry {
+    pub path: PathBuf,
+}
+
 /// Outcome of [`ProjectConfig::add_observation`].
 #[derive(Debug, PartialEq, Eq)]
 pub enum AddObservationOutcome {
     /// The observation was added to an existing or newly created linear stack.
     Added,
+
     /// The observation path was already registered in the matching stack; no change was made.
     AlreadyRegistered,
 }
@@ -120,7 +121,7 @@ impl ProjectConfig {
         let stack = self
             .linear_stacks
             .iter_mut()
-            .find(|s| s.profile == profile && s.filter == filter && s.panel == panel);
+            .find(|s| s.profile == profile && s.name == filter && s.panel == panel);
 
         match stack {
             Some(existing) => {
@@ -134,7 +135,7 @@ impl ProjectConfig {
             None => {
                 self.linear_stacks.push(ProjectLinearStack {
                     profile,
-                    filter: filter.clone(),
+                    name: filter.clone(),
                     panel,
                     comments: None,
                     observations: vec![ObservationEntry { path: obs_path }],

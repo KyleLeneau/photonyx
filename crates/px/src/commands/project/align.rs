@@ -16,7 +16,7 @@ pub(crate) async fn align_project(args: AlignProjectArgs, printer: Printer) -> R
 
     printer.info(format!(
         "project_dir: {:?}, config: {:?}",
-        project.dir().display(),
+        project.root.display(),
         project.load_config()?
     ))?;
 

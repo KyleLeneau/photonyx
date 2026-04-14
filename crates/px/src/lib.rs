@@ -27,6 +27,10 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
     // Configure the `Printer`, which controls user-facing output in the CLI.
     let printer = Printer::Default;
 
+    // TODO: Use global args to load the profile
+
+    // TODO: validate that we have a profile and skip commands that don't need it
+
     match cli.command {
         Commands::GenerateShellCompletion(args) => {
             let mut cmd = Cli::command();
@@ -62,16 +66,12 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
 
         // Profile
         Commands::Profile(ProfileNamespace {
-            command: ProfileCommand::Show(args),
+            command: ProfileCommand::Info(args),
         }) => commands::show_profile(args, printer).await,
 
         Commands::Profile(ProfileNamespace {
             command: ProfileCommand::Init(args),
         }) => commands::init_profile(args, printer).await,
-
-        Commands::Profile(ProfileNamespace {
-            command: ProfileCommand::List(args),
-        }) => commands::list_profiles(args, printer).await,
 
         Commands::Profile(ProfileNamespace {
             command: ProfileCommand::Scan(args),

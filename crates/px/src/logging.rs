@@ -3,7 +3,7 @@ use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitEx
 
 pub fn init_logging(cli: &Cli) {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        let level = match cli.verbose {
+        let level = match cli.top_level.global_args.verbose {
             0 => "error",
             1 => "info,siril_sys=debug",
             2 => "debug",
@@ -12,7 +12,7 @@ pub fn init_logging(cli: &Cli) {
         EnvFilter::new(level)
     });
 
-    let json_log = matches!(cli.log_format, LogFormat::Json);
+    let json_log = matches!(cli.top_level.global_args.log_format, LogFormat::Json);
 
     let json_layer = json_log.then(|| {
         tracing_subscriber::fmt::layer()

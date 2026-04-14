@@ -19,7 +19,7 @@ pub(crate) async fn create_project_samples(
 
     printer.info(format!(
         "project_dir: {:?}, config: {:?}",
-        project.dir().display(),
+        project.root.display(),
         project.load_config()?
     ))?;
 

@@ -29,7 +29,7 @@ pub(crate) async fn stack_project_observations(
     let config = project.load_config()?;
     printer.info(format!(
         "project_dir: {:?}, config: {:?}",
-        project.dir().display(),
+        project.root.display(),
         config
     ))?;
 
@@ -39,7 +39,7 @@ pub(crate) async fn stack_project_observations(
             .output_sink(siril_sys::OutputSink::Inherit)
             .use_extension(ext.clone());
 
-        stack_linear(builder, &stack, project.dir(), printer).await?;
+        stack_linear(builder, &stack, &project.root, printer).await?;
         // utils::wait_for_confirm(printer).await;
     }
 
@@ -125,12 +125,12 @@ async fn stack_linear<'a>(
     // TODO: Save this output file name to the project config?
 
     // Output file for the linear_stack
-    let filter_output_file = project_dir.join(format!("{}_linear_stack", stack.filter));
+    let filter_output_file = project_dir.join(format!("{}_linear_stack", stack.name));
     siril.save(filter_output_file).await?;
 
     // TODO: Split and save RGB from OSC image
 
-    printer.success(format!("{} linear stack complete", stack.filter))?;
+    printer.success(format!("{} linear stack complete", stack.name))?;
 
     Ok(())
 }

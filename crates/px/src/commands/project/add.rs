@@ -74,7 +74,7 @@ pub(crate) async fn add_project_observation(
         return Ok(ExitStatus::Success);
     }
 
-    config.save(project.dir())?;
+    config.save(&project.root)?;
 
     let profile_name = profile_root
         .file_name()

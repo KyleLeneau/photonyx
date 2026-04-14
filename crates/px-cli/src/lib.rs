@@ -55,9 +55,34 @@ const STYLES: Styles = Styles::styled()
     styles = STYLES,
 )]
 pub struct Cli {
+    #[command(subcommand)]
+    pub command: Commands,
+
+    #[command(flatten)]
+    pub top_level: TopLevelArgs,
+}
+
+#[derive(Parser)]
+#[command(disable_help_flag = true, disable_version_flag = true)]
+pub struct TopLevelArgs {
+    #[command(flatten)]
+    pub global_args: GlobalArgs,
+
     // /// Path to configuration file
     // #[arg(short, long, default_value = "config.yaml", env = "CONFIG_PATH")]
     // pub config: PathBuf,
+    /// Display the concise help for this command.
+    #[arg(global = true, short, long, action = clap::ArgAction::HelpShort, help_heading = "Global options")]
+    help: Option<bool>,
+
+    /// Display the uv version.
+    #[arg(short = 'V', long, action = clap::ArgAction::Version)]
+    version: Option<bool>,
+}
+
+#[derive(Parser, Debug, Clone)]
+#[command(next_help_heading = "Global options", next_display_order = 1000)]
+pub struct GlobalArgs {
     /// Log format
     #[arg(short, long, default_value = "pretty", env = "RUST_LOG_FORMAT")]
     pub log_format: LogFormat,
@@ -66,8 +91,15 @@ pub struct Cli {
     #[arg(short, long, action = clap::ArgAction::Count)]
     pub verbose: u8,
 
-    #[command(subcommand)]
-    pub command: Commands,
+    /// Discover a profile in the given directory.
+    ///
+    /// A `px_profile.yaml` file will be discovered by walking up the directory tree.
+    ///
+    /// Other command-line arguments (such as relative paths) will be resolved relative
+    /// to the current working directory.
+    ///
+    #[arg(global = true, long, env = EnvVars::PX_PROFILE, value_hint = ValueHint::DirPath)]
+    pub profile: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]
@@ -122,13 +154,10 @@ pub struct ProfileNamespace {
 #[derive(Subcommand)]
 pub enum ProfileCommand {
     /// show details on a profile (current or specified)
-    Show(ShowProfileArgs),
+    Info(ShowProfileArgs),
 
     /// make a new profile (dir, layout, config, etc)
     Init(InitProfileArgs),
-
-    /// list all profiles known to system
-    List(ListProfileArgs),
 
     /// scan for changes in current or specified profile
     Scan(ScanProfileArgs),
@@ -138,10 +167,11 @@ pub enum ProfileCommand {
 pub struct ShowProfileArgs {}
 
 #[derive(Args, Debug)]
-pub struct InitProfileArgs {}
-
-#[derive(Args, Debug)]
-pub struct ListProfileArgs {}
+pub struct InitProfileArgs {
+    /// The path to use for the profile (created if it does not exist)
+    #[arg(value_hint = ValueHint::DirPath)]
+    pub path: PathBuf,
+}
 
 #[derive(Args, Debug)]
 pub struct ScanProfileArgs {}

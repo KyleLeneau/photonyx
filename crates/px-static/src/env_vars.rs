@@ -31,4 +31,7 @@ impl EnvVars {
 
     /// Used to set the default output format of the cli (pretty or json)
     pub const PX_DEFAULT_OUTPUT_FORMAT: &'static str = "PX_DEFAULT_OUTPUT_FORMAT";
+
+    /// Equivalent to the `--profile` command-line argument.
+    pub const PX_PROFILE: &'static str = "PX_PROFILE";
 }
