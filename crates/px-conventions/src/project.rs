@@ -20,9 +20,7 @@ impl ProjectPath {
             return Err(ProjectConfigError::AlreadyExists(root));
         }
 
-        for dir in [&root] {
-            std::fs::create_dir_all(dir)?;
-        }
+        std::fs::create_dir_all(&root)?;
 
         let name = root.file_name().unwrap().display().to_string();
         let desc = format!("Photonyx project for: {}", &name);

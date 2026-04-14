@@ -9,11 +9,11 @@ pub(crate) async fn init_profile(args: InitProfileArgs, printer: Printer) -> Res
     match ProfilePath::new(profile_dir) {
         Ok(path) => {
             printer.success(format!("Initialized profile at `{}`", path.root.display()))?;
-            return Ok(ExitStatus::Success);
+            Ok(ExitStatus::Success)
         }
         Err(e) => {
             printer.error(e.to_string())?;
-            return Ok(ExitStatus::Failure);
+            Ok(ExitStatus::Failure)
         }
     }
 }
