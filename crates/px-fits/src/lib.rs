@@ -1,3 +1,5 @@
+pub mod display;
+
 // Soon to be wrapper around https://github.com/cds-astro/fitsrs
 // * Lazy data loading
 // * pure rust
