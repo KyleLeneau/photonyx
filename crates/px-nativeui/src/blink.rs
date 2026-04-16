@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 use egui_phosphor::regular as ph;
-use px_fits::display::{decode_preview, PreviewImage, MAX_DISPLAY_DIM};
+use px_fits::display::{decode_preview_alt, PreviewImage, MAX_DISPLAY_DIM};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -121,7 +121,7 @@ impl BlinkApp {
         let ctx = ctx.clone(); // egui::Context is cheap to clone (Arc inside)
 
         std::thread::spawn(move || {
-            let result = decode_preview(&path).map_err(|e| e.to_string());
+            let result = decode_preview_alt(&path).map_err(|e| e.to_string());
             *decoded.lock().unwrap() = Some(result);
             ctx.request_repaint(); // wake egui so it uploads the texture
         });

@@ -32,6 +32,12 @@ pub enum FitsError {
 
     #[error("Missing primary hdu")]
     MissingPrimaryHDU,
+
+    #[error("unknown fits error")]
+    UnKnown,
+
+    #[error("image processing error: {0}")]
+    Processing(String),
 }
 
 pub struct FitsFile {
