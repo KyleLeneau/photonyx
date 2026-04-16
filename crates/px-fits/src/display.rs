@@ -52,6 +52,26 @@ pub fn decode_preview(path: &Path) -> Result<PreviewImage, FitsError> {
         }
     };
 
+    // use astroimage::ImageAnalyzer;
+
+    // let result = ImageAnalyzer::new()
+    //     .with_max_stars(500)
+    //     .with_optics(403.0, 4.78)  // focal length mm, pixel size µm → arcsec output
+    //     .analyze_raw(&meta, &pixels)
+    //     .map_err(|e| FitsError::Processing(e.to_string()))?;
+
+    // println!("Stars: {}  FWHM: {:.2} px ({:.1}\")  Ecc: {:.3}  Seeing: {:.1}\"",
+    //     result.stars_detected, result.median_fwhm,
+    //     result.median_fwhm_arcsec.unwrap_or(0.0),
+    //     result.median_eccentricity,
+    //     result.median_fwhm_arcsec.unwrap_or(0.0));
+
+    // // Per-stage timing breakdown
+    // let t = &result.stage_timing;
+    // println!("Timing: bg={:.0}ms det={:.0}ms cal={:.0}ms meas={:.0}ms total={:.0}ms",
+    //     t.background_ms, t.detection_pass1_ms, t.calibration_ms,
+    //     t.measurement_ms, t.total_ms);
+
     let image = ImageConverter::new()
         .with_downscale(factor)
         .with_preview_mode()
