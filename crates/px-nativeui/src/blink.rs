@@ -16,6 +16,15 @@ use egui_phosphor::regular as ph;
 use px_fits::display::{MAX_DISPLAY_DIM, PreviewImage, decode_preview};
 
 // ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/// How many frames ahead to decode and upload while playing.
+const PRELOAD_AHEAD: usize = 4;
+/// How many frames behind to keep decoded (for backward scrubbing).
+const PRELOAD_BEHIND: usize = 2;
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -187,19 +196,18 @@ impl eframe::App for BlinkApp {
             return;
         }
 
-        // Kick off decode for current frame and neighbours.
-        let prev = if self.current == 0 {
-            n - 1
-        } else {
-            self.current - 1
-        };
-        let next = (self.current + 1) % n;
-        self.request_decode(self.current, ctx);
-        self.request_decode(prev, ctx);
-        self.request_decode(next, ctx);
-
-        // Upload texture if ready.
-        self.ensure_texture(self.current, ctx);
+        // Kick off decode and eagerly upload textures for the preload window.
+        // Ahead frames are prioritised so playback never waits on a decode.
+        for offset in 0..=PRELOAD_AHEAD {
+            let idx = (self.current + offset) % n;
+            self.request_decode(idx, ctx);
+            self.ensure_texture(idx, ctx);
+        }
+        for offset in 1..=PRELOAD_BEHIND {
+            let idx = (self.current + n - offset) % n;
+            self.request_decode(idx, ctx);
+            self.ensure_texture(idx, ctx);
+        }
 
         // --- Input handling ---
         let mut navigate_prev = false;
@@ -249,7 +257,6 @@ impl eframe::App for BlinkApp {
             if now.duration_since(self.last_advance) >= self.play_interval {
                 self.go_next();
                 self.last_advance = now;
-                self.ensure_texture(self.current, ctx);
             }
             ctx.request_repaint_after(self.play_interval / 4);
         }
@@ -259,6 +266,7 @@ impl eframe::App for BlinkApp {
         let rejected = self.frames[current].rejected;
         let filename = self.frames[current].filename.clone();
         let playing = self.playing;
+        let play_interval = self.play_interval;
 
         // --- Top bar ---
         egui::TopBottomPanel::top("top_bar")
@@ -294,6 +302,37 @@ impl eframe::App for BlinkApp {
                                     .color(egui::Color32::GRAY),
                             );
                         }
+
+                        ui.separator();
+
+                        const INTERVALS: &[(f64, &str)] = &[
+                            (0.25, "0.25 s"),
+                            (0.5, "0.5 s"),
+                            (1.0, "1.0 s"),
+                            (1.5, "1.5 s"),
+                            (2.0, "2.0 s"),
+                            (3.0, "3.0 s"),
+                        ];
+                        let current_label = INTERVALS
+                            .iter()
+                            .find(|(s, _)| Duration::from_secs_f64(*s) == play_interval)
+                            .map(|(_, l)| *l)
+                            .unwrap_or("Custom");
+                        egui::ComboBox::from_id_salt("interval_select")
+                            .selected_text(current_label)
+                            .width(70.0)
+                            .show_ui(ui, |ui| {
+                                for (secs, label) in INTERVALS {
+                                    let d = Duration::from_secs_f64(*secs);
+                                    if ui
+                                        .selectable_label(play_interval == d, *label)
+                                        .clicked()
+                                    {
+                                        self.play_interval = d;
+                                    }
+                                }
+                            });
+                        ui.label(egui::RichText::new("Interval:").color(egui::Color32::GRAY));
                     });
                 });
             });
