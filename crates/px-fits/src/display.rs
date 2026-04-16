@@ -29,8 +29,8 @@ pub fn decode_preview(path: &Path) -> Result<PreviewImage, FitsError> {
 
     // Read raw pixels and metadata in one pass so we can compute the
     // downscale factor needed to respect MAX_DISPLAY_DIM before processing.
-    let (meta, pixels) = ImageConverter::read_raw(path)
-        .map_err(|e| FitsError::Processing(e.to_string()))?;
+    let (meta, pixels) =
+        ImageConverter::read_raw(path).map_err(|e| FitsError::Processing(e.to_string()))?;
 
     let is_bayer = meta.bayer_pattern != BayerPattern::None;
     let max_dim = meta.width.max(meta.height);
@@ -78,5 +78,9 @@ pub fn decode_preview(path: &Path) -> Result<PreviewImage, FitsError> {
         .process_data(meta, pixels)
         .map_err(|e| FitsError::Processing(e.to_string()))?;
 
-    Ok(PreviewImage { width: image.width, height: image.height, pixels: image.data })
+    Ok(PreviewImage {
+        width: image.width,
+        height: image.height,
+        pixels: image.data,
+    })
 }

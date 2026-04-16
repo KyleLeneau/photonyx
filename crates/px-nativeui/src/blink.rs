@@ -7,14 +7,13 @@
 //!   Q              Quit and save
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use eframe::egui;
 use egui_phosphor::regular as ph;
-use px_fits::display::{decode_preview, PreviewImage, MAX_DISPLAY_DIM};
-use serde::{Deserialize, Serialize};
+use px_fits::display::{MAX_DISPLAY_DIM, PreviewImage, decode_preview};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,12 +38,26 @@ pub struct BlinkApp {
     textures: HashMap<usize, egui::TextureHandle>,
     /// Track which indices have had decode threads spawned.
     decode_requested: HashSet<usize>,
+    delegate: Box<dyn BlinkAppDelegate>,
 }
 
-#[derive(Serialize, Deserialize)]
-struct CulledState {
-    folder: String,
-    rejected: Vec<String>,
+// ---------------------------------------------------------------------------
+// Interaction
+// ---------------------------------------------------------------------------
+
+pub trait BlinkAppDelegate {
+    /// Called once when the app starts, to restore any prior session state.
+    /// Returns the set of filenames that were previously rejected.
+    ///
+    fn load_state(&self, folder: &Path) -> HashSet<String>;
+
+    /// Called when the user quits (Q key or window close).
+    ///
+    fn save_state(&mut self, folder: &Path, rejected: Vec<String>, total: usize);
+
+    /// Void callback when a frame is rejected
+    ///
+    fn frame_rejected_toggle(&mut self, path: String, rejected: bool);
 }
 
 // ---------------------------------------------------------------------------
@@ -52,14 +65,14 @@ struct CulledState {
 // ---------------------------------------------------------------------------
 
 impl BlinkApp {
-    pub fn new(paths: Vec<PathBuf>, folder: PathBuf, interval_secs: f64) -> Self {
+    pub fn new(
+        paths: Vec<PathBuf>,
+        folder: PathBuf,
+        interval_secs: f64,
+        delegate: Box<dyn BlinkAppDelegate>,
+    ) -> Self {
         // Load any existing rejection state from a prior session.
-        let sidecar = folder.join(".px_culled.json");
-        let prior_rejected: HashSet<String> = std::fs::read_to_string(&sidecar)
-            .ok()
-            .and_then(|s| serde_json::from_str::<CulledState>(&s).ok())
-            .map(|s| s.rejected.into_iter().collect())
-            .unwrap_or_default();
+        let prior_rejected = delegate.load_state(&folder);
 
         let frames = paths
             .into_iter()
@@ -87,6 +100,7 @@ impl BlinkApp {
             folder,
             textures: HashMap::new(),
             decode_requested: HashSet::new(),
+            delegate,
         }
     }
 }
@@ -106,7 +120,11 @@ impl BlinkApp {
 
     fn go_prev(&mut self) {
         let n = self.frame_count();
-        self.current = if self.current == 0 { n - 1 } else { self.current - 1 };
+        self.current = if self.current == 0 {
+            n - 1
+        } else {
+            self.current - 1
+        };
     }
 
     /// Spawn a background thread to decode `idx` if not already requested.
@@ -145,7 +163,7 @@ impl BlinkApp {
         }
     }
 
-    fn save_state(&self) {
+    fn save_state(&mut self) {
         let rejected: Vec<String> = self
             .frames
             .iter()
@@ -153,29 +171,8 @@ impl BlinkApp {
             .map(|f| f.filename.clone())
             .collect();
 
-        // Print summary to stdout so it can be piped / logged.
-        println!(
-            "\nBlink session complete — {}/{} frames rejected",
-            rejected.len(),
-            self.frames.len()
-        );
-        for name in &rejected {
-            println!("  rejected: {name}");
-        }
-
-        // Write sidecar for session restore.
-        let state = CulledState {
-            folder: self.folder.to_string_lossy().to_string(),
-            rejected,
-        };
-        let sidecar = self.folder.join(".px_culled.json");
-        if let Ok(json) = serde_json::to_string_pretty(&state) {
-            if let Err(e) = std::fs::write(&sidecar, json) {
-                eprintln!("Warning: could not write sidecar: {e}");
-            } else {
-                println!("Saved: {}", sidecar.display());
-            }
-        }
+        self.delegate
+            .save_state(&self.folder, rejected, self.frames.len());
     }
 }
 
@@ -191,7 +188,11 @@ impl eframe::App for BlinkApp {
         }
 
         // Kick off decode for current frame and neighbours.
-        let prev = if self.current == 0 { n - 1 } else { self.current - 1 };
+        let prev = if self.current == 0 {
+            n - 1
+        } else {
+            self.current - 1
+        };
         let next = (self.current + 1) % n;
         self.request_decode(self.current, ctx);
         self.request_decode(prev, ctx);
@@ -231,6 +232,10 @@ impl eframe::App for BlinkApp {
         }
         if toggle_reject {
             self.frames[self.current].rejected = !self.frames[self.current].rejected;
+            self.delegate.frame_rejected_toggle(
+                self.frames[self.current].filename.clone(),
+                self.frames[self.current].rejected,
+            );
         }
         if quit {
             self.save_state();
@@ -327,10 +332,8 @@ impl eframe::App for BlinkApp {
                     let display_size = img_size * scale;
 
                     let offset = (available - display_size) * 0.5;
-                    let img_rect = egui::Rect::from_min_size(
-                        ui.min_rect().min + offset,
-                        display_size,
-                    );
+                    let img_rect =
+                        egui::Rect::from_min_size(ui.min_rect().min + offset, display_size);
 
                     ui.painter().image(
                         texture.id(),
@@ -379,7 +382,12 @@ impl eframe::App for BlinkApp {
 
 /// Launch the blink UI, blocking until the window is closed.
 /// Must be called from the main thread (Cocoa / Wayland requirement).
-pub fn launch(paths: Vec<PathBuf>, folder: PathBuf, interval_secs: f64) -> anyhow::Result<()> {
+pub fn launch(
+    paths: Vec<PathBuf>,
+    folder: PathBuf,
+    interval_secs: f64,
+    delegate: Box<dyn BlinkAppDelegate>,
+) -> anyhow::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("px — Blink Preview")
@@ -396,7 +404,12 @@ pub fn launch(paths: Vec<PathBuf>, folder: PathBuf, interval_secs: f64) -> anyho
             egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
             cc.egui_ctx.set_fonts(fonts);
 
-            Ok(Box::new(BlinkApp::new(paths, folder, interval_secs)))
+            Ok(Box::new(BlinkApp::new(
+                paths,
+                folder,
+                interval_secs,
+                delegate,
+            )))
         }),
     )
     .map_err(|e| anyhow::anyhow!("UI error: {e}"))?;

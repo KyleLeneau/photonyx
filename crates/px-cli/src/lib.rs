@@ -336,7 +336,7 @@ pub enum ObservationCommand {
     Calibrate(CalibrateObservationArgs),
 
     /// Preview the observation data to cull frames
-    Preview(PreviewObservationArgs)
+    Preview(PreviewObservationArgs),
 }
 
 #[derive(Args)]

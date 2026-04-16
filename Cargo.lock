@@ -3792,8 +3792,6 @@ dependencies = [
  "egui-phosphor",
  "px-fits",
  "rayon",
- "serde",
- "serde_json",
 ]
 
 [[package]]
