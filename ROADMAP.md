@@ -37,6 +37,7 @@
 * [ ] need a `.px` folder in the user home initialized at some point to store default or common config (https://crates.io/crates/etcetera)
 * [ ] post-install or validation step to ensure Siril is installed and available with minimum version
 * [ ] Config file support and order loading so that a user can specify less on the command line for their profile
+* [ ] explore building a gui based app that allows a user to "blink" their frames easily or view fits headers
 * [ ]
 
 
