@@ -1,5 +1,3 @@
-use std::fmt::Write;
-// use std::path::Path;
 use anyhow::Result;
 
 use siril_sys::Builder;
@@ -11,12 +9,11 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 pub(crate) async fn siril_test(printer: Printer) -> Result<ExitStatus> {
-    tracing::info!("siril_test command called");
+    printer.info("starting siril-test command")?;
 
     // Startup and wait till process is ready for additional commands
     let mut siril = Builder::default()
         .output_sink(siril_sys::OutputSink::Inherit)
-        // .use_directory(Path::new("/Users/kyle/Development/BortleSpace/photonyx"))
         .build()
         .await?;
 
@@ -24,7 +21,7 @@ pub(crate) async fn siril_test(printer: Printer) -> Result<ExitStatus> {
     siril.execute(&c).await?;
 
     let dir = siril.current_directory().await?;
-    writeln!(printer.stdout(), "pwd: {:?}", dir)?;
+    printer.info(format!("pwd: {:?}", dir))?;
 
     Ok(ExitStatus::Success)
 }
