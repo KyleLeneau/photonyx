@@ -30,6 +30,9 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
     // TODO: Use global args to load the profile
 
     // TODO: validate that we have a profile and skip commands that don't need it
+    if cli.command.requires_profile() {
+        printer.warn("profile is required for this command")?;
+    }
 
     match cli.command {
         Commands::GenerateShellCompletion(args) => {

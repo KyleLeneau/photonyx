@@ -113,9 +113,11 @@ pub enum Commands {
     Self_(SelfNamespace),
 
     /// Test if siril is installed and working
+    #[command(hide = true)]
     SirilTest,
 
     /// Launch a terminal UI poc
+    #[command(hide = true)]
     Tui,
 
     /// Manage hardware profiles
@@ -137,6 +139,26 @@ pub enum Commands {
     /// Manage and create projects from observations
     #[command()]
     Project(ProjectNamespace),
+}
+
+impl Commands {
+    /// Everything requires by default and `!` to only specify the ones that don't
+    pub fn requires_profile(&self) -> bool {
+        !matches!(
+            self,
+            Commands::GenerateShellCompletion(_)
+                | Commands::Self_(_)
+                | Commands::SirilTest
+                | Commands::Tui
+                | Commands::Inspect(_)
+                | Commands::Profile(ProfileNamespace {
+                    command: ProfileCommand::Init(_),
+                })
+                | Commands::Master(_)
+                | Commands::Observation(_)
+                | Commands::Project(_)
+        )
+    }
 }
 
 #[derive(ValueEnum, Clone, Debug)]

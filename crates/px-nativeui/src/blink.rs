@@ -324,10 +324,7 @@ impl eframe::App for BlinkApp {
                             .show_ui(ui, |ui| {
                                 for (secs, label) in INTERVALS {
                                     let d = Duration::from_secs_f64(*secs);
-                                    if ui
-                                        .selectable_label(play_interval == d, *label)
-                                        .clicked()
-                                    {
+                                    if ui.selectable_label(play_interval == d, *label).clicked() {
                                         self.play_interval = d;
                                     }
                                 }
