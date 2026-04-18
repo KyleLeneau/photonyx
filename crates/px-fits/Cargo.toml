@@ -10,10 +10,12 @@ repository.workspace = true
 [dependencies]
 chrono = { workspace = true }
 fitsrs = { version = "0.4.1" }
+rayon = { workspace = true }
 regex = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
+rustafits = { git = "https://github.com/KyleLeneau/rustafits", branch = "jpg-feature"}
 
 [lints]
 workspace = true

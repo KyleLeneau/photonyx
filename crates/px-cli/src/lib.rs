@@ -334,6 +334,9 @@ pub enum ObservationCommand {
     /// calibration a single raw observation
     #[command(alias = "process")]
     Calibrate(CalibrateObservationArgs),
+
+    /// Preview the observation data to cull frames
+    Preview(PreviewObservationArgs),
 }
 
 #[derive(Args)]
@@ -373,6 +376,17 @@ pub struct CalibrateObservationArgs {
     /// Location of the master FLAT
     #[arg(long, value_hint = ValueHint::FilePath)]
     pub flat: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct PreviewObservationArgs {
+    /// Path to the folder of light frames to preview
+    #[arg(value_hint = ValueHint::DirPath)]
+    pub folder: PathBuf,
+
+    /// Autoplay interval in seconds between frames
+    #[arg(long, default_value = "0.5")]
+    pub interval: f64,
 }
 
 #[derive(Args, Debug)]
