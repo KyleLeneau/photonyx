@@ -11,7 +11,7 @@
 //! | Rendering model  | Immediate-mode: describe UI every frame | Declarative: produce a widget tree     |
 //! | State mutation   | `&mut self` in `update()`          | `update(msg) -> Task` (Elm pattern)     |
 //! | Background work  | `std::thread::spawn` + `Arc<Mutex>`| `Task::perform` (async future)          |
-//! | Input            | `ctx.input(|i| ...)` polled inline | `keyboard::on_key_press` subscription   |
+//! | Input            | `ctx.input(|i| ...)` polled inline | `keyboard::listen` subscription         |
 //! | Timer / autoplay | `request_repaint_after` + `Instant`| `iced::time::every` subscription        |
 //! | Quit             | `ViewportCommand::Close`           | `std::process::exit` after save         |
 //!
@@ -25,12 +25,11 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::Duration;
 
-use iced::widget::vertical_rule;
 use iced::{
     Color, ContentFit, Element, Length, Subscription, Task,
     alignment::{Horizontal, Vertical},
     keyboard::{self, key::Named},
-    widget::{column, container, horizontal_rule, horizontal_space, image, pick_list, row, stack, text},
+    widget::{column, container, image, pick_list, row, rule, space, stack, text},
 };
 
 use px_fits::display::{MAX_DISPLAY_DIM, decode_preview};
@@ -82,6 +81,10 @@ enum Message {
         result: Result<(u32, u32, Vec<u8>), String>,
     },
     IntervalSelected(&'static str),
+    ImageAllocated {
+        idx: usize,
+        result: Result<image::Allocation, image::Error>,
+    },
 }
 
 pub struct BlinkIcedApp {
@@ -90,8 +93,8 @@ pub struct BlinkIcedApp {
     playing: bool,
     play_interval: Duration,
     folder: PathBuf,
-    /// Decoded image handles ready for the GPU, keyed by frame index.
-    image_handles: HashMap<usize, image::Handle>,
+    /// Decoded image allocations and handles ready for the GPU, keyed by frame index.
+    image_allocations: HashMap<usize, image::Allocation>,
     /// Tracks which frames have had a decode task kicked off.
     decode_requested: HashSet<usize>,
     delegate: Box<dyn BlinkAppDelegate>,
@@ -118,7 +121,11 @@ impl BlinkIcedApp {
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_default();
                 let rejected = prior_rejected.contains(&filename);
-                FrameEntry { path, filename, rejected }
+                FrameEntry {
+                    path,
+                    filename,
+                    rejected,
+                }
             })
             .collect();
 
@@ -128,7 +135,7 @@ impl BlinkIcedApp {
             playing: false,
             play_interval: Duration::from_secs_f64(interval_secs),
             folder,
-            image_handles: HashMap::new(),
+            image_allocations: HashMap::new(),
             decode_requested: HashSet::new(),
             delegate,
         }
@@ -150,7 +157,11 @@ impl BlinkIcedApp {
 
     fn go_prev(&mut self) {
         let n = self.frame_count();
-        self.current = if self.current == 0 { n - 1 } else { self.current - 1 };
+        self.current = if self.current == 0 {
+            n - 1
+        } else {
+            self.current - 1
+        };
     }
 
     /// Build `Task`s to decode frames in the preload window around `current`.
@@ -174,7 +185,7 @@ impl BlinkIcedApp {
         let to_decode: Vec<usize> = ahead
             .chain(behind)
             .filter(|&idx| {
-                !self.decode_requested.contains(&idx) && !self.image_handles.contains_key(&idx)
+                !self.decode_requested.contains(&idx) && !self.image_allocations.contains_key(&idx)
             })
             .collect();
 
@@ -203,7 +214,8 @@ impl BlinkIcedApp {
                                 .map_err(|e| e.to_string());
                             let _ = tx.send(result);
                         });
-                        rx.await.unwrap_or_else(|_| Err("decode thread panicked".into()))
+                        rx.await
+                            .unwrap_or_else(|_| Err("decode thread panicked".into()))
                     },
                     move |result| Message::FrameDecoded { idx, result },
                 )
@@ -220,7 +232,8 @@ impl BlinkIcedApp {
             .filter(|f| f.rejected)
             .map(|f| f.filename.clone())
             .collect();
-        self.delegate.save_state(&self.folder, rejected, self.frames.len());
+        self.delegate
+            .save_state(&self.folder, rejected, self.frames.len());
     }
 }
 
@@ -252,7 +265,8 @@ impl BlinkIcedApp {
                 if !self.frames.is_empty() {
                     let f = &mut self.frames[self.current];
                     f.rejected = !f.rejected;
-                    self.delegate.frame_rejected_toggle(f.filename.clone(), f.rejected);
+                    self.delegate
+                        .frame_rejected_toggle(f.filename.clone(), f.rejected);
                 }
                 Task::none()
             }
@@ -266,8 +280,15 @@ impl BlinkIcedApp {
             Message::FrameDecoded { idx, result } => {
                 if let Ok((w, h, rgba)) = result {
                     // image::Handle::from_rgba uploads raw RGBA pixels.
-                    // In egui the equivalent was ctx.load_texture() inside ensure_texture().
-                    self.image_handles.insert(idx, image::Handle::from_rgba(w, h, rgba));
+                    // Manually allocate the image to prevent the async image loading and related image shrink / flicker to the UI
+                    return image::allocate(image::Handle::from_rgba(w, h, rgba))
+                        .map(move |f| Message::ImageAllocated { idx, result: f });
+                }
+                Task::none()
+            }
+            Message::ImageAllocated { idx, result } => {
+                if let Ok(allocation) = result {
+                    self.image_allocations.insert(idx, allocation);
                 }
                 Task::none()
             }
@@ -279,7 +300,7 @@ impl BlinkIcedApp {
             }
             Message::Quit | Message::CloseRequested => {
                 self.save_state();
-                // iced 0.13 does not expose a single-call graceful exit for
+                // iced 0.14 does not expose a single-call graceful exit for
                 // single-window apps without a window Id; process::exit is the
                 // pragmatic equivalent of egui's ViewportCommand::Close here.
                 std::process::exit(0);
@@ -294,7 +315,11 @@ impl BlinkIcedApp {
         let n = self.frame_count();
         let current = self.current;
         let rejected = n > 0 && self.frames[current].rejected;
-        let filename = if n > 0 { self.frames[current].filename.as_str() } else { "" };
+        let filename = if n > 0 {
+            self.frames[current].filename.as_str()
+        } else {
+            ""
+        };
         let playing = self.playing;
         let play_interval = self.play_interval;
 
@@ -314,7 +339,7 @@ impl BlinkIcedApp {
                 .size(14)
                 .into()
         } else {
-            horizontal_space().width(0).into()
+            space().into()
         };
 
         let play_status = if playing {
@@ -325,15 +350,23 @@ impl BlinkIcedApp {
 
         let top_bar = container(
             row![
-                text(format!("{} / {}", current + 1, n)).size(14).width(80).align_x(Horizontal::Center),
-                vertical_rule(1),
+                text(format!("{} / {}", current + 1, n))
+                    .size(14)
+                    .width(80)
+                    .align_x(Horizontal::Center),
+                rule::vertical(1),
                 text(filename),
                 rejected_badge,
-                horizontal_space(),
+                space::horizontal(),
                 play_status,
-                vertical_rule(1),
+                rule::vertical(1),
                 text("Interval:").color(Color::from_rgb(0.5, 0.5, 0.5)),
-                pick_list(interval_labels, selected_interval, Message::IntervalSelected).width(80),
+                pick_list(
+                    interval_labels,
+                    selected_interval,
+                    Message::IntervalSelected
+                )
+                .width(80),
             ]
             .align_y(Vertical::Center)
             .padding([6, 10])
@@ -344,38 +377,43 @@ impl BlinkIcedApp {
         // --- Central image area ---
         // In egui the painter drew directly onto the CentralPanel canvas.
         // Here we build a widget tree; iced handles layout and rendering.
-        let image_area: Element<Message> = if let Some(handle) = self.image_handles.get(&current) {
-            let img: Element<Message> = image(handle.clone())
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .content_fit(ContentFit::Contain)
-                .into();
+        let image_area: Element<Message> =
+            if let Some(allocation) = self.image_allocations.get(&current) {
+                let img: Element<Message> = image(allocation.handle())
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .content_fit(ContentFit::Contain)
+                    .into();
 
-            if rejected {
-                // iced::widget::stack layers widgets like a CSS z-index stack.
-                // In egui the "REJECTED" text was painter().text() drawn after the image.
-                let overlay = container(
-                    text("⊗  REJECTED")
-                        .size(52)
-                        .color(Color::from_rgba(0.86, 0.16, 0.16, 0.86)),
-                )
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .align_x(Horizontal::Center)
-                .align_y(Vertical::Center);
+                if rejected {
+                    // iced::widget::stack layers widgets like a CSS z-index stack.
+                    // In egui the "REJECTED" text was painter().text() drawn after the image.
+                    let overlay = container(
+                        text("⊗  REJECTED")
+                            .size(52)
+                            .color(Color::from_rgba(0.86, 0.16, 0.16, 0.86)),
+                    )
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .align_x(Horizontal::Center)
+                    .align_y(Vertical::Center);
 
-                stack![img, overlay].into()
+                    stack![img, overlay].into()
+                } else {
+                    img
+                }
             } else {
-                img
-            }
-        } else {
-            container(text("Loading…").size(18).color(Color::from_rgb(0.5, 0.5, 0.5)))
+                container(
+                    text("Loading…")
+                        .size(18)
+                        .color(Color::from_rgb(0.5, 0.5, 0.5)),
+                )
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .align_x(Horizontal::Center)
                 .align_y(Vertical::Center)
                 .into()
-        };
+            };
 
         // Wrap in a black container; apply a red border when rejected.
         let image_container = container(image_area)
@@ -398,28 +436,40 @@ impl BlinkIcedApp {
         // --- Bottom bar (keyboard reference) ---
         let bottom_bar = container(
             row![
-                text("← →").font(iced::Font { weight: iced::font::Weight::Bold, ..iced::Font::DEFAULT }),
+                text("← →").font(iced::Font {
+                    weight: iced::font::Weight::Bold,
+                    ..iced::Font::DEFAULT
+                }),
                 text("Navigate"),
-                vertical_rule(1),
-                text("Space").font(iced::Font { weight: iced::font::Weight::Bold, ..iced::Font::DEFAULT }),
+                rule::vertical(1),
+                text("Space").font(iced::Font {
+                    weight: iced::font::Weight::Bold,
+                    ..iced::Font::DEFAULT
+                }),
                 text("Play / Pause"),
-                vertical_rule(1),
-                text("X").font(iced::Font { weight: iced::font::Weight::Bold, ..iced::Font::DEFAULT }),
+                rule::vertical(1),
+                text("X").font(iced::Font {
+                    weight: iced::font::Weight::Bold,
+                    ..iced::Font::DEFAULT
+                }),
                 text("Reject / Unreject"),
-                vertical_rule(1),
-                text("Q").font(iced::Font { weight: iced::font::Weight::Bold, ..iced::Font::DEFAULT }),
+                rule::vertical(1),
+                text("Q").font(iced::Font {
+                    weight: iced::font::Weight::Bold,
+                    ..iced::Font::DEFAULT
+                }),
                 text("Quit & Save"),
             ]
             .padding([4, 10])
             .spacing(10)
-            .height(30)
+            .height(30),
         );
 
         column![
             top_bar,
-            horizontal_rule(1),
+            rule::horizontal(1),
             image_container,
-            horizontal_rule(1),
+            rule::horizontal(1),
             bottom_bar,
         ]
         .into()
@@ -428,19 +478,22 @@ impl BlinkIcedApp {
     /// Subscriptions replace egui's polling — iced calls this after every
     /// update and activates/deactivates the declared subscriptions as needed.
     ///
-    /// `keyboard::on_key_press` replaces `ctx.input(|i| i.key_pressed(...))`.
+    /// `keyboard::listen` replaces `ctx.input(|i| i.key_pressed(...))`.
     /// `iced::time::every` replaces `ctx.request_repaint_after(interval)`.
     fn subscription(&self) -> Subscription<Message> {
-        let keyboard_sub = keyboard::on_key_press(|key, _mods| match key {
-            keyboard::Key::Named(Named::ArrowLeft) => Some(Message::Prev),
-            keyboard::Key::Named(Named::ArrowRight) => Some(Message::Next),
-            keyboard::Key::Named(Named::Space) => Some(Message::TogglePlay),
-            keyboard::Key::Character(ref c) if c.as_str().eq_ignore_ascii_case("x") => {
-                Some(Message::ToggleReject)
-            }
-            keyboard::Key::Character(ref c) if c.as_str().eq_ignore_ascii_case("q") => {
-                Some(Message::Quit)
-            }
+        let keyboard_sub = keyboard::listen().filter_map(|event| match event {
+            keyboard::Event::KeyPressed { key, .. } => match key {
+                keyboard::Key::Named(Named::ArrowLeft) => Some(Message::Prev),
+                keyboard::Key::Named(Named::ArrowRight) => Some(Message::Next),
+                keyboard::Key::Named(Named::Space) => Some(Message::TogglePlay),
+                keyboard::Key::Character(ref c) if c.as_str().eq_ignore_ascii_case("x") => {
+                    Some(Message::ToggleReject)
+                }
+                keyboard::Key::Character(ref c) if c.as_str().eq_ignore_ascii_case("q") => {
+                    Some(Message::Quit)
+                }
+                _ => None,
+            },
             _ => None,
         });
 
@@ -504,15 +557,36 @@ pub fn launch(
         ..iced::window::Settings::default()
     };
 
-    iced::application("px — Blink Preview", BlinkIcedApp::update, BlinkIcedApp::view)
-        .subscription(BlinkIcedApp::subscription)
-        .window(window_settings)
-        .run_with(move || {
+    // iced 0.14 requires BootFn: Fn (not FnOnce). Wrap init params in an
+    // Arc<Mutex<Option<_>>> so the closure captures by reference rather than
+    // moving out of its environment on every call.
+    #[allow(clippy::arc_with_non_send_sync)]
+    let init_params = std::sync::Arc::new(std::sync::Mutex::new(Some((
+        paths,
+        folder,
+        interval_secs,
+        delegate,
+    ))));
+
+    iced::application(
+        move || {
+            let (paths, folder, interval_secs, delegate) = init_params
+                .lock()
+                .unwrap()
+                .take()
+                .expect("boot called twice");
             let mut app = BlinkIcedApp::new(paths, folder, interval_secs, delegate);
             // Kick off initial preload — equivalent to the first pass through
             // egui's update() loop where request_decode() is called.
             let init_task = app.preload_tasks();
             (app, init_task)
-        })
-        .map_err(|e| anyhow::anyhow!("UI error: {e}"))
+        },
+        BlinkIcedApp::update,
+        BlinkIcedApp::view,
+    )
+    .subscription(BlinkIcedApp::subscription)
+    .title("px — Blink Preview")
+    .window(window_settings)
+    .run()
+    .map_err(|e| anyhow::anyhow!("UI error: {e}"))
 }

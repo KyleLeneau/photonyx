@@ -13,7 +13,7 @@ px-fits = { workspace = true }
 anyhow = { workspace = true }
 eframe = "0.30"
 egui-phosphor = "0.8"
-iced = { version = "0.13", features = ["image", "tokio"] }
+iced = { version = "0.14", features = ["image", "tokio"] }
 rayon = { workspace = true }
 
 [lints]

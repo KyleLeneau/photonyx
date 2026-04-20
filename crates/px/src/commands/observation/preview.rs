@@ -3,7 +3,7 @@ use std::{collections::HashSet, path::Path};
 use anyhow::Result;
 use px_cli::PreviewObservationArgs;
 use px_fits::all_fits_files;
-use px_nativeui::{blink::{BlinkAppDelegate}, blink_iced};
+use px_nativeui::{blink::BlinkAppDelegate, blink_iced};
 
 use crate::{ExitStatus, printer::Printer};
 
