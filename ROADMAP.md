@@ -32,12 +32,12 @@
 * [x] fits crate to wrap some other fits library
 * [x] Add a "conventions" crate or similar for file naming conventions or directory layouts?
 * [x] need the conversion file helper to move files someplace else on the system
+* [x] explore building a gui based app that allows a user to "blink" their frames easily or view fits headers
 * [ ] Siril workflows idea (jobs & workflows) like CI but for the processing engine
 * [ ] need some type of processing_engine with the basic workflows
 * [ ] need a `.px` folder in the user home initialized at some point to store default or common config (https://crates.io/crates/etcetera)
 * [ ] post-install or validation step to ensure Siril is installed and available with minimum version
 * [ ] Config file support and order loading so that a user can specify less on the command line for their profile
-* [ ] explore building a gui based app that allows a user to "blink" their frames easily or view fits headers
 * [ ]
 
 
