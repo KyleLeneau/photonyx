@@ -3,7 +3,7 @@ use std::{collections::HashSet, path::Path};
 use anyhow::Result;
 use px_cli::PreviewObservationArgs;
 use px_fits::all_fits_files;
-use px_nativeui::blink::{self, BlinkAppDelegate};
+use px_nativeui::{blink::{BlinkAppDelegate}, blink_iced};
 
 use crate::{ExitStatus, printer::Printer};
 
@@ -75,7 +75,8 @@ pub(crate) async fn preview_observation(
     // eframe must run on the main thread (Cocoa / Wayland requirement).
     // block_in_place lets tokio yield the current thread without blocking the runtime.
     tokio::task::block_in_place(|| {
-        blink::launch(paths, folder, args.interval, Box::new(delegate))
+        // blink::launch(paths, folder, args.interval, Box::new(delegate))
+        blink_iced::launch(paths, folder, args.interval, Box::new(delegate), None)
     })?;
 
     Ok(ExitStatus::Success)
