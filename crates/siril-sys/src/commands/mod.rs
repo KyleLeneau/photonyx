@@ -142,6 +142,7 @@ pub use update_key::UpdateKey;
 use std::fmt::Display;
 
 pub enum Argument {
+    None,
     Positional(Option<String>),
     Flag(String, Option<bool>),
     Option(String, Option<String>),
@@ -170,6 +171,7 @@ impl Argument {
 
     fn is_valid(&self) -> bool {
         match self {
+            Argument::None => false,
             Argument::Positional(value) => value.is_some(),
             Argument::Flag(_, value) => value.is_some_and(|x| x),
             Argument::Option(_, value) => value.is_some(),
@@ -185,6 +187,7 @@ impl Display for Argument {
         }
 
         match self {
+            Argument::None => {}
             Argument::Positional(Some(value)) => {
                 if value.contains(" ") {
                     write!(f, "'{}'", value)?;
@@ -233,6 +236,18 @@ pub trait Command {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --- Argument::None ---
+
+    #[test]
+    fn none_renders_empty() {
+        assert_eq!(Argument::None.to_string(), "");
+    }
+
+    #[test]
+    fn none_is_not_valid() {
+        assert!(!Argument::None.is_valid());
+    }
 
     // --- Argument::Positional ---
 
@@ -330,6 +345,25 @@ mod tests {
     fn to_args_string_filters_invalid_args() {
         // -q is false so should be excluded
         assert_eq!(TestCmd.to_args_string(), "test -v file.fit");
+    }
+
+    struct NoneArgCmd;
+    impl Command for NoneArgCmd {
+        fn name() -> &'static str {
+            "cmd"
+        }
+        fn args(&self) -> Vec<Argument> {
+            vec![
+                Argument::None,
+                Argument::positional("file.fit"),
+                Argument::None,
+            ]
+        }
+    }
+
+    #[test]
+    fn to_args_string_filters_none_args() {
+        assert_eq!(NoneArgCmd.to_args_string(), "cmd file.fit");
     }
 
     struct NoArgsCmd;

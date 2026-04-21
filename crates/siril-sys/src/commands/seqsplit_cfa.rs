@@ -14,7 +14,12 @@ use crate::commands::{Argument, Command};
 /// Links: :ref:`split_cfa <split_cfa>`
 ///
 #[derive(Builder)]
-pub struct SeqsplitCfa {}
+pub struct SeqsplitCfa {
+    #[builder(start_fn, into)]
+    sequence: String,
+    #[builder(into)]
+    prefix: Option<String>,
+}
 
 impl Command for SeqsplitCfa {
     fn name() -> &'static str {
@@ -22,9 +27,26 @@ impl Command for SeqsplitCfa {
     }
 
     fn args(&self) -> Vec<Argument> {
-        vec![]
+        vec![
+            Argument::positional(&self.sequence),
+            Argument::option("prefix", self.prefix.as_deref()),
+        ]
     }
 }
 
-// TODO: Need command implementation
-// TODO: Implement Tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sequence_only() {
+        let cmd = SeqsplitCfa::builder("lights").build();
+        assert_eq!(cmd.to_args_string(), "seqsplit_cfa lights");
+    }
+
+    #[test]
+    fn custom_prefix() {
+        let cmd = SeqsplitCfa::builder("lights").prefix("CFA2_").build();
+        assert_eq!(cmd.to_args_string(), "seqsplit_cfa lights -prefix=CFA2_");
+    }
+}

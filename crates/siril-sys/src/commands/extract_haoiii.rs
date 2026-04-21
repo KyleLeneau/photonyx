@@ -1,6 +1,9 @@
 use bon::Builder;
 
-use crate::commands::{Argument, Command};
+use crate::{
+    ExtractResample,
+    commands::{Argument, Command},
+};
 
 /// ```text
 /// extract_HaOIII [-resample=]
@@ -11,7 +14,9 @@ use crate::commands::{Argument, Command};
 /// The optional argument **-resample={ha|oiii}** sets whether to upsample the Ha image or downsample the OIII image to have images the same size. If this argument is not provided, no resampling will be carried out and the OIII image will have twice the height and width of the Ha image
 ///
 #[derive(Builder)]
-pub struct ExtractHaOIII {}
+pub struct ExtractHaOIII {
+    resample: Option<ExtractResample>,
+}
 
 impl Command for ExtractHaOIII {
     fn name() -> &'static str {
@@ -19,9 +24,33 @@ impl Command for ExtractHaOIII {
     }
 
     fn args(&self) -> Vec<Argument> {
-        vec![]
+        vec![Argument::option("resample", self.resample.as_ref())]
     }
 }
 
-// TODO: Need command implementation
-// TODO: Implement Tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_resample() {
+        let cmd = ExtractHaOIII::builder().build();
+        assert_eq!(cmd.to_args_string(), "extract_HaOIII");
+    }
+
+    #[test]
+    fn resample_ha() {
+        let cmd = ExtractHaOIII::builder()
+            .resample(ExtractResample::HA)
+            .build();
+        assert_eq!(cmd.to_args_string(), "extract_HaOIII -resample=ha");
+    }
+
+    #[test]
+    fn resample_oiii() {
+        let cmd = ExtractHaOIII::builder()
+            .resample(ExtractResample::OIII)
+            .build();
+        assert_eq!(cmd.to_args_string(), "extract_HaOIII -resample=oiii");
+    }
+}

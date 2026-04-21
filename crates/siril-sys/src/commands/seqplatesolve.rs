@@ -1,7 +1,7 @@
 use bon::Builder;
 
 use crate::{
-    LimitMag, StarCatalog,
+    IntoArgument, LimitMag, StarCatalog,
     commands::{Argument, Command},
 };
 
@@ -98,23 +98,8 @@ impl Command for Seqplatesolve {
             Argument::option("order", self.order),
             Argument::option("radius", self.radius),
             Argument::option("disto", self.disto.as_deref()),
+            self.limit_mag.to_argument(),
         ];
-
-        match &self.limit_mag {
-            LimitMag::Default => {}
-            LimitMag::Offset(v) if *v != 0.0 => {
-                let s = if *v > 0.0 {
-                    format!("+{}", v)
-                } else {
-                    v.to_string()
-                };
-                args.push(Argument::option("limitmag", Some(s)));
-            }
-            LimitMag::Offset(_) => {}
-            LimitMag::Absolute(v) => {
-                args.push(Argument::option("limitmag", Some(v.to_string())));
-            }
-        }
 
         if !self.local_asnet {
             args.push(Argument::option(

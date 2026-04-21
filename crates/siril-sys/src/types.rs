@@ -4,6 +4,18 @@ use strum_macros::Display;
 use strum_macros::EnumString;
 use strum_macros::FromRepr;
 
+pub trait IntoArgument {
+    fn to_argument(&self) -> crate::commands::Argument;
+}
+
+impl<T: IntoArgument> IntoArgument for Option<T> {
+    fn to_argument(&self) -> crate::commands::Argument {
+        self.as_ref()
+            .map(|f| f.to_argument())
+            .unwrap_or(crate::commands::Argument::None)
+    }
+}
+
 #[derive(Debug, PartialEq, EnumString, Display, Clone)]
 pub enum FitsExt {
     #[strum(serialize = "fit")]
@@ -278,6 +290,25 @@ pub enum LimitMag {
     Absolute(f64),
 }
 
+impl IntoArgument for LimitMag {
+    fn to_argument(&self) -> crate::commands::Argument {
+        use crate::commands::Argument;
+        match &self {
+            LimitMag::Default => Argument::None,
+            LimitMag::Offset(v) if *v != 0.0 => {
+                let s = if *v > 0.0 {
+                    format!("+{}", v)
+                } else {
+                    v.to_string()
+                };
+                Argument::option("limitmag", Some(s))
+            }
+            LimitMag::Offset(_) => Argument::None,
+            LimitMag::Absolute(v) => Argument::option("limitmag", Some(v.to_string())),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, FromRepr, Clone, Display, Copy)]
 #[repr(u8)]
 pub enum RmgreenProtection {
@@ -358,4 +389,61 @@ impl BestRejection {
             },
         }
     }
+}
+
+/// Resample during extraction
+#[derive(Debug, PartialEq, EnumString, Display, Clone)]
+#[strum(serialize_all = "lowercase")]
+pub enum ExtractResample {
+    HA,
+    OIII,
+}
+
+/// Clipping mode for stretches
+#[derive(Debug, PartialEq, EnumString, Display, Clone)]
+#[strum(serialize_all = "lowercase")]
+pub enum ClipMode {
+    Clip,
+    ReScale,
+    RGBBlend,
+    GlobalRescale,
+}
+
+/// Clipping channels
+#[derive(Debug, PartialEq, EnumString, Display, Clone)]
+#[strum(serialize_all = "UPPERCASE")]
+pub enum Channels {
+    R,
+    G,
+    B,
+    RG,
+    RB,
+    GB,
+}
+
+/// Clipping weight to apply
+#[derive(Debug, PartialEq, EnumString, Display, Clone)]
+#[strum(serialize_all = "lowercase")]
+pub enum ClipWeight {
+    Human,
+    Even,
+    Independent,
+    #[strum(serialize = "sat")]
+    Saturation,
+}
+
+impl IntoArgument for ClipWeight {
+    fn to_argument(&self) -> crate::commands::Argument {
+        crate::commands::Argument::flag(self.to_string())
+    }
+}
+
+/// Common bayer patterns
+#[derive(Debug, PartialEq, EnumString, Display, Clone)]
+#[strum(serialize_all = "UPPERCASE")]
+pub enum BayerPattern {
+    RGGB,
+    BGGR,
+    GRBG,
+    GBRG,
 }
