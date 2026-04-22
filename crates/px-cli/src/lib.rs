@@ -154,7 +154,7 @@ impl Commands {
                 | Commands::Profile(ProfileNamespace {
                     command: ProfileCommand::Init(_),
                 })
-                | Commands::Master(_)
+                // | Commands::Master(_)
                 | Commands::Observation(_)
                 | Commands::Project(_)
         )
@@ -301,7 +301,7 @@ pub struct CreateBiasMasterArgs {
 
     /// Output location for the new master bias
     #[arg(value_hint = ValueHint::DirPath)]
-    pub out_folder: PathBuf,
+    pub out_folder: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -316,7 +316,7 @@ pub struct CreateDarkMasterArgs {
 
     /// Output location for the new master dark
     #[arg(value_hint = ValueHint::DirPath)]
-    pub out_folder: PathBuf,
+    pub out_folder: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -331,7 +331,7 @@ pub struct CreateFlatMasterArgs {
 
     /// Output location for the new master flat
     #[arg(value_hint = ValueHint::DirPath)]
-    pub out_folder: PathBuf,
+    pub out_folder: Option<PathBuf>,
 
     /// Location of the master BIAS
     #[arg(short, long, value_hint = ValueHint::FilePath)]

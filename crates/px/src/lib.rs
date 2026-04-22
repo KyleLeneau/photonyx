@@ -7,6 +7,7 @@ mod utils;
 use anyhow::Result;
 use clap::CommandFactory;
 use logging::init_logging;
+use px_conventions::profile::ProfilePath;
 use std::io::stdout;
 
 #[cfg(feature = "self-update")]
@@ -28,10 +29,19 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
     let printer = Printer::Default;
 
     // TODO: Use global args to load the profile
+    let profile_path = ProfilePath::find(cli.top_level.global_args.profile);
 
     // TODO: validate that we have a profile and skip commands that don't need it
     if cli.command.requires_profile() {
-        printer.warn("profile is required for this command")?;
+        match profile_path {
+            Ok(ref p) => {
+                printer.info(format!("using profile at: {:?}", p.root))?;
+            },
+            Err(e) => {
+                printer.error(format!("{e} - profile is required for this command"))?;
+                return Ok(ExitStatus::Error);
+            }
+        }
     }
 
     match cli.command {
@@ -83,23 +93,23 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         // Masters
         Commands::Master(MasterNamespace {
             command: MasterCommand::Best(args),
-        }) => commands::find_best_master(args, printer).await,
+        }) => commands::find_best_master(args, printer, profile_path.unwrap()).await,
 
         Commands::Master(MasterNamespace {
             command: MasterCommand::List(args),
-        }) => commands::list_masters(args, printer).await,
+        }) => commands::list_masters(args, printer, profile_path.unwrap()).await,
 
         Commands::Master(MasterNamespace {
             command: MasterCommand::Bias(args),
-        }) => commands::create_master_bias(args, printer).await,
+        }) => commands::create_master_bias(args, printer, profile_path.unwrap()).await,
 
         Commands::Master(MasterNamespace {
             command: MasterCommand::Dark(args),
-        }) => commands::create_master_dark(args, printer).await,
+        }) => commands::create_master_dark(args, printer, profile_path.unwrap()).await,
 
         Commands::Master(MasterNamespace {
             command: MasterCommand::Flat(args),
-        }) => commands::create_master_flat(args, printer).await,
+        }) => commands::create_master_flat(args, printer, profile_path.unwrap()).await,
 
         // Observations
         Commands::Observation(ObservationNamespace {

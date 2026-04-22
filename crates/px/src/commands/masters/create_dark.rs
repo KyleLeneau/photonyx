@@ -1,6 +1,7 @@
 use crate::{ExitStatus, printer::Printer, utils::to_fits_ext};
 use anyhow::Result;
 use px_cli::CreateDarkMasterArgs;
+use px_conventions::profile::ProfilePath;
 use px_fits::{CalibrationMetadata, all_fits_files};
 use siril_sys::{
     Builder,
@@ -12,6 +13,7 @@ use std::path::PathBuf;
 pub(crate) async fn create_master_dark(
     args: CreateDarkMasterArgs,
     printer: Printer,
+    profile_path: ProfilePath,
 ) -> Result<ExitStatus> {
     // Guard to make sure the input folder exists first
     if !args.raw_folder.exists() {
@@ -26,15 +28,19 @@ pub(crate) async fn create_master_dark(
         return Ok(ExitStatus::Error);
     }
 
-    // Guard to make sure the output folder exists
-    if !args.out_folder.exists() {
-        printer.error("Output bias folder does not exist")?;
-        return Ok(ExitStatus::Error);
-    }
+    // Get the output folder from args OR profile convention
+    let out_folder = match args.out_folder {
+        Some(ref path) if path.exists() => path.clone(),
+        Some(_) => {
+            printer.error("Output dark folder does not exist")?;
+            return Ok(ExitStatus::Error);
+        }
+        None => profile_path.dark.clone(),
+    };
 
     // Setup the output file
     let name = CalibrationMetadata::from(raw_files.first().unwrap())?.master_dark_name();
-    let output_file = args.out_folder.join(name).display().to_string();
+    let output_file = out_folder.join(name).display().to_string();
 
     // Setup siril
     let ext = to_fits_ext(args.ext);
