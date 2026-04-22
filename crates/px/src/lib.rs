@@ -36,7 +36,7 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         match profile_path {
             Ok(ref p) => {
                 printer.info(format!("using profile at: {:?}", p.root))?;
-            },
+            }
             Err(e) => {
                 printer.error(format!("{e} - profile is required for this command"))?;
                 return Ok(ExitStatus::Error);

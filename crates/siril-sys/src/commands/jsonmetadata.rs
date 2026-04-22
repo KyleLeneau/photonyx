@@ -49,7 +49,10 @@ mod tests {
         let cmd = Jsonmetadata::builder("image.fits".to_string())
             .stats_from_loaded(true)
             .build();
-        assert_eq!(cmd.to_args_string(), "jsonmetadata image.fits -stats_from_loaded");
+        assert_eq!(
+            cmd.to_args_string(),
+            "jsonmetadata image.fits -stats_from_loaded"
+        );
     }
 
     #[test]
@@ -65,7 +68,10 @@ mod tests {
         let cmd = Jsonmetadata::builder("image.fits".to_string())
             .output("result.json".to_string())
             .build();
-        assert_eq!(cmd.to_args_string(), "jsonmetadata image.fits -out=result.json");
+        assert_eq!(
+            cmd.to_args_string(),
+            "jsonmetadata image.fits -out=result.json"
+        );
     }
 
     #[test]

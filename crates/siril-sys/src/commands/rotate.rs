@@ -1,6 +1,9 @@
 use bon::Builder;
 
-use crate::{PixelInterpolation, commands::{Argument, Command}};
+use crate::{
+    PixelInterpolation,
+    commands::{Argument, Command},
+};
 
 /// ```text
 /// rotate degree [-nocrop] [-interp=] [-noclamp]
@@ -58,7 +61,9 @@ mod tests {
 
     #[test]
     fn with_interp() {
-        let cmd = Rotate::builder(90.0).interp(PixelInterpolation::Cubic).build();
+        let cmd = Rotate::builder(90.0)
+            .interp(PixelInterpolation::Cubic)
+            .build();
         assert_eq!(cmd.to_args_string(), "rotate 90 -interp=cubic");
     }
 
@@ -75,6 +80,9 @@ mod tests {
             .interp(PixelInterpolation::Lanczos4)
             .no_clamp(true)
             .build();
-        assert_eq!(cmd.to_args_string(), "rotate 30 -nocrop -interp=lanczos4 -noclamp");
+        assert_eq!(
+            cmd.to_args_string(),
+            "rotate 30 -nocrop -interp=lanczos4 -noclamp"
+        );
     }
 }

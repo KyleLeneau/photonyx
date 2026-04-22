@@ -1,6 +1,9 @@
 use bon::Builder;
 
-use crate::{Channels, commands::{Argument, Command}};
+use crate::{
+    Channels,
+    commands::{Argument, Command},
+};
 
 /// ```text
 /// mtf low mid high [channels]

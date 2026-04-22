@@ -1,6 +1,9 @@
 use bon::Builder;
 
-use crate::{LimitOption, commands::{Argument, Command}};
+use crate::{
+    LimitOption,
+    commands::{Argument, Command},
+};
 
 /// ```text
 /// limit { -clip | -posrescale | -rescale }
@@ -26,9 +29,7 @@ impl Command for Limit {
     }
 
     fn args(&self) -> Vec<Argument> {
-        vec![
-            Argument::flag_option(self.limit.to_string(), true),
-        ]
+        vec![Argument::flag_option(self.limit.to_string(), true)]
     }
 }
 

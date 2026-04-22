@@ -1,6 +1,9 @@
 use bon::Builder;
 
-use crate::{Rect, commands::{Argument, Command}};
+use crate::{
+    Rect,
+    commands::{Argument, Command},
+};
 
 /// ```text
 /// seqcrop sequencename x y width height [-prefix=]
@@ -19,7 +22,7 @@ pub struct Seqcrop {
     sequencename: String,
     #[builder(start_fn)]
     rect: Rect,
-    prefix: Option<String>
+    prefix: Option<String>,
 }
 
 impl Command for Seqcrop {
@@ -46,15 +49,32 @@ mod tests {
 
     #[test]
     fn minimal() {
-        let cmd = Seqcrop::builder("seq", Rect { x: 10, y: 20, width: 100, height: 200 }).build();
+        let cmd = Seqcrop::builder(
+            "seq",
+            Rect {
+                x: 10,
+                y: 20,
+                width: 100,
+                height: 200,
+            },
+        )
+        .build();
         assert_eq!(cmd.to_args_string(), "seqcrop seq 10 20 100 200");
     }
 
     #[test]
     fn with_prefix() {
-        let cmd = Seqcrop::builder("seq", Rect { x: 0, y: 0, width: 50, height: 50 })
-            .prefix("out_".to_string())
-            .build();
+        let cmd = Seqcrop::builder(
+            "seq",
+            Rect {
+                x: 0,
+                y: 0,
+                width: 50,
+                height: 50,
+            },
+        )
+        .prefix("out_".to_string())
+        .build();
         assert_eq!(cmd.to_args_string(), "seqcrop seq 0 0 50 50 -prefix=out_");
     }
 }

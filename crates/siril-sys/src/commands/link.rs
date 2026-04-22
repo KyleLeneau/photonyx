@@ -51,7 +51,9 @@ mod tests {
 
     #[test]
     fn with_output() {
-        let cmd = Link::builder("sequence").output("out_dir".to_string()).build();
+        let cmd = Link::builder("sequence")
+            .output("out_dir".to_string())
+            .build();
         assert_eq!(cmd.to_args_string(), "link sequence -out=out_dir");
     }
 

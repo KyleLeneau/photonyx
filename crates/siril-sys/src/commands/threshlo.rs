@@ -20,9 +20,7 @@ impl Command for Threshlo {
     }
 
     fn args(&self) -> Vec<Argument> {
-        vec![
-            Argument::positional(self.level.to_string()),
-        ]
+        vec![Argument::positional(self.level.to_string())]
     }
 }
 

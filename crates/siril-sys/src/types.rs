@@ -453,5 +453,5 @@ pub enum BayerPattern {
 pub enum LimitOption {
     Clip,
     PosRescale,
-    Rescale
+    Rescale,
 }

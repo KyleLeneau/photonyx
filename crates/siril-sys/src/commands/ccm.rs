@@ -88,6 +88,9 @@ mod tests {
     #[test]
     fn custom_matrix_no_gamma() {
         let cmd = Ccm::builder(1.1, 0.2, -0.3, -0.1, 0.9, 0.2, 0.0, 0.1, 0.9).build();
-        assert_eq!(cmd.to_args_string(), "ccm 1.1 0.2 -0.3 -0.1 0.9 0.2 0 0.1 0.9");
+        assert_eq!(
+            cmd.to_args_string(),
+            "ccm 1.1 0.2 -0.3 -0.1 0.9 0.2 0 0.1 0.9"
+        );
     }
 }

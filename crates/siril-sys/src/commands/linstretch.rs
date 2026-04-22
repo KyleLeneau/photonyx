@@ -1,6 +1,9 @@
 use bon::Builder;
 
-use crate::{Channels, ClipMode, commands::{Argument, Command}};
+use crate::{
+    Channels, ClipMode,
+    commands::{Argument, Command},
+};
 
 /// ```text
 /// linstretch -BP= [-sat] [-clipmode=] [channels] [-clipmode=]
@@ -53,7 +56,9 @@ mod tests {
 
     #[test]
     fn with_clipmode() {
-        let cmd = Linstretch::builder(0.05_f32).clipmode(ClipMode::Clip).build();
+        let cmd = Linstretch::builder(0.05_f32)
+            .clipmode(ClipMode::Clip)
+            .build();
         assert_eq!(cmd.to_args_string(), "linstretch -BP=0.05 -clipmode=clip");
     }
 
@@ -70,6 +75,9 @@ mod tests {
             .clipmode(ClipMode::RGBBlend)
             .channels(Channels::RG)
             .build();
-        assert_eq!(cmd.to_args_string(), "linstretch -BP=0 -sat -clipmode=rgbblend RG");
+        assert_eq!(
+            cmd.to_args_string(),
+            "linstretch -BP=0 -sat -clipmode=rgbblend RG"
+        );
     }
 }

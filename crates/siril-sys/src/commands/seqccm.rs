@@ -16,7 +16,7 @@ use crate::commands::{Argument, Command};
 pub struct Seqccm {
     #[builder(start_fn, into)]
     sequencename: String,
-    prefix: Option<String>
+    prefix: Option<String>,
 }
 
 impl Command for Seqccm {
@@ -44,7 +44,9 @@ mod tests {
 
     #[test]
     fn with_prefix() {
-        let cmd = Seqccm::builder("sequence").prefix("ccm_".to_string()).build();
+        let cmd = Seqccm::builder("sequence")
+            .prefix("ccm_".to_string())
+            .build();
         assert_eq!(cmd.to_args_string(), "seqccm sequence -prefix=ccm_");
     }
 }

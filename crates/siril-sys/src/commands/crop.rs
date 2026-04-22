@@ -1,6 +1,9 @@
 use bon::Builder;
 
-use crate::{Rect, commands::{Argument, Command}};
+use crate::{
+    Rect,
+    commands::{Argument, Command},
+};
 
 /// ```text
 /// crop [x y width height]
@@ -40,13 +43,25 @@ mod tests {
 
     #[test]
     fn crop_with_rect() {
-        let cmd = Crop::builder(Rect { x: 10, y: 20, width: 100, height: 200 }).build();
+        let cmd = Crop::builder(Rect {
+            x: 10,
+            y: 20,
+            width: 100,
+            height: 200,
+        })
+        .build();
         assert_eq!(cmd.to_args_string(), "crop 10 20 100 200");
     }
 
     #[test]
     fn crop_zero_origin() {
-        let cmd = Crop::builder(Rect { x: 0, y: 0, width: 50, height: 50 }).build();
+        let cmd = Crop::builder(Rect {
+            x: 0,
+            y: 0,
+            width: 50,
+            height: 50,
+        })
+        .build();
         assert_eq!(cmd.to_args_string(), "crop 0 0 50 50");
     }
 }
