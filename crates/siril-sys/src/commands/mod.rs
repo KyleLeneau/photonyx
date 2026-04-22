@@ -5,18 +5,30 @@ pub mod autoghs;
 pub use autoghs::Autoghs;
 pub mod autostretch;
 pub use autostretch::Autostretch;
+pub mod bg;
+pub use bg::Bg;
+pub mod bgnoise;
+pub use bgnoise::Bgnoise;
+pub mod binxy;
+pub use binxy::Binxy;
 pub mod calibrate;
 pub use calibrate::Calibrate;
 pub mod calibrate_single;
 pub use calibrate_single::CalibrateSingle;
 pub mod capabilities;
 pub use capabilities::Capabilities;
+pub mod ccm;
+pub use ccm::Ccm;
 pub mod cd;
 pub use cd::Cd;
 pub mod close;
 pub use close::Close;
 pub mod convert;
 pub use convert::Convert;
+pub mod convertraw;
+pub use convertraw::Convertraw;
+pub mod crop;
+pub use crop::Crop;
 pub mod dumpheader;
 pub use dumpheader::Dumpheader;
 pub mod exit;
@@ -33,8 +45,16 @@ pub mod getref;
 pub use getref::Getref;
 pub mod ght;
 pub use ght::Ght;
+pub mod jsonmetadata;
+pub use jsonmetadata::Jsonmetadata;
+pub mod limit;
+pub use limit::Limit;
 pub mod linear_match;
 pub use linear_match::LinearMatch;
+pub mod link;
+pub use link::Link;
+pub mod linstretch;
+pub use linstretch::Linstretch;
 pub mod load;
 pub use load::Load;
 pub mod log;
@@ -49,10 +69,18 @@ pub mod mirrorx_single;
 pub use mirrorx_single::MirrorxSingle;
 pub mod mirrory;
 pub use mirrory::Mirrory;
+pub mod mtf;
+pub use mtf::Mtf;
+pub mod neg;
+pub use neg::Neg;
+pub mod nozero;
+pub use nozero::Nozero;
 pub mod pcc;
 pub use pcc::Pcc;
 pub mod platesolve;
 pub use platesolve::Platesolve;
+pub mod pm;
+pub use pm::Pm;
 pub mod pwd;
 pub use pwd::Pwd;
 pub mod register;
@@ -63,6 +91,10 @@ pub mod rgbcomp;
 pub use rgbcomp::Rgbcomp;
 pub mod rmgreen;
 pub use rmgreen::Rmgreen;
+pub mod rotate;
+pub use rotate::Rotate;
+pub mod rotatepi;
+pub use rotatepi::RotatePi;
 pub mod satu;
 pub use satu::Satu;
 pub mod save;
@@ -83,10 +115,16 @@ pub mod savetif32;
 pub use savetif32::Savetif32;
 pub mod savetif8;
 pub use savetif8::Savetif8;
+pub mod select;
+pub use select::Select;
 pub mod seqapplyreg;
 pub use seqapplyreg::SeqApplyReg;
+pub mod seqccm;
+pub use seqccm::Seqccm;
 pub mod seqclean;
 pub use seqclean::Seqclean;
+pub mod seqcrop;
+pub use seqcrop::Seqcrop;
 pub mod seqextract_green;
 pub use seqextract_green::SeqextractGreen;
 pub mod seqextract_ha;
@@ -133,8 +171,16 @@ pub mod stat;
 pub use stat::Stat;
 pub mod subsky;
 pub use subsky::Subsky;
+pub mod thresh;
+pub use thresh::Thresh;
+pub mod threshhi;
+pub use threshhi::Threshhi;
+pub mod threshlo;
+pub use threshlo::Threshlo;
 pub mod unpurple;
 pub use unpurple::Unpurple;
+pub mod unselect;
+pub use unselect::Unselect;
 pub mod update_key;
 pub use update_key::UpdateKey;
 // @generated end by xtask merge-siril-commands
@@ -144,6 +190,7 @@ use std::fmt::Display;
 pub enum Argument {
     None,
     Positional(Option<String>),
+    DoubleQuoted(String),
     Flag(String, Option<bool>),
     Option(String, Option<String>),
 }
@@ -155,6 +202,10 @@ impl Argument {
 
     pub fn positional_option(value: Option<impl Display>) -> Self {
         Argument::Positional(value.map(|v| v.to_string()))
+    }
+
+    pub fn double_quoted(value: impl Into<String>) -> Self {
+        Argument::DoubleQuoted(value.into())
     }
 
     pub fn flag(key: impl Into<String>) -> Self {
@@ -173,6 +224,7 @@ impl Argument {
         match self {
             Argument::None => false,
             Argument::Positional(value) => value.is_some(),
+            Argument::DoubleQuoted(_) => true,
             Argument::Flag(_, value) => value.is_some_and(|x| x),
             Argument::Option(_, value) => value.is_some(),
         }
@@ -196,6 +248,9 @@ impl Display for Argument {
                 }
             }
             Argument::Positional(None) => {}
+            Argument::DoubleQuoted(value) => {
+                write!(f, "\"{}\"", value)?;
+            }
             Argument::Flag(key, _) => {
                 write!(f, "-{}", key)?;
             }

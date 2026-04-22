@@ -447,3 +447,11 @@ pub enum BayerPattern {
     GRBG,
     GBRG,
 }
+
+#[derive(Debug, PartialEq, EnumString, Display, Clone)]
+#[strum(serialize_all = "lowercase")]
+pub enum LimitOption {
+    Clip,
+    PosRescale,
+    Rescale
+}
