@@ -8,6 +8,7 @@ use anyhow::Result;
 use clap::CommandFactory;
 use logging::init_logging;
 use px_conventions::profile::ProfilePath;
+use siril_sys::{SIRIL_MIN_VERSION, SirilError, check_siril_version};
 use std::io::stdout;
 
 #[cfg(feature = "self-update")]
@@ -20,18 +21,45 @@ use px_cli::{
 pub use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
+fn siril_install_instructions() -> String {
+    let platform_note = match std::env::consts::OS {
+        "macos" => concat!(
+            "  macOS:   Download the .dmg from https://siril.org/download/\n",
+            "           or install via Homebrew:  brew install --cask siril",
+        ),
+        "linux" => concat!(
+            "  Linux:   Install via your package manager, e.g.:\n",
+            "             sudo apt install siril          # Debian/Ubuntu\n",
+            "             sudo dnf install siril          # Fedora\n",
+            "           or AppImage/Flatpak from https://siril.org/download/",
+        ),
+        "windows" => concat!(
+            "  Windows: Download the installer from https://siril.org/download/\n",
+            "           and ensure siril-cli.exe is on your PATH.",
+        ),
+        _ => "  Visit https://siril.org/download/ for installation instructions.",
+    };
+
+    format!(
+        "To install or upgrade Siril:\n{platform_note}\n\n\
+         After installation, verify with:  siril-cli --version"
+    )
+}
+
 /// Only public interace out to the bin/px.rs file, not to be used externally
 ///
 pub async fn run(cli: Cli) -> Result<ExitStatus> {
     init_logging(&cli);
 
+    // TODO: Use cli.top_level.global_args to load the global px config file
+
     // Configure the `Printer`, which controls user-facing output in the CLI.
     let printer = Printer::Default;
 
-    // TODO: Use global args to load the profile
+    // Use global args to load the profile and hold result
     let profile_path = ProfilePath::find(cli.top_level.global_args.profile);
 
-    // TODO: validate that we have a profile and skip commands that don't need it
+    // validate profile result and skip commands that don't need it (use `profile_path.unwrap()` later)
     if cli.command.requires_profile() {
         match profile_path {
             Ok(ref p) => {
@@ -39,6 +67,28 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
             }
             Err(e) => {
                 printer.error(format!("{e} - profile is required for this command"))?;
+                return Ok(ExitStatus::Error);
+            }
+        }
+    }
+
+    if cli.command.requires_siril() {
+        match check_siril_version("siril-cli", SIRIL_MIN_VERSION) {
+            Ok(_) => {}
+            Err(SirilError::NotInstalled) => {
+                printer.error("Siril is not installed or could not be found.")?;
+                printer.error(siril_install_instructions())?;
+                return Ok(ExitStatus::Error);
+            }
+            Err(SirilError::VersionTooOld { found, minimum }) => {
+                printer.error(format!(
+                    "Siril {found} is installed but version {minimum} or newer is required."
+                ))?;
+                printer.error(siril_install_instructions())?;
+                return Ok(ExitStatus::Error);
+            }
+            Err(e) => {
+                printer.error(format!("Could not verify Siril installation: {e}"))?;
                 return Ok(ExitStatus::Error);
             }
         }

@@ -74,6 +74,9 @@ pub enum SirilError {
     #[error("Siril CLI executable not found, please install it first")]
     NotInstalled,
 
+    #[error("Siril {found} is too old; minimum required version is {minimum}")]
+    VersionTooOld { found: String, minimum: String },
+
     #[error("Invalid configuration: {0}")]
     InvalidConfig(String),
 

@@ -20,6 +20,7 @@
 * Add `px project stack` and basic implementation with a number of todo's
 * Add `px profile init` and a convention plus profile config file
 * Enforce profile path being specified on `px master ..` commands
+* Validate that siril is installed on select commands and give instructions if it's not
 
 ## 0.1.3
 

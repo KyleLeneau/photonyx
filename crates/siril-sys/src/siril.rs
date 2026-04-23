@@ -21,6 +21,9 @@ type PipeWriter = tokio::net::unix::pipe::Sender;
 #[cfg(windows)]
 type PipeWriter = tokio::net::windows::named_pipe::NamedPipeClient;
 
+/// Minimum supported Siril version: (major, minor, patch)
+pub const SIRIL_MIN_VERSION: (u32, u32, u32) = (1, 4, 0);
+
 /// Find the right siril-cli across the system
 ///
 pub fn find_siril_cli(exe: &str) -> Result<PathBuf, SirilError> {
@@ -48,6 +51,55 @@ pub fn find_siril_cli(exe: &str) -> Result<PathBuf, SirilError> {
         .map(PathBuf::from)
         .find(|p| p.exists())
         .ok_or(SirilError::NotInstalled)
+}
+
+/// Locate siril-cli and verify it meets `minimum` version `(major, minor, patch)`.
+///
+/// Returns the resolved path on success. On failure returns `SirilError::NotInstalled`
+/// when the binary cannot be found, or `SirilError::VersionTooOld` when the version
+/// is below the minimum.
+pub fn check_siril_version(exe: &str, minimum: (u32, u32, u32)) -> Result<PathBuf, SirilError> {
+    let path = find_siril_cli(exe)?;
+
+    let output = std::process::Command::new(&path)
+        .arg("--version")
+        .output()
+        .map_err(SirilError::Io)?;
+
+    // Siril writes its version to stdout; fall back to stderr.
+    let raw = if output.stdout.is_empty() {
+        String::from_utf8_lossy(&output.stderr).into_owned()
+    } else {
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    };
+
+    let found = parse_siril_version(&raw).ok_or_else(|| {
+        SirilError::ParseError(format!("could not parse Siril version from: {raw}"))
+    })?;
+
+    if found < minimum {
+        return Err(SirilError::VersionTooOld {
+            found: format!("{}.{}.{}", found.0, found.1, found.2),
+            minimum: format!("{}.{}.{}", minimum.0, minimum.1, minimum.2),
+        });
+    }
+
+    Ok(path)
+}
+
+fn parse_siril_version(text: &str) -> Option<(u32, u32, u32)> {
+    for token in text.split_whitespace() {
+        // Strip a leading 'v' (e.g. "v1.2.0") and pre-release suffixes per part (e.g. "1.4.0-rc2")
+        let token = token.trim_start_matches('v');
+        let parts: Vec<u32> = token
+            .split('.')
+            .filter_map(|s| s.split(['-', '+']).next()?.parse().ok())
+            .collect();
+        if parts.len() >= 3 {
+            return Some((parts[0], parts[1], parts[2]));
+        }
+    }
+    None
 }
 
 /// Retry `open` until it succeeds, sleeping 50 ms between attempts on any

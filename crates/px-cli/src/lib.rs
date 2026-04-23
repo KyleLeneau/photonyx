@@ -142,6 +142,27 @@ pub enum Commands {
 }
 
 impl Commands {
+    /// Only commands that actually invoke Siril return true.
+    pub fn requires_siril(&self) -> bool {
+        matches!(
+            self,
+            Commands::SirilTest
+                | Commands::Master(MasterNamespace {
+                    command: MasterCommand::Bias(_)
+                        | MasterCommand::Dark(_)
+                        | MasterCommand::Flat(_),
+                })
+                | Commands::Observation(ObservationNamespace {
+                    command: ObservationCommand::Calibrate(_),
+                })
+                | Commands::Project(ProjectNamespace {
+                    command: ProjectCommand::Stack(_)
+                        | ProjectCommand::Align(_)
+                        | ProjectCommand::Sample(_),
+                })
+        )
+    }
+
     /// Everything requires by default and `!` to only specify the ones that don't
     pub fn requires_profile(&self) -> bool {
         !matches!(
