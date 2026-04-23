@@ -1,5 +1,5 @@
 #![allow(async_fn_in_trait)]
-use std::path::PathBuf;
+use std::path::Path;
 
 use bon::Builder;
 
@@ -34,11 +34,11 @@ impl Command for Cd {
 }
 
 pub trait CdExt {
-    async fn cd(&mut self, path: PathBuf) -> Result<(), SirilError>;
+    async fn cd(&mut self, path: &Path) -> Result<(), SirilError>;
 }
 
 impl CdExt for Siril {
-    async fn cd(&mut self, path: PathBuf) -> Result<(), SirilError> {
+    async fn cd(&mut self, path: &Path) -> Result<(), SirilError> {
         let cmd = Cd::builder(path.display().to_string()).build();
         self.execute(&cmd).await?;
         Ok(())

@@ -46,8 +46,8 @@ pub(crate) async fn stack_project_observations(
     Ok(ExitStatus::Success)
 }
 
-async fn stack_linear<'a>(
-    siril_builder: Builder<'a>,
+async fn stack_linear(
+    siril_builder: Builder,
     stack: &ProjectLinearStack,
     project_dir: &Path,
     printer: Printer,
@@ -64,7 +64,7 @@ async fn stack_linear<'a>(
     for obs in &stack.observations {
         let observation = ObservationPath::single(&obs.path)?;
         let count = observation.pp_path().count_by_ext(ext.to_string())?;
-        siril.cd(observation.pp_path().to_path_buf()).await?;
+        siril.cd(observation.pp_path()).await?;
         siril
             .execute(
                 &Convert::builder(&prefix)
@@ -77,7 +77,7 @@ async fn stack_linear<'a>(
     }
 
     // Return to working directory
-    siril.cd(siril.initial_directory()).await?;
+    siril.cd(&siril.initial_directory()).await?;
 
     // TODO: Optional: run bg extraction on every frame before stacking
     // if extract_background:

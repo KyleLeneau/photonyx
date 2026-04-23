@@ -15,6 +15,7 @@ px-conventions = { workspace = true }
 px-fits = { workspace = true }
 px-fs = { workspace = true }
 px-nativeui = { workspace = true }
+px-pipeline = { workspace = true }
 siril-sys = { workspace = true }
 
 anstream = { workspace = true }

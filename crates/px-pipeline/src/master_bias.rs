@@ -1,0 +1,84 @@
+//! Pipeline for creating a master bias from an array of raw bias frames
+//!
+
+use std::path::PathBuf;
+
+use px_fits::{CalibrationMetadata, all_fits_files};
+use siril_sys::{
+    Builder, FitsExt,
+    commands::{Convert, Stack},
+    siril_ext::CdExt,
+};
+
+use crate::error::PipelineError;
+
+#[derive(Debug)]
+pub struct MasterBias {
+    pub path: PathBuf,
+}
+
+#[derive(bon::Builder)]
+pub struct CreateMasterBiasPipeline {
+    pub siril_builder: Builder,
+    pub ext: FitsExt,
+    pub raw_folder: PathBuf,
+    pub out_folder: PathBuf,
+}
+
+impl CreateMasterBiasPipeline {
+    pub async fn execute(&self) -> Result<MasterBias, PipelineError> {
+        let raw_files = all_fits_files(&self.raw_folder)?;
+        if raw_files.is_empty() {
+            return Err(PipelineError::FileNotFound(
+                "raw_folder contains no files".to_string(),
+            ));
+        }
+
+        // Setup the output file
+        let name = CalibrationMetadata::from(raw_files.first().unwrap())?.master_bias_name();
+        let output_file = self.out_folder.join(name).display().to_string();
+
+        let mut siril = self
+            .siril_builder
+            .clone()
+            .use_extension(self.ext.clone())
+            .build()
+            .await?;
+
+        // Move to the raw folder to convert into a sequence
+        siril.cd(&self.raw_folder).await?;
+        siril
+            .execute(
+                &Convert::builder("bias_")
+                    .output_dir(siril.initial_directory())
+                    .build(),
+            )
+            .await?;
+
+        // Return to working directory
+        siril.cd(&siril.initial_directory()).await?;
+
+        // Stack with defaults
+        siril
+            .execute(
+                &Stack::builder("bias_")
+                    .stack_type(siril_sys::StackType::Med)
+                    .out(&output_file)
+                    .build(),
+            )
+            .await?;
+
+        // Confirm the output file exists now
+        let result = PathBuf::from(output_file).with_added_extension(self.ext.to_string());
+        if !result.exists() {
+            return Err(PipelineError::OutputFileNotFound(format!(
+                "Output file is missing: {:?}",
+                result
+            )));
+        }
+
+        // TODO: add more metadata to this output file
+        let bias = MasterBias { path: result };
+        Ok(bias)
+    }
+}

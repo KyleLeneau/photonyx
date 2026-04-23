@@ -21,6 +21,8 @@
 * Add `px profile init` and a convention plus profile config file
 * Enforce profile path being specified on `px master ..` commands
 * Validate that siril is installed on select commands and give instructions if it's not
+* Change the master bias to use `px-pipeline` crate
+* Remove the lifetime on `siril-sys::Builder`
 
 ## 0.1.3
 

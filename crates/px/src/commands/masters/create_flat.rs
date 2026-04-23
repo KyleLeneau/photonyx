@@ -60,7 +60,7 @@ pub(crate) async fn create_master_flat(
 
     // Move to the raw folder to convert into a sequence
     let sp = printer.spinner("[1/3] Converting flat frames...");
-    siril.cd(args.raw_folder).await?;
+    siril.cd(&args.raw_folder).await?;
     siril
         .execute(
             &Convert::builder("flat_")
@@ -71,7 +71,7 @@ pub(crate) async fn create_master_flat(
         .inspect_err(|_| sp.abandon_with_message("✗ Convert failed"))?;
 
     // Return to working directory
-    siril.cd(siril.initial_directory()).await?;
+    siril.cd(&siril.initial_directory()).await?;
     sp.finish_with_message("[1/3] Converted flat frames");
 
     // Calibrate the flat frames using the master bias

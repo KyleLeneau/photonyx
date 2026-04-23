@@ -4669,6 +4669,7 @@ dependencies = [
  "px-fits",
  "px-fs",
  "px-nativeui",
+ "px-pipeline",
  "ratatui",
  "serde_json",
  "siril-sys",
@@ -4748,6 +4749,14 @@ dependencies = [
 [[package]]
 name = "px-pipeline"
 version = "0.1.3"
+dependencies = [
+ "bon",
+ "px-fits",
+ "siril-sys",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
+ "thiserror 1.0.69",
+]
 
 [[package]]
 name = "px-static"

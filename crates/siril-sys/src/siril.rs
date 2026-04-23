@@ -119,6 +119,7 @@ async fn connect_with_retry<T>(
     }
 }
 
+#[derive(Debug, Clone)]
 enum MemoryLimit {
     /// Fixed memory limit in Gigabytes
     FixedGB(f64),
@@ -127,9 +128,10 @@ enum MemoryLimit {
     Ratio(f64),
 }
 
-pub struct Builder<'a> {
+#[derive(Clone)]
+pub struct Builder {
     /// Directory to start up in, if None then uses a tempdir
-    directory: Option<&'a Path>,
+    directory: Option<PathBuf>,
 
     /// How much CPU to use (in number of cores, default is all)
     cpu_limit: Option<u8>,
@@ -147,7 +149,7 @@ pub struct Builder<'a> {
     output_sink: OutputSink,
 }
 
-impl Default for Builder<'_> {
+impl Default for Builder {
     fn default() -> Self {
         Self {
             directory: None, // temp dir
@@ -160,7 +162,7 @@ impl Default for Builder<'_> {
     }
 }
 
-impl<'a> Builder<'a> {
+impl Builder {
     pub fn container_aware_limits(mut self) -> Self {
         self.cpu_limit = container_aware_cpu_limit();
         self.memory_limit = container_aware_memory_limit_gb().unwrap_or(MemoryLimit::Ratio(0.9));
@@ -182,8 +184,8 @@ impl<'a> Builder<'a> {
         self
     }
 
-    pub fn use_directory(mut self, directory: &'a Path) -> Self {
-        self.directory = Some(directory);
+    pub fn use_directory(mut self, directory: &Path) -> Self {
+        self.directory = Some(directory.to_path_buf());
         self
     }
 
@@ -263,15 +265,15 @@ pub struct Siril {
 impl Siril {
     /// Spawn a new siril-cli process in pipe mode and wait until it is ready.
     ///
-    async fn new<'a>(builder: Builder<'a>) -> Result<Self, SirilError> {
+    async fn new(builder: Builder) -> Result<Self, SirilError> {
         // Find the right siril-cli for the system
         let siril_exe = find_siril_cli("siril-cli")?;
         tracing::debug!("siril-cli found {:?}", &siril_exe);
 
         // Always create temp directory to work in but start in builder supplied
         let temp_dir = TempDir::with_prefix("photonyx-")?;
-        let dir = if let Some(startup_dir) = builder.directory {
-            startup_dir.to_path_buf()
+        let dir = if let Some(ref startup_dir) = builder.directory {
+            startup_dir.clone()
         } else {
             temp_dir.path().to_path_buf()
         };
@@ -444,7 +446,7 @@ impl Siril {
 
     /// Call some helper commands on siril if the user provided a builder to us
     ///
-    async fn configure<'a>(&mut self, builder: Builder<'a>) -> Result<(), SirilError> {
+    async fn configure(&mut self, builder: Builder) -> Result<(), SirilError> {
         self.execute(&Requires::builder("0.99.10").build()).await?;
         if let Some(cores) = builder.cpu_limit {
             self.set_cpu_cores(cores).await?;

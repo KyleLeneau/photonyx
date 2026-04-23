@@ -94,7 +94,7 @@ pub(crate) async fn calibrate_observation(
         .await?;
 
     // Move to the raw folder to convert into a sequence
-    siril.cd(args.raw_folder).await?;
+    siril.cd(&args.raw_folder).await?;
     siril
         .execute(
             &Convert::builder("light_")
@@ -105,7 +105,7 @@ pub(crate) async fn calibrate_observation(
         .inspect_err(|_| sp.abandon_with_message("✗ Convert failed"))?;
 
     // Return to working directory
-    siril.cd(siril.initial_directory()).await?;
+    siril.cd(&siril.initial_directory()).await?;
     sp.finish_with_message("[1/3] Converted flat frames");
 
     let sp = printer.spinner("[2/3] Calibrating light frames...");

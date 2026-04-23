@@ -51,7 +51,7 @@ pub(crate) async fn create_master_dark(
         .await?;
 
     // Move to the raw folder to convert into a sequence
-    siril.cd(args.raw_folder).await?;
+    siril.cd(&args.raw_folder).await?;
     siril
         .execute(
             &Convert::builder("dark_")
@@ -61,7 +61,7 @@ pub(crate) async fn create_master_dark(
         .await?;
 
     // Return to working directory
-    siril.cd(siril.initial_directory()).await?;
+    siril.cd(&siril.initial_directory()).await?;
 
     // Stack with defaults
     siril

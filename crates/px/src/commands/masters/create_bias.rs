@@ -1,15 +1,9 @@
-use std::path::PathBuf;
-
 use crate::{ExitStatus, printer::Printer, utils::to_fits_ext};
 use anyhow::Result;
 use px_cli::CreateBiasMasterArgs;
 use px_conventions::profile::ProfilePath;
-use px_fits::{CalibrationMetadata, all_fits_files};
-use siril_sys::{
-    Builder,
-    commands::{Convert, Stack},
-    siril_ext::CdExt,
-};
+use px_pipeline::master_bias::CreateMasterBiasPipeline;
+use siril_sys::Builder;
 
 pub(crate) async fn create_master_bias(
     args: CreateBiasMasterArgs,
@@ -19,13 +13,6 @@ pub(crate) async fn create_master_bias(
     // Guard to make sure the input folder exists first
     if !args.raw_folder.exists() {
         printer.error("Raw bias folder does not exist")?;
-        return Ok(ExitStatus::Error);
-    }
-
-    // Check that all files in raw folder are fits
-    let raw_files = all_fits_files(&args.raw_folder)?;
-    if raw_files.is_empty() {
-        printer.error("raw_folder contains no files")?;
         return Ok(ExitStatus::Error);
     }
 
@@ -39,49 +26,16 @@ pub(crate) async fn create_master_bias(
         None => profile_path.bias.clone(),
     };
 
-    // Setup the output file
-    let name = CalibrationMetadata::from(raw_files.first().unwrap())?.master_bias_name();
-    let output_file = out_folder.join(name).display().to_string();
-
-    // Setup siril
-    let ext = to_fits_ext(args.ext);
-    let mut siril = Builder::default()
-        .output_sink(siril_sys::OutputSink::Discard)
-        .use_extension(ext.clone())
+    let master = CreateMasterBiasPipeline::builder()
+        .ext(to_fits_ext(args.ext))
+        .siril_builder(Builder::default().output_sink(siril_sys::OutputSink::Discard))
+        .raw_folder(args.raw_folder)
+        .out_folder(out_folder)
         .build()
+        .execute()
         .await?;
-
-    // Move to the raw folder to convert into a sequence
-    siril.cd(args.raw_folder).await?;
-    siril
-        .execute(
-            &Convert::builder("bias_")
-                .output_dir(siril.initial_directory())
-                .build(),
-        )
-        .await?;
-
-    // Return to working directory
-    siril.cd(siril.initial_directory()).await?;
-
-    // Stack with defaults
-    siril
-        .execute(
-            &Stack::builder("bias_")
-                .stack_type(siril_sys::StackType::Med)
-                .out(&output_file)
-                .build(),
-        )
-        .await?;
-
-    // Confirm the output file exists now
-    let result = PathBuf::from(output_file).with_added_extension(ext.to_string());
-    if !result.exists() {
-        printer.error(format!("Output file is missing: {:?}", result))?;
-        return Ok(ExitStatus::Error);
-    }
 
     // Pretty print the result
-    printer.success(format!("Master BIAS stacking completed: {:?}", result))?;
+    printer.success(format!("Master BIAS stacking completed: {:?}", master))?;
     Ok(ExitStatus::Success)
 }
