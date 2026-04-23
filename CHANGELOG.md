@@ -23,6 +23,10 @@
 * Validate that siril is installed on select commands and give instructions if it's not
 * Change the master bias to use `px-pipeline` crate
 * Remove the lifetime on `siril-sys::Builder`
+* Change master dark command to use `px-pipeline`
+* Add common master file types to `px-fits`
+* Change master flat to use `px-pipeline`
+* Created a general pipeline reporter for cli progress
 
 ## 0.1.3
 

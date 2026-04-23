@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use px_fits::{CalibrationMetadata, MasterBias, all_fits_files};
+use px_fits::{CalibrationMetadata, MasterDark, all_fits_files};
 use siril_sys::{
     Builder, FitsExt,
     commands::{Convert, Stack},
@@ -13,15 +13,15 @@ use siril_sys::{
 use crate::error::PipelineError;
 
 #[derive(bon::Builder)]
-pub struct CreateMasterBiasPipeline {
+pub struct CreateMasterDarkPipeline {
     pub siril_builder: Builder,
     pub ext: FitsExt,
     pub raw_folder: PathBuf,
     pub out_folder: PathBuf,
 }
 
-impl CreateMasterBiasPipeline {
-    pub async fn execute(&self) -> Result<MasterBias, PipelineError> {
+impl CreateMasterDarkPipeline {
+    pub async fn execute(&self) -> Result<MasterDark, PipelineError> {
         let raw_files = all_fits_files(&self.raw_folder)?;
         if raw_files.is_empty() {
             return Err(PipelineError::FileNotFound(
@@ -30,7 +30,7 @@ impl CreateMasterBiasPipeline {
         }
 
         // Setup the output file
-        let name = CalibrationMetadata::from(raw_files.first().unwrap())?.master_bias_name();
+        let name = CalibrationMetadata::from(raw_files.first().unwrap())?.master_dark_name();
         let output_file = self.out_folder.join(name).display().to_string();
 
         let mut siril = self
@@ -44,7 +44,7 @@ impl CreateMasterBiasPipeline {
         siril.cd(&self.raw_folder).await?;
         siril
             .execute(
-                &Convert::builder("bias_")
+                &Convert::builder("dark_")
                     .output_dir(siril.initial_directory())
                     .build(),
             )
@@ -56,7 +56,7 @@ impl CreateMasterBiasPipeline {
         // Stack with defaults
         siril
             .execute(
-                &Stack::builder("bias_")
+                &Stack::builder("dark_")
                     .stack_type(siril_sys::StackType::Med)
                     .out(&output_file)
                     .build(),
@@ -73,11 +73,12 @@ impl CreateMasterBiasPipeline {
         }
 
         let meta = CalibrationMetadata::from(&result)?;
-        let bias = MasterBias {
+        let bias = MasterDark {
             path: result,
             temperature: meta.temperature.unwrap_or_default(),
             gain: meta.gain.unwrap_or_default(),
             offset: meta.offset.unwrap_or_default(),
+            exposure: meta.exposure.unwrap_or_default(),
             binning: meta.binning,
         };
         Ok(bias)

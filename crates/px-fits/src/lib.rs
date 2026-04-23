@@ -1,4 +1,7 @@
 pub mod display;
+mod model;
+
+pub use model::*;
 
 // Soon to be wrapper around https://github.com/cds-astro/fitsrs
 // * Lazy data loading
@@ -175,16 +178,29 @@ pub fn all_color_raw_frames(raw_files: &Vec<PathBuf>) -> Result<bool, FitsError>
     Ok(all_color)
 }
 
+#[allow(unused)]
+#[derive(Debug)]
+pub struct Binning {
+    x: u8,
+    y: u8,
+}
+impl Default for Binning {
+    fn default() -> Self {
+        Self { x: 1, y: 1 }
+    }
+}
+
 #[derive(Debug)]
 pub struct CalibrationMetadata {
-    obs_date_utc: Option<DateTime<FixedOffset>>,
-    obs_date_local: Option<NaiveDateTime>,
-    exposure: Option<f64>,
-    temperature: Option<f64>,
-    filter: Option<String>,
-    _offset: Option<i64>,
-    _gain: Option<i64>,
-    // TODO: binning
+    pub obs_date_utc: Option<DateTime<FixedOffset>>,
+    pub obs_date_local: Option<NaiveDateTime>,
+    pub exposure: Option<f64>,
+    pub temperature: Option<f64>,
+    pub filter: Option<String>,
+    pub offset: Option<i64>,
+    pub gain: Option<i64>,
+    pub binning: Binning,
+    // TODO: rotation
 }
 
 impl CalibrationMetadata {
@@ -221,6 +237,11 @@ impl CalibrationMetadata {
                 .and_then(|caps| NaiveDateTime::parse_from_str(&caps[1], "%Y%m%d-%H%M%S").ok())
         });
 
+        let binning = Binning {
+            x: get_int("XBINNING").unwrap_or(1) as u8,
+            y: get_int("YBINNING").unwrap_or(1) as u8,
+        };
+
         Ok(Self {
             obs_date_local,
             obs_date_utc: get_string("DATE-OBS").and_then(|s| {
@@ -230,11 +251,12 @@ impl CalibrationMetadata {
                         .map(|ndt| Utc.from_utc_datetime(&ndt).fixed_offset())
                 })
             }),
-            exposure: get_float("EXPOSURE"),
+            exposure: get_float("EXPOSURE").or_else(|| get_float("EXPTIME")),
             temperature: get_float("SET-TEMP"),
             filter: get_string("FILTER"),
-            _offset: get_int("OFFSET"),
-            _gain: get_int("GAIN"),
+            offset: get_int("OFFSET"),
+            gain: get_int("GAIN"),
+            binning,
         })
     }
 

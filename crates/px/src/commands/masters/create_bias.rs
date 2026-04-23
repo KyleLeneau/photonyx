@@ -37,5 +37,8 @@ pub(crate) async fn create_master_bias(
 
     // Pretty print the result
     printer.success(format!("Master BIAS stacking completed: {:?}", master))?;
+
+    // TODO: Add this new master to the px_profile.yaml config for later uses
+
     Ok(ExitStatus::Success)
 }

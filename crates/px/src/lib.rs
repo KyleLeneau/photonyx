@@ -1,6 +1,7 @@
 mod commands;
 mod logging;
 mod printer;
+mod reporters;
 mod resolve;
 mod utils;
 
