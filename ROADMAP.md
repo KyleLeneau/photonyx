@@ -35,9 +35,13 @@
 * [x] explore building a gui based app that allows a user to "blink" their frames easily or view fits headers
 * [x] Config file support and order loading so that a user can specify less on the command line for their profile
 * [x] post-install or validation step to ensure Siril is installed and available with minimum version
-* [ ] Siril workflows idea (jobs & workflows) like CI but for the processing engine
-* [ ] need some type of processing_engine with the basic workflows
+* [x] need some type of processing_engine with the basic workflows
 * [ ] need a `.px` folder in the user home initialized at some point to store default or common config (https://crates.io/crates/etcetera)
+* [ ] need a way to save/store the master calibration frames inside the profile so they can be referenced later on (should auto create this after each command)
+* [ ] add a master list command that lists all active master, support json and tui display
+* [ ] need to implement scan of observations so that an inventory of lights is managed and have a place to associate master calibration frames to
+* [ ] implement a profile level or top level "watcher" that watches for file drops in light obs folder, scans, finds best master and sets that link up and then calibrate individual sub frames as they come in
+* [ ] build on top of the per sub frame calibration and send to a livestacker (tasks & channels) that produces linear weighted stacks per target then send to another queue to beautify them with the latest beuty image added to a rolling motion movie stream
 * [ ]
 
 
