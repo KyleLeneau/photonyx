@@ -43,6 +43,8 @@
 * [ ] implement a profile level or top level "watcher" that watches for file drops in light obs folder, scans, finds best master and sets that link up and then calibrate individual sub frames as they come in
 * [ ] build on top of the per sub frame calibration and send to a livestacker (tasks & channels) that produces linear weighted stacks per target then send to another queue to beautify them with the latest beuty image added to a rolling motion movie stream
 * [ ] build a command that monitors the advanced API of nina and renders a video of the guiding results along with a history of events on the right side
+* [ ] simple web server to recieve events of where scopes are pointed (ra, dec, fov, pixel size, name) and render an event feed on a web UI, and display a bounding box on a stellarium view. Have the cli initialize and send this data through a LIGHT file watcher.
+* [ ] need a debug tool to trigger the similar flow of a file watcher to simulate file drops by by "playing" a folder of files
 
 
 ### Future
