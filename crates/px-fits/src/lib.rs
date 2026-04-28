@@ -230,11 +230,18 @@ impl CalibrationMetadata {
             }
         };
 
-        let obs_date_local = path.file_stem().and_then(|s| s.to_str()).and_then(|stem| {
+        let obs_date_local_time = path.file_stem().and_then(|s| s.to_str()).and_then(|stem| {
             Regex::new(r"(\d{8}-\d{6})")
                 .ok()?
                 .captures(stem)
                 .and_then(|caps| NaiveDateTime::parse_from_str(&caps[1], "%Y%m%d-%H%M%S").ok())
+        });
+
+        let obs_date_local_date = path.to_str().and_then(|stem| {
+            Regex::new(r"(\d{4}-\d{2}-\d{2})")
+                .ok()?
+                .captures(stem)
+                .and_then(|caps| NaiveDateTime::parse_from_str(&caps[1], "%Y-%m-%d").ok())
         });
 
         let binning = Binning {
@@ -243,7 +250,7 @@ impl CalibrationMetadata {
         };
 
         Ok(Self {
-            obs_date_local,
+            obs_date_local: obs_date_local_date.or(obs_date_local_time),
             obs_date_utc: get_string("DATE-OBS").and_then(|s| {
                 DateTime::parse_from_rfc3339(&s).ok().or_else(|| {
                     NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.f")

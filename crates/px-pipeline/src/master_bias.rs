@@ -21,7 +21,7 @@ pub struct CreateMasterBiasPipeline {
 }
 
 impl CreateMasterBiasPipeline {
-    pub async fn execute(&self) -> Result<MasterBias, PipelineError> {
+    pub async fn run(&self) -> Result<MasterBias, PipelineError> {
         let raw_files = all_fits_files(&self.raw_folder)?;
         if raw_files.is_empty() {
             return Err(PipelineError::FileNotFound(
@@ -74,6 +74,7 @@ impl CreateMasterBiasPipeline {
 
         let meta = CalibrationMetadata::from(&result)?;
         let bias = MasterBias {
+            source: self.raw_folder.clone(),
             path: result,
             temperature: meta.temperature.unwrap_or_default(),
             gain: meta.gain.unwrap_or_default(),

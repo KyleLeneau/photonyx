@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use px_fits::{MasterBias, MasterDark, MasterFlat};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -20,6 +21,83 @@ pub enum ProfileConfigError {
     Parse(#[from] serde_yaml::Error),
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+pub enum CalibrationType {
+    FLAT,
+    BIAS,
+    DARK,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CalibrationMaster {
+    pub kind: CalibrationType,
+    pub source: PathBuf,
+    pub master: PathBuf,
+    pub active: bool,
+    pub temperature: f64,
+    pub gain: i64,
+    pub offset: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exposure: Option<f64>,
+    // pub binning: Binning,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
+}
+
+impl PartialEq for CalibrationMaster {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind && self.source == other.source && self.master == other.master
+    }
+}
+
+impl From<MasterBias> for CalibrationMaster {
+    fn from(value: MasterBias) -> Self {
+        Self {
+            kind: CalibrationType::BIAS,
+            source: value.source,
+            master: value.path,
+            active: true,
+            temperature: value.temperature,
+            gain: value.gain,
+            offset: value.offset,
+            exposure: None,
+            filter: None,
+        }
+    }
+}
+
+impl From<MasterDark> for CalibrationMaster {
+    fn from(value: MasterDark) -> Self {
+        Self {
+            kind: CalibrationType::DARK,
+            source: value.source,
+            master: value.path,
+            active: true,
+            temperature: value.temperature,
+            gain: value.gain,
+            offset: value.offset,
+            exposure: Some(value.exposure),
+            filter: None,
+        }
+    }
+}
+
+impl From<MasterFlat> for CalibrationMaster {
+    fn from(value: MasterFlat) -> Self {
+        Self {
+            kind: CalibrationType::FLAT,
+            source: value.source,
+            master: value.path,
+            active: true,
+            temperature: value.temperature,
+            gain: value.gain,
+            offset: value.offset,
+            exposure: None,
+            filter: Some(value.filter),
+        }
+    }
+}
+
 /// Top-level configuration stored in `px_project.yaml` at the project root.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfileConfig {
@@ -31,6 +109,10 @@ pub struct ProfileConfig {
     /// Filter names present in this profile (e.g. `["Ha", "OIII", "SII"]`).
     #[serde(default)]
     pub filters: Vec<String>,
+
+    /// Stored/created calibration masters on this profile
+    #[serde[default]]
+    pub calibration_master: Vec<CalibrationMaster>,
 }
 
 impl ProfileConfig {
@@ -39,6 +121,7 @@ impl ProfileConfig {
             name,
             description,
             filters: Vec::new(),
+            calibration_master: Vec::new(),
         }
     }
 
@@ -65,5 +148,13 @@ impl ProfileConfig {
         let content = serde_yaml::to_string(self)?;
         std::fs::write(path, content)?;
         Ok(())
+    }
+
+    pub fn add_master(&mut self, master: CalibrationMaster) -> Result<Self, ProfileConfigError> {
+        // TODO: Validation or do we need a date?
+        if !self.calibration_master.contains(&master) {
+            self.calibration_master.push(master);
+        }
+        Ok(self.clone())
     }
 }

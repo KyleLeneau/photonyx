@@ -45,6 +45,7 @@
 * [ ] build a command that monitors the advanced API of nina and renders a video of the guiding results along with a history of events on the right side
 * [ ] simple web server to recieve events of where scopes are pointed (ra, dec, fov, pixel size, name) and render an event feed on a web UI, and display a bounding box on a stellarium view. Have the cli initialize and send this data through a LIGHT file watcher.
 * [ ] need a debug tool to trigger the similar flow of a file watcher to simulate file drops by by "playing" a folder of files
+* [ ] fix why the master file names don't see the YYYY-MM-DD format in the path string
 
 
 ### Future

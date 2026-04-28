@@ -23,10 +23,7 @@ pub struct CreateMasterFlatPipeline {
 }
 
 impl CreateMasterFlatPipeline {
-    pub async fn execute(
-        &self,
-        reporter: impl PipelineReporter,
-    ) -> Result<MasterFlat, PipelineError> {
+    pub async fn run(&self, reporter: impl PipelineReporter) -> Result<MasterFlat, PipelineError> {
         let raw_files = all_fits_files(&self.raw_folder)?;
         if raw_files.is_empty() {
             return Err(PipelineError::FileNotFound(
@@ -99,6 +96,7 @@ impl CreateMasterFlatPipeline {
 
         let meta = CalibrationMetadata::from(&result)?;
         let bias = MasterFlat {
+            source: self.raw_folder.clone(),
             path: result,
             temperature: meta.temperature.unwrap_or_default(),
             gain: meta.gain.unwrap_or_default(),

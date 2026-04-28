@@ -42,13 +42,16 @@ pub(crate) async fn create_master_flat(
         .bias(args.bias)
         .filter(args.filter)
         .build()
-        .execute(DefaultPipelineReporter::from(printer))
+        .run(DefaultPipelineReporter::from(printer))
         .await?;
 
     // Pretty print the result
     printer.success(format!("Master FLAT stacking completed: {:?}", master))?;
 
     // TODO: Add this new master to the px_profile.yaml config for later uses
+    let mut profile = profile_path.load_config()?;
+    let config = profile.add_master(master.into())?;
+    profile_path.save_config(&config)?;
 
     Ok(ExitStatus::Success)
 }

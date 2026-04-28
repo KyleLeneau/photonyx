@@ -21,7 +21,7 @@ pub struct CreateMasterDarkPipeline {
 }
 
 impl CreateMasterDarkPipeline {
-    pub async fn execute(&self) -> Result<MasterDark, PipelineError> {
+    pub async fn run(&self) -> Result<MasterDark, PipelineError> {
         let raw_files = all_fits_files(&self.raw_folder)?;
         if raw_files.is_empty() {
             return Err(PipelineError::FileNotFound(
@@ -74,6 +74,7 @@ impl CreateMasterDarkPipeline {
 
         let meta = CalibrationMetadata::from(&result)?;
         let bias = MasterDark {
+            source: self.raw_folder.clone(),
             path: result,
             temperature: meta.temperature.unwrap_or_default(),
             gain: meta.gain.unwrap_or_default(),

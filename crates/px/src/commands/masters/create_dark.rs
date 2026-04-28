@@ -32,13 +32,16 @@ pub(crate) async fn create_master_dark(
         .raw_folder(args.raw_folder)
         .out_folder(out_folder)
         .build()
-        .execute()
+        .run()
         .await?;
 
     // Pretty print the result
     printer.success(format!("Master DARK stacking completed: {:?}", master))?;
 
     // TODO: Add this new master to the px_profile.yaml config for later uses
+    let mut profile = profile_path.load_config()?;
+    let config = profile.add_master(master.into())?;
+    profile_path.save_config(&config)?;
 
     Ok(ExitStatus::Success)
 }
