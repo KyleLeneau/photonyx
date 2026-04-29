@@ -45,6 +45,10 @@
 * [ ] build a command that monitors the advanced API of nina and renders a video of the guiding results along with a history of events on the right side
 * [ ] simple web server to recieve events of where scopes are pointed (ra, dec, fov, pixel size, name) and render an event feed on a web UI, and display a bounding box on a stellarium view. Have the cli initialize and send this data through a LIGHT file watcher.
 * [ ] need a debug tool to trigger the similar flow of a file watcher to simulate file drops by by "playing" a folder of files
+* [ ] move the calibrate obs steps into px-pipeline
+* [ ] move the linear stack creation into px-pipeline
+* [ ] implement the pipelines for color samples
+* [ ] implement obs find best to manage calibration links
 
 ### Bugs
 
@@ -53,6 +57,7 @@
 
 ### Future
 
+* [ ] should the project config type exist in the DB instead?
 * [ ] need to support and test multi pipes on windows now that MR is merged for support
 * [ ] need a better way to bump versions for a release
 * [ ] need a `.px` folder in the user home initialized at some point to store default or common config (https://crates.io/crates/etcetera) - can also use this for cross profile querying
