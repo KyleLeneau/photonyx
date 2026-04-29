@@ -13,6 +13,7 @@ px-cli = { workspace = true }
 px-configuration = { workspace = true }
 px-conventions = { workspace = true }
 px-fits = { workspace = true }
+px-index = { workspace = true }
 px-fs = { workspace = true }
 px-nativeui = { workspace = true }
 px-pipeline = { workspace = true }

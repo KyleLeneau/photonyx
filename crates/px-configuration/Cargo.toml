@@ -8,8 +8,6 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
-px-fits = { workspace = true }
-
 serde = { workspace = true }
 serde_yaml = { workspace = true }
 thiserror = { workspace = true }

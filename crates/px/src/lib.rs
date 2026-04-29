@@ -8,7 +8,7 @@ mod utils;
 use anyhow::Result;
 use clap::CommandFactory;
 use logging::init_logging;
-use px_conventions::profile::ProfilePath;
+use px_index::ProfileIndex;
 use siril_sys::{SIRIL_MIN_VERSION, SirilError, check_siril_version};
 use std::io::stdout;
 
@@ -57,16 +57,16 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
     // Configure the `Printer`, which controls user-facing output in the CLI.
     let printer = Printer::Default;
 
-    // Use global args to load the profile and hold result
-    let profile_path = ProfilePath::find(cli.top_level.global_args.profile);
+    // Open the profile index (finds profile dir, loads config, opens DB, runs migrations).
+    let profile_index = ProfileIndex::find_and_open(cli.top_level.global_args.profile).await;
 
-    // validate profile result and skip commands that don't need it (use `profile_path.unwrap()` later)
+    // Validate and surface the error only for commands that require a profile.
     if cli.command.requires_profile() {
-        match profile_path {
-            Ok(ref p) => {
-                printer.info(format!("using profile at: {:?}", p.root))?;
+        match profile_index {
+            Ok(ref idx) => {
+                printer.info(format!("using profile at: {:?}", idx.profile.root))?;
             }
-            Err(e) => {
+            Err(ref e) => {
                 printer.error(format!("{e} - profile is required for this command"))?;
                 return Ok(ExitStatus::Error);
             }
@@ -144,23 +144,23 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         // Masters
         Commands::Master(MasterNamespace {
             command: MasterCommand::Best(args),
-        }) => commands::find_best_master(args, printer, profile_path.unwrap()).await,
+        }) => commands::find_best_master(args, printer, profile_index.unwrap()).await,
 
         Commands::Master(MasterNamespace {
             command: MasterCommand::List(args),
-        }) => commands::list_masters(args, printer, profile_path.unwrap()).await,
+        }) => commands::list_masters(args, printer, profile_index.unwrap()).await,
 
         Commands::Master(MasterNamespace {
             command: MasterCommand::Bias(args),
-        }) => commands::create_master_bias(args, printer, profile_path.unwrap()).await,
+        }) => commands::create_master_bias(args, printer, profile_index.unwrap()).await,
 
         Commands::Master(MasterNamespace {
             command: MasterCommand::Dark(args),
-        }) => commands::create_master_dark(args, printer, profile_path.unwrap()).await,
+        }) => commands::create_master_dark(args, printer, profile_index.unwrap()).await,
 
         Commands::Master(MasterNamespace {
             command: MasterCommand::Flat(args),
-        }) => commands::create_master_flat(args, printer, profile_path.unwrap()).await,
+        }) => commands::create_master_flat(args, printer, profile_index.unwrap()).await,
 
         // Observations
         Commands::Observation(ObservationNamespace {

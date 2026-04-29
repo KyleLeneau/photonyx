@@ -190,6 +190,12 @@ impl Default for Binning {
     }
 }
 
+impl std::fmt::Display for Binning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}x{}", self.x, self.y)
+    }
+}
+
 #[derive(Debug)]
 pub struct CalibrationMetadata {
     pub obs_date_utc: Option<DateTime<FixedOffset>>,

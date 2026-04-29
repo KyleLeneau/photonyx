@@ -27,6 +27,10 @@
 * Add common master file types to `px-fits`
 * Change master flat to use `px-pipeline`
 * Created a general pipeline reporter for cli progress
+* Fixed `px profile init` to do an import if `BIAS, DARK, FLAT, LIGHT` exist with no config
+* Added sqlite DB for master and observation storage in `.px/index.db`
+* Added new `px-index` crate to interact with DB
+* Implemented `px master list` to show everything in the DB
 
 ## 0.1.3
 

@@ -32,7 +32,8 @@ impl ProfilePath {
     ///
     pub fn new(root: PathBuf) -> Result<Self, ProfileConfigError> {
         if root.exists() {
-            return Err(ProfileConfigError::AlreadyExists(root));
+            // Try to import this root if it exists already
+            return ProfilePath::import(root);
         }
 
         let bias = root.join("BIAS");
@@ -58,6 +59,41 @@ impl ProfilePath {
             light,
             projects,
         })
+    }
+
+    /// Import an existing directory as a profile.
+    ///
+    /// Requires `root` to exist plus BIAS/DARK/FLAT/LIGHT subdirs.
+    /// Creates PROJECTS if missing, then writes a fresh `px_profile.yaml`.
+    /// Returns `AlreadyExists` if a config file is already present.
+    pub fn import(root: PathBuf) -> Result<Self, ProfileConfigError> {
+        if !root.is_dir() {
+            return Err(ProfileConfigError::NotFound(root));
+        }
+        if ProfileConfig::exists(&root) {
+            return Err(ProfileConfigError::AlreadyExists(root));
+        }
+
+        let bias = root.join("BIAS");
+        let dark = root.join("DARK");
+        let flat = root.join("FLAT");
+        let light = root.join("LIGHT");
+        let projects = root.join("PROJECTS");
+
+        for dir in [&bias, &dark, &flat, &light] {
+            if !dir.is_dir() {
+                return Err(ProfileConfigError::ImportFailed(dir.clone()));
+            }
+        }
+
+        std::fs::create_dir_all(&projects)?;
+
+        let name = root.file_name().unwrap().display().to_string();
+        let desc = format!("Photonyx profile for: {}", &name);
+        let config = ProfileConfig::new(name, Some(desc));
+        config.save(&root)?;
+
+        Ok(Self { root, bias, dark, flat, light, projects })
     }
 
     /// Find the project directory and load the config file
