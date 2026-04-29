@@ -1,9 +1,15 @@
-use std::fmt::Write as _;
+use std::io;
 
 use anyhow::Result;
-use owo_colors::OwoColorize;
 use px_cli::{CalibrationImageType, ListMasterArgs};
 use px_index::{CalibrationSetRow, MasterKind, ProfileIndex};
+use ratatui::{
+    Terminal,
+    backend::CrosstermBackend,
+    layout::Constraint,
+    style::{Color, Modifier, Style},
+    widgets::{Block, Cell, Padding, Row, Table},
+};
 
 use crate::{ExitStatus, printer::Printer};
 
@@ -12,7 +18,6 @@ pub(crate) async fn list_masters(
     printer: Printer,
     index: ProfileIndex,
 ) -> Result<ExitStatus> {
-    // Map CLI filter args to MasterKind; empty = all.
     let kinds: Vec<MasterKind> = args.image_type.iter().map(cli_kind_to_master_kind).collect();
 
     let rows = if kinds.len() == 1 {
@@ -21,7 +26,6 @@ pub(crate) async fn list_masters(
         index.list_masters(None).await?
     };
 
-    // If multiple kinds were specified, filter in-memory after fetching all.
     let rows: Vec<&CalibrationSetRow> = if kinds.len() > 1 {
         rows.iter()
             .filter(|r| kinds.iter().any(|k| k.as_str() == r.kind))
@@ -35,60 +39,90 @@ pub(crate) async fn list_masters(
         return Ok(ExitStatus::Success);
     }
 
-    let mut out = printer.stdout();
+    let table_rows: Vec<Row> = rows
+        .iter()
+        .map(|row| {
+            let filter = row.filter.as_deref().unwrap_or("–").to_string();
+            let exposure = row
+                .exposure
+                .map(|e| format!("{e}s"))
+                .unwrap_or_else(|| "–".to_string());
+            let temp = row
+                .temperature
+                .map(|t| format!("{t:.1}"))
+                .unwrap_or_else(|| "–".to_string());
+            let gain = row
+                .gain
+                .map(|g| g.to_string())
+                .unwrap_or_else(|| "–".to_string());
+            let offset = row
+                .offset
+                .map(|g| g.to_string())
+                .unwrap_or_else(|| "–".to_string());
+            let binning = row
+                .binning
+                .clone()
+                .unwrap_or_else(|| "–".to_string());
 
-    // Header
-    writeln!(
-        out,
-        " {:<5}  {:<10}  {:<6}  {:<8}  {:<7}  {:<6}  {}",
-        "KIND".bold(),
-        "DATE".bold(),
-        "FILTER".bold(),
-        "EXPOSURE".bold(),
-        "TEMP °C".bold(),
-        "GAIN".bold(),
-        "MASTER PATH".bold(),
+            let kind_color = match row.kind.as_str() {
+                "bias" => Color::Cyan,
+                "dark" => Color::Yellow,
+                "flat" => Color::Green,
+                _ => Color::Reset,
+            };
+
+            Row::new([
+                Cell::from(row.kind.clone()).style(Style::default().fg(kind_color)),
+                Cell::from(row.date.clone()),
+                Cell::from(filter),
+                Cell::from(exposure),
+                Cell::from(temp),
+                Cell::from(gain),
+                Cell::from(offset),
+                Cell::from(binning),
+                Cell::from(row.master_path.clone()),
+            ])
+        })
+        .collect();
+
+    let backend = CrosstermBackend::new(io::stdout());
+    let mut terminal = Terminal::with_options(
+        backend,
+        ratatui::TerminalOptions {
+            viewport: ratatui::Viewport::Inline((rows.len() + 4) as u16),
+        },
     )?;
-    writeln!(
-        out,
-        " {:-<5}  {:-<10}  {:-<6}  {:-<8}  {:-<7}  {:-<6}  {:-<11}",
-        "", "", "", "", "", "", ""
-    )?;
 
-    for row in rows {
-        let filter = row.filter.as_deref().unwrap_or("–");
-        let exposure = row
-            .exposure
-            .map(|e| format!("{e}s"))
-            .unwrap_or_else(|| "–".to_string());
-        let temp = row
-            .temperature
-            .map(|t| format!("{t:.1}"))
-            .unwrap_or_else(|| "–".to_string());
-        let gain = row
-            .gain
-            .map(|g| g.to_string())
-            .unwrap_or_else(|| "–".to_string());
-
-        let kind_colored = match row.kind.as_str() {
-            "bias" => row.kind.cyan().to_string(),
-            "dark" => row.kind.yellow().to_string(),
-            "flat" => row.kind.green().to_string(),
-            _ => row.kind.clone(),
-        };
-
-        writeln!(
-            out,
-            " {:<5}  {:<10}  {:<6}  {:<8}  {:<7}  {:<6}  {}",
-            kind_colored,
-            row.date,
-            filter,
-            exposure,
-            temp,
-            gain,
-            row.master_path,
-        )?;
-    }
+    terminal.draw(|frame| {
+        let table = Table::new(
+            table_rows.clone(),
+            [
+                Constraint::Length(6),
+                Constraint::Length(12),
+                Constraint::Length(8),
+                Constraint::Length(10),
+                Constraint::Length(9),
+                Constraint::Length(8),
+                Constraint::Length(8),
+                Constraint::Length(8),
+                Constraint::Min(20),
+            ],
+        )
+        .block(
+            Block::bordered()
+                .title("Master Calibration Frames")
+                .padding(Padding::horizontal(1)),
+        )
+        .header(
+            Row::new(["KIND", "DATE", "FILTER", "EXPOSURE", "TEMP °C", "GAIN", "OFFSET", "BINNING", "MASTER PATH"])
+                .style(
+                    Style::default()
+                        .add_modifier(Modifier::BOLD)
+                        .add_modifier(Modifier::UNDERLINED),
+                ),
+        );
+        frame.render_widget(table, frame.area());
+    })?;
 
     Ok(ExitStatus::Success)
 }
