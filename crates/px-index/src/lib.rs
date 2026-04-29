@@ -182,7 +182,11 @@ impl ProfileIndex {
 
         sqlx::migrate!("./migrations").run(&pool).await?;
 
-        Ok(Self { profile, config, pool })
+        Ok(Self {
+            profile,
+            config,
+            pool,
+        })
     }
 
     /// Convenience: find the profile from an optional directory then open the index.
@@ -325,12 +329,12 @@ impl ProfileIndex {
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(rows.into_iter().find(|r| {
-            match (r.temperature, criteria.temperature) {
+        Ok(rows
+            .into_iter()
+            .find(|r| match (r.temperature, criteria.temperature) {
                 (Some(t), Some(target)) => (t - target).abs() <= tolerance,
                 _ => true,
-            }
-        }))
+            }))
     }
 
     /// Find the best-matching flat master for the given filter and criteria.
@@ -364,11 +368,11 @@ impl ProfileIndex {
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(rows.into_iter().find(|r| {
-            match (r.temperature, criteria.temperature) {
+        Ok(rows
+            .into_iter()
+            .find(|r| match (r.temperature, criteria.temperature) {
                 (Some(t), Some(target)) => (t - target).abs() <= tolerance,
                 _ => true,
-            }
-        }))
+            }))
     }
 }

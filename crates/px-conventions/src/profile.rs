@@ -93,7 +93,14 @@ impl ProfilePath {
         let config = ProfileConfig::new(name, Some(desc));
         config.save(&root)?;
 
-        Ok(Self { root, bias, dark, flat, light, projects })
+        Ok(Self {
+            root,
+            bias,
+            dark,
+            flat,
+            light,
+            projects,
+        })
     }
 
     /// Find the project directory and load the config file

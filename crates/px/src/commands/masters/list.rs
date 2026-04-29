@@ -18,7 +18,11 @@ pub(crate) async fn list_masters(
     printer: Printer,
     index: ProfileIndex,
 ) -> Result<ExitStatus> {
-    let kinds: Vec<MasterKind> = args.image_type.iter().map(cli_kind_to_master_kind).collect();
+    let kinds: Vec<MasterKind> = args
+        .image_type
+        .iter()
+        .map(cli_kind_to_master_kind)
+        .collect();
 
     let rows = if kinds.len() == 1 {
         index.list_masters(Some(kinds[0])).await?
@@ -59,10 +63,7 @@ pub(crate) async fn list_masters(
                 .offset
                 .map(|g| g.to_string())
                 .unwrap_or_else(|| "–".to_string());
-            let binning = row
-                .binning
-                .clone()
-                .unwrap_or_else(|| "–".to_string());
+            let binning = row.binning.clone().unwrap_or_else(|| "–".to_string());
 
             let kind_color = match row.kind.as_str() {
                 "bias" => Color::Cyan,
@@ -114,12 +115,22 @@ pub(crate) async fn list_masters(
                 .padding(Padding::horizontal(1)),
         )
         .header(
-            Row::new(["KIND", "DATE", "FILTER", "EXPOSURE", "TEMP °C", "GAIN", "OFFSET", "BINNING", "MASTER PATH"])
-                .style(
-                    Style::default()
-                        .add_modifier(Modifier::BOLD)
-                        .add_modifier(Modifier::UNDERLINED),
-                ),
+            Row::new([
+                "KIND",
+                "DATE",
+                "FILTER",
+                "EXPOSURE",
+                "TEMP °C",
+                "GAIN",
+                "OFFSET",
+                "BINNING",
+                "MASTER PATH",
+            ])
+            .style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .add_modifier(Modifier::UNDERLINED),
+            ),
         );
         frame.render_widget(table, frame.area());
     })?;
