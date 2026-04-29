@@ -130,7 +130,7 @@ impl From<MasterFlat> for CalibrationRecord {
 }
 
 /// A row returned from `calibration_set`.
-#[derive(Debug, sqlx::FromRow)]
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
 pub struct CalibrationSetRow {
     pub id: String,
     pub kind: String,

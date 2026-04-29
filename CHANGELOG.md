@@ -31,6 +31,7 @@
 * Added sqlite DB for master and observation storage in `.px/index.db`
 * Added new `px-index` crate to interact with DB
 * Implemented `px master list` to show everything in the DB
+* Add output format to `px master list` to render as json
 
 ## 0.1.3
 

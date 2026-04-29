@@ -1,7 +1,7 @@
 use std::io;
 
 use anyhow::Result;
-use px_cli::{CalibrationImageType, ListMasterArgs};
+use px_cli::{CalibrationImageType, ListMasterArgs, OutputFormat};
 use px_index::{CalibrationSetRow, MasterKind, ProfileIndex};
 use ratatui::{
     Terminal,
@@ -43,6 +43,20 @@ pub(crate) async fn list_masters(
         return Ok(ExitStatus::Success);
     }
 
+    match args.output {
+        OutputFormat::Json => {
+            let json = serde_json::to_string_pretty(&rows)?;
+            println!("{json}");
+        }
+        OutputFormat::Pretty => {
+            render_table(&rows)?;
+        }
+    }
+
+    Ok(ExitStatus::Success)
+}
+
+fn render_table(rows: &[&CalibrationSetRow]) -> anyhow::Result<()> {
     let table_rows: Vec<Row> = rows
         .iter()
         .map(|row| {
@@ -135,7 +149,7 @@ pub(crate) async fn list_masters(
         frame.render_widget(table, frame.area());
     })?;
 
-    Ok(ExitStatus::Success)
+    Ok(())
 }
 
 fn cli_kind_to_master_kind(k: &CalibrationImageType) -> MasterKind {

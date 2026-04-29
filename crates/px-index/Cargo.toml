@@ -12,6 +12,7 @@ px-configuration = { workspace = true }
 px-conventions = { workspace = true }
 px-fits = { workspace = true }
 
+serde = { workspace = true }
 sqlx = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }

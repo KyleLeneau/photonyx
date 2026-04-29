@@ -10,6 +10,10 @@ use clap::{ValueEnum, ValueHint};
 
 use px_static::EnvVars;
 
+fn absolute_path(s: &str) -> Result<PathBuf, String> {
+    std::path::absolute(s).map_err(|e| e.to_string())
+}
+
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
 pub enum CalibrationImageType {
     Bias,
@@ -308,12 +312,16 @@ pub struct ListMasterArgs {
     /// Image types to display (default: none, all)
     #[arg(short, long)]
     pub image_type: Vec<CalibrationImageType>,
+
+    /// Output format to display
+    #[arg(short, long, default_value = "pretty")]
+    pub output: OutputFormat,
 }
 
 #[derive(Args)]
 pub struct CreateBiasMasterArgs {
     /// Path to the raw folder of bias frames
-    #[arg(value_hint = ValueHint::DirPath)]
+    #[arg(value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub raw_folder: PathBuf,
 
     /// Output file extension
@@ -321,14 +329,14 @@ pub struct CreateBiasMasterArgs {
     pub ext: Option<FitFileExtension>,
 
     /// Output location for the new master bias
-    #[arg(value_hint = ValueHint::DirPath)]
+    #[arg(value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub out_folder: Option<PathBuf>,
 }
 
 #[derive(Args)]
 pub struct CreateDarkMasterArgs {
     /// Path to the raw folder of dark frames
-    #[arg(value_hint = ValueHint::DirPath)]
+    #[arg(value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub raw_folder: PathBuf,
 
     /// Output file extension
@@ -336,14 +344,14 @@ pub struct CreateDarkMasterArgs {
     pub ext: Option<FitFileExtension>,
 
     /// Output location for the new master dark
-    #[arg(value_hint = ValueHint::DirPath)]
+    #[arg(value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub out_folder: Option<PathBuf>,
 }
 
 #[derive(Args)]
 pub struct CreateFlatMasterArgs {
     /// Path to the raw folder of flat frames
-    #[arg(value_hint = ValueHint::DirPath)]
+    #[arg(value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub raw_folder: PathBuf,
 
     /// Output file extension
@@ -351,11 +359,11 @@ pub struct CreateFlatMasterArgs {
     pub ext: Option<FitFileExtension>,
 
     /// Output location for the new master flat
-    #[arg(value_hint = ValueHint::DirPath)]
+    #[arg(value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub out_folder: Option<PathBuf>,
 
     /// Location of the master BIAS
-    #[arg(short, long, value_hint = ValueHint::FilePath)]
+    #[arg(short, long, value_hint = ValueHint::FilePath, value_parser = absolute_path)]
     pub bias: PathBuf,
 
     /// The name of the filter for the master flat
@@ -388,7 +396,7 @@ pub struct ListObservationArgs {}
 #[derive(Args, Debug)]
 pub struct CalibrateObservationArgs {
     /// Path to the raw folder of light frames
-    #[arg(value_hint = ValueHint::DirPath)]
+    #[arg(value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub raw_folder: PathBuf,
 
     /// Clean or remove the match calibrated folder from a previous run
@@ -400,7 +408,7 @@ pub struct CalibrateObservationArgs {
     pub ext: Option<FitFileExtension>,
 
     /// Output location for the calibrated folder (default: peer to input)
-    #[arg(value_hint = ValueHint::DirPath)]
+    #[arg(value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub out_folder: Option<PathBuf>,
 
     /// Specify a filter for the observation if unable to find
@@ -409,22 +417,22 @@ pub struct CalibrateObservationArgs {
 
     // TODO: find best matching masters flag and override the input
     /// Location of the master BIAS
-    #[arg(long, value_hint = ValueHint::FilePath)]
+    #[arg(long, value_hint = ValueHint::FilePath, value_parser = absolute_path)]
     pub bias: Option<PathBuf>,
 
     /// Location of the master DARK
-    #[arg(long, value_hint = ValueHint::FilePath)]
+    #[arg(long, value_hint = ValueHint::FilePath, value_parser = absolute_path)]
     pub dark: Option<PathBuf>,
 
     /// Location of the master FLAT
-    #[arg(long, value_hint = ValueHint::FilePath)]
+    #[arg(long, value_hint = ValueHint::FilePath, value_parser = absolute_path)]
     pub flat: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
 pub struct PreviewObservationArgs {
     /// Path to the folder of light frames to preview
-    #[arg(value_hint = ValueHint::DirPath)]
+    #[arg(value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub folder: PathBuf,
 
     /// Autoplay interval in seconds between frames
@@ -462,7 +470,7 @@ pub enum ProjectCommand {
 #[derive(Args, Debug)]
 pub struct InitProjectArgs {
     /// The path to use for the project (created if it does not exist)
-    #[arg(value_hint = ValueHint::DirPath)]
+    #[arg(value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub path: PathBuf,
 
     /// The name of the project (defaults to the directory name)
@@ -477,11 +485,11 @@ pub struct InitProjectArgs {
 #[derive(Args, Debug)]
 pub struct AddProjectArgs {
     /// The path to the project; defaults to searching the current directory and its parents
-    #[arg(short, long, value_hint = ValueHint::DirPath)]
+    #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub project: Option<PathBuf>,
 
     /// The path to the RAW observation folder to add
-    #[arg(value_hint = ValueHint::DirPath)]
+    #[arg(value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub obs_path: PathBuf,
 
     /// Override the filter for this observation (auto-detected from FITS headers if not set)
@@ -499,20 +507,20 @@ pub struct ListProjectArgs {}
 #[derive(Args, Debug)]
 pub struct StackProjectArgs {
     /// The path to the project; defaults to searching the current directory and its parents
-    #[arg(short, long, value_hint = ValueHint::DirPath)]
+    #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub project: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
 pub struct AlignProjectArgs {
     /// The path to the project; defaults to searching the current directory and its parents
-    #[arg(short, long, value_hint = ValueHint::DirPath)]
+    #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub project: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
 pub struct SampleProjectArgs {
     /// The path to the project; defaults to searching the current directory and its parents
-    #[arg(short, long, value_hint = ValueHint::DirPath)]
+    #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub project: Option<PathBuf>,
 }

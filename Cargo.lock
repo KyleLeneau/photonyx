@@ -4965,6 +4965,7 @@ dependencies = [
  "px-configuration",
  "px-conventions",
  "px-fits",
+ "serde",
  "sqlx",
  "thiserror 1.0.69",
  "tokio",

@@ -9,7 +9,7 @@ pub use model::*;
 // * doesn't write images well but that's ok
 // * can support wasm if all data loaded outside of wasm (fetch)
 
-use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use fitsrs::card::Value;
 use fitsrs::{
     Fits, HDU, fits,
@@ -243,11 +243,12 @@ impl CalibrationMetadata {
                 .and_then(|caps| NaiveDateTime::parse_from_str(&caps[1], "%Y%m%d-%H%M%S").ok())
         });
 
-        let obs_date_local_date = path.to_str().and_then(|stem| {
+        let obs_date_local_date = path.parent().and_then(|p| p.to_str()).and_then(|parent| {
             Regex::new(r"(\d{4}-\d{2}-\d{2})")
                 .ok()?
-                .captures(stem)
-                .and_then(|caps| NaiveDateTime::parse_from_str(&caps[1], "%Y-%m-%d").ok())
+                .captures(parent)
+                .and_then(|caps| NaiveDate::parse_from_str(&caps[1], "%Y-%m-%d").ok())
+                .and_then(|d| d.and_hms_opt(0, 0, 0))
         });
 
         let binning = Binning {
