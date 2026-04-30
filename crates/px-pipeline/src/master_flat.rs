@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use px_fits::{CalibrationMetadata, MasterFlat, all_fits_files};
 use siril_sys::{
-    Builder, FitsExt,
-    commands::{Calibrate, Convert, Stack},
+    Builder, FitsExt, UpdateKeyMethod,
+    commands::{Calibrate, Convert, SequpdateKey, Stack},
     siril_ext::CdExt,
 };
 
@@ -58,6 +58,17 @@ impl CreateMasterFlatPipeline {
 
         // Return to working directory
         siril.cd(&siril.initial_directory()).await?;
+
+        // Add the filter to the sequence so it ends up in final stack?
+        siril
+            .execute(
+                &SequpdateKey::builder(
+                    "flat_",
+                    UpdateKeyMethod::Set("FILTER".to_string(), self.filter.clone(), None),
+                )
+                .build(),
+            )
+            .await?;
 
         // Calibrate the flat frames using the master bias
         let id = reporter.step_started("[2/3] Calibrating flat frames...");

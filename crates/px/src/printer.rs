@@ -108,6 +108,7 @@ impl Printer {
         )
     }
 
+    #[allow(unused)]
     pub(crate) fn spinner(&self, msg: impl Into<String>) -> ProgressBar {
         let pb = ProgressBar::new_spinner();
         pb.set_draw_target(self.target());

@@ -1,15 +1,11 @@
 use anyhow::Result;
 use px_cli::CalibrateObservationArgs;
 use px_conventions::observation::ObservationPath;
-use px_fits::{all_color_raw_frames, all_fits_files};
-use px_fs::OptionPath;
-use siril_sys::{
-    Builder, ConversionFile,
-    commands::{Calibrate, Convert},
-    siril_ext::CdExt,
-};
+use px_fits::all_fits_files;
+use px_pipeline::calibrate_observation::CalibrateObservationSetPipeline;
+use siril_sys::Builder;
 
-use crate::{ExitStatus, printer::Printer, utils::to_fits_ext};
+use crate::{ExitStatus, printer::Printer, reporters::DefaultPipelineReporter, utils::to_fits_ext};
 
 pub(crate) async fn calibrate_observation(
     args: CalibrateObservationArgs,
@@ -80,63 +76,24 @@ pub(crate) async fn calibrate_observation(
         return Ok(ExitStatus::Error);
     }
 
-    let all_color = all_color_raw_frames(&raw_files)?;
-    printer.info(format!("Raw images are OSC: {all_color}"))?;
-
-    let sp = printer.spinner("[1/3] Converting light frames...");
-
-    // Setup siril
-    let ext = to_fits_ext(args.ext);
-    let mut siril = Builder::default()
-        .output_sink(siril_sys::OutputSink::Discard)
-        .use_extension(ext.clone())
+    let light = CalibrateObservationSetPipeline::builder()
+        .ext(to_fits_ext(args.ext))
+        .siril_builder(Builder::default().output_sink(siril_sys::OutputSink::Discard))
+        .raw_folder(args.raw_folder)
+        .out_folder(resolved_out_folder.clone())
+        .maybe_bias(args.bias)
+        .maybe_dark(args.dark)
+        .maybe_flat(args.flat)
         .build()
+        .run(DefaultPipelineReporter::from(printer))
         .await?;
 
-    // Move to the raw folder to convert into a sequence
-    siril.cd(&args.raw_folder).await?;
-    siril
-        .execute(
-            &Convert::builder("light_")
-                .output_dir(siril.initial_directory())
-                .build(),
-        )
-        .await
-        .inspect_err(|_| sp.abandon_with_message("✗ Convert failed"))?;
-
-    // Return to working directory
-    siril.cd(&siril.initial_directory()).await?;
-    sp.finish_with_message("[1/3] Converted flat frames");
-
-    let sp = printer.spinner("[2/3] Calibrating light frames...");
-
-    // Run calibration
-    siril
-        .execute(
-            &Calibrate::builder("light_")
-                .maybe_bias(args.bias.some_string())
-                .maybe_dark(args.dark.some_string())
-                .maybe_flat(args.flat.some_string())
-                .cfa(all_color)
-                .debayer(all_color)
-                .equalize_cfa(all_color)
-                .build(),
-        )
-        .await
-        .inspect_err(|_| sp.abandon_with_message("✗ Calibration failed"))?;
-    sp.finish_with_message("[2/3] Calibrated light frames");
-
-    let sp = printer.spinner("[3/3] Moving calibrated light frames...");
-
-    // Load the conversion file and move final files to output
-    let conversion_file = siril.initial_directory().join("light_conversion.txt");
-    let conversion = ConversionFile::new(conversion_file)?;
-    conversion.move_converted_files(&resolved_out_folder, "pp_")?;
-
-    sp.finish_with_message("[3/3] Calibrated light frames moved");
     printer.success(format!(
         "Calibration of light frames completed: {:?}",
-        resolved_out_folder
+        light
     ))?;
+
+    // TODO: Register in ProfileIndex
+
     Ok(ExitStatus::Success)
 }

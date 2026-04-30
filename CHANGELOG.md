@@ -32,6 +32,9 @@
 * Added new `px-index` crate to interact with DB
 * Implemented `px master list` to show everything in the DB
 * Add output format to `px master list` to render as json
+* Ensure that the passed in filter to `px master flat` ends up in the resulting master fits header
+* Move siril calibrate steps into `px-pipeline`
+
 
 ## 0.1.3
 

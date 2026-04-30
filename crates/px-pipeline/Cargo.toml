@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 px-fits = { workspace = true}
+px-fs = { workspace = true}
 siril-sys = { workspace = true }
 
 bon = { workspace = true }

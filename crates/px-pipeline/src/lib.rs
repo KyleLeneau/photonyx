@@ -1,3 +1,4 @@
+pub mod calibrate_observation;
 pub mod error;
 pub mod master_bias;
 pub mod master_dark;

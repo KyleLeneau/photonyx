@@ -36,3 +36,15 @@ pub struct MasterFlat {
     pub filter: String,
     pub binning: Binning, // TODO: rotation
 }
+
+#[derive(Debug)]
+pub struct CalibratedLight {
+    pub source: PathBuf,
+    pub path: PathBuf,
+    pub temperature: f64,
+    pub gain: i64,
+    pub offset: i64,
+    pub exposure: f64,
+    pub filter: String,
+    pub binning: Binning, // TODO: rotation
+}
