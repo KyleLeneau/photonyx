@@ -36,6 +36,7 @@
 * Move siril calibrate steps into `px-pipeline`
 * Added observation to ProfileIndex on completion
 * Reworked the meta models in `px-fits` and how headers and capture dates were parsed
+* Change `--bias` to be optional on `px master flat` and allow the bias to be found in the index
 
 ## 0.1.3
 

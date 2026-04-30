@@ -363,9 +363,9 @@ pub struct CreateFlatMasterArgs {
     #[arg(value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub out_folder: Option<PathBuf>,
 
-    /// Location of the master BIAS
+    /// Location of the master BIAS (auto-selected from index when omitted)
     #[arg(short, long, value_hint = ValueHint::FilePath, value_parser = absolute_path)]
-    pub bias: PathBuf,
+    pub bias: Option<PathBuf>,
 
     /// The name of the filter for the master flat
     #[arg(short, long, value_hint = ValueHint::Other)]
