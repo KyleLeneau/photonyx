@@ -1,8 +1,6 @@
-use std::io;
-
 use anyhow::Result;
 use px_cli::{CalibrationImageType, ListMasterArgs, OutputFormat};
-use px_index::{CalibrationSetRow, MasterKind, ProfileIndex};
+use px_index::{CalibrationRecord, MasterKind, ProfileIndex};
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
@@ -10,6 +8,8 @@ use ratatui::{
     style::{Color, Modifier, Style},
     widgets::{Block, Cell, Padding, Row, Table},
 };
+use std::fmt::Write;
+use std::io;
 
 use crate::{ExitStatus, printer::Printer};
 
@@ -30,10 +30,8 @@ pub(crate) async fn list_masters(
         index.list_masters(None).await?
     };
 
-    let rows: Vec<&CalibrationSetRow> = if kinds.len() > 1 {
-        rows.iter()
-            .filter(|r| kinds.iter().any(|k| k.as_str() == r.kind))
-            .collect()
+    let rows: Vec<&CalibrationRecord> = if kinds.len() > 1 {
+        rows.iter().filter(|r| kinds.contains(&r.kind)).collect()
     } else {
         rows.iter().collect()
     };
@@ -46,7 +44,7 @@ pub(crate) async fn list_masters(
     match args.output {
         OutputFormat::Json => {
             let json = serde_json::to_string_pretty(&rows)?;
-            println!("{json}");
+            writeln!(printer.stdout(), "{json}")?;
         }
         OutputFormat::Pretty => {
             render_table(&rows)?;
@@ -56,7 +54,7 @@ pub(crate) async fn list_masters(
     Ok(ExitStatus::Success)
 }
 
-fn render_table(rows: &[&CalibrationSetRow]) -> anyhow::Result<()> {
+fn render_table(rows: &[&CalibrationRecord]) -> anyhow::Result<()> {
     let table_rows: Vec<Row> = rows
         .iter()
         .map(|row| {
@@ -79,15 +77,14 @@ fn render_table(rows: &[&CalibrationSetRow]) -> anyhow::Result<()> {
                 .unwrap_or_else(|| "–".to_string());
             let binning = row.binning.clone().unwrap_or_else(|| "–".to_string());
 
-            let kind_color = match row.kind.as_str() {
-                "bias" => Color::Cyan,
-                "dark" => Color::Yellow,
-                "flat" => Color::Green,
-                _ => Color::Reset,
+            let kind_color = match row.kind {
+                MasterKind::Bias => Color::Cyan,
+                MasterKind::Dark => Color::Yellow,
+                MasterKind::Flat => Color::Green,
             };
 
             Row::new([
-                Cell::from(row.kind.clone()).style(Style::default().fg(kind_color)),
+                Cell::from(row.kind.as_str()).style(Style::default().fg(kind_color)),
                 Cell::from(row.date.clone()),
                 Cell::from(filter),
                 Cell::from(exposure),

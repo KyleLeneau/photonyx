@@ -2,6 +2,7 @@ use anyhow::Result;
 use px_cli::CalibrateObservationArgs;
 use px_conventions::observation::ObservationPath;
 use px_fits::all_fits_files;
+use px_index::ProfileIndex;
 use px_pipeline::calibrate_observation::CalibrateObservationSetPipeline;
 use siril_sys::Builder;
 
@@ -10,6 +11,7 @@ use crate::{ExitStatus, printer::Printer, reporters::DefaultPipelineReporter, ut
 pub(crate) async fn calibrate_observation(
     args: CalibrateObservationArgs,
     printer: Printer,
+    index: ProfileIndex,
 ) -> Result<ExitStatus> {
     printer.info("Observation calibration starting")?;
     printer.info(format!("clean output: {}", args.clean))?;
@@ -93,7 +95,8 @@ pub(crate) async fn calibrate_observation(
         light
     ))?;
 
-    // TODO: Register in ProfileIndex
+    index.register_observation(light).await?;
+    printer.info("Observation registered in profile index")?;
 
     Ok(ExitStatus::Success)
 }

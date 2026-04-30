@@ -4,7 +4,9 @@
 
 use std::path::PathBuf;
 
-use px_fits::{CalibratedLight, CalibrationMetadata, all_color_raw_frames, all_fits_files};
+use px_fits::{
+    CalibratedLight, CalibrationMetadata, ObservationMetadata, all_color_raw_frames, all_fits_files,
+};
 use px_fs::OptionPath;
 use siril_sys::{
     Builder, ConversionFile, FitsExt,
@@ -88,26 +90,31 @@ impl CalibrateObservationSetPipeline {
         }
 
         // Try to get the filter from calibrated file OR flat
-        let pp_files = all_fits_files(&self.out_folder)?;
-        let first = pp_files.first().expect("missing first pp_ file");
-        let pp_meta = CalibrationMetadata::from(first)?;
-
         let flat_filter = self
             .flat
             .as_deref()
             .and_then(|f| CalibrationMetadata::from(f).ok())
             .and_then(|m| m.filter);
+        let pp_files = all_fits_files(&self.out_folder)?;
+        let obs_meta = ObservationMetadata::from(pp_files)?;
 
         // Get one of the converted files to load metadata
         let light = CalibratedLight {
             source: self.raw_folder.clone(),
             path: self.out_folder.clone(),
-            temperature: pp_meta.temperature.unwrap_or_default(),
-            gain: pp_meta.gain.unwrap_or_default(),
-            offset: pp_meta.offset.unwrap_or_default(),
-            exposure: pp_meta.exposure.unwrap_or_default(),
-            filter: pp_meta.filter.or(flat_filter).unwrap_or_default(),
-            binning: pp_meta.binning,
+            temperature: obs_meta.temperature.unwrap_or_default(),
+            gain: obs_meta.gain.unwrap_or_default(),
+            offset: obs_meta.offset.unwrap_or_default(),
+            exposure: obs_meta.exposure.unwrap_or_default(),
+            filter: obs_meta.filter.clone().or(flat_filter).unwrap_or_default(),
+            binning: obs_meta.binning,
+            frame_count: obs_meta.frame_count,
+            target_name: obs_meta.target_name.clone(),
+            target_ra: obs_meta.target_ra,
+            target_dec: obs_meta.target_dec,
+            capture_date: obs_meta.capture_date().expect("Missing capture date"),
+            site_lat: obs_meta.site_lat,
+            site_long: obs_meta.site_long,
         };
 
         Ok(light)

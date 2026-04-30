@@ -8,7 +8,9 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+chrono = { workspace = true }
 dunce = { workspace = true }
+regex = { workspace = true }
 
 [lints]
 workspace = true

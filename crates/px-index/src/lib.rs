@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use chrono::Utc;
 use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use px_configuration::{ProfileConfig, ProfileConfigError};
 use px_conventions::profile::ProfilePath;
-use px_fits::{MasterBias, MasterDark, MasterFlat};
+use px_fits::{CalibratedLight, MasterBias, MasterDark, MasterFlat};
 
 #[derive(Debug, Error)]
 pub enum ProfileIndexError {
@@ -24,7 +24,8 @@ pub enum ProfileIndexError {
     Io(#[from] std::io::Error),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
+#[sqlx(type_name = "TEXT", rename_all = "lowercase")]
 pub enum MasterKind {
     Bias,
     Dark,
@@ -41,8 +42,52 @@ impl MasterKind {
     }
 }
 
-/// A record ready to be inserted into `calibration_set`.
-#[derive(Debug)]
+/// A record ready to be inserted into `observation_set`.
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct ObservationRecord {
+    pub id: String,
+    pub target_name: String,
+    pub target_ra: Option<f64>,
+    pub target_dec: Option<f64>,
+    pub date: String,
+    pub filter: String,
+    pub exposure: f64,
+    pub frame_count: Option<i64>,
+    pub temperature: Option<f64>,
+    pub gain: Option<i64>,
+    pub offset: Option<i64>,
+    pub binning: Option<String>,
+    pub raw_path: String,
+    pub calibrated_path: Option<String>,
+    pub site_lat: Option<f64>,
+    pub site_long: Option<f64>,
+}
+
+impl From<CalibratedLight> for ObservationRecord {
+    fn from(l: CalibratedLight) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            target_name: l.target_name,
+            target_ra: l.target_ra,
+            target_dec: l.target_dec,
+            date: l.capture_date.format("%Y-%m-%d").to_string(),
+            filter: l.filter,
+            exposure: l.exposure,
+            frame_count: Some(l.frame_count as i64),
+            temperature: Some(l.temperature),
+            gain: Some(l.gain),
+            offset: Some(l.offset),
+            binning: Some(l.binning.to_string()),
+            raw_path: l.source.to_string_lossy().into_owned(),
+            calibrated_path: Some(l.path.to_string_lossy().into_owned()),
+            site_lat: l.site_lat,
+            site_long: l.site_long,
+        }
+    }
+}
+
+/// A record for `calibration_set` — used for both inserts and query results.
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
 pub struct CalibrationRecord {
     pub id: String,
     pub kind: MasterKind,
@@ -58,29 +103,15 @@ pub struct CalibrationRecord {
     pub filter: Option<String>,
 }
 
-/// Extract YYYY-MM-DD from the start of a filename, falling back to today.
-fn date_from_path(path: &Path) -> String {
-    path.file_name()
-        .and_then(|n| n.to_str())
-        .filter(|n| {
-            n.len() >= 10
-                && n.as_bytes()[4] == b'-'
-                && n.as_bytes()[7] == b'-'
-                && n[..4].chars().all(|c| c.is_ascii_digit())
-        })
-        .map(|n| n[..10].to_string())
-        .unwrap_or_else(|| Utc::now().format("%Y-%m-%d").to_string())
-}
-
 impl From<MasterBias> for CalibrationRecord {
     fn from(m: MasterBias) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             kind: MasterKind::Bias,
-            date: date_from_path(&m.path),
+            date: m.capture_date.format("%Y-%m-%d").to_string(),
             source_path: m.source.to_string_lossy().into_owned(),
             master_path: m.path.to_string_lossy().into_owned(),
-            frame_count: None,
+            frame_count: Some(m.frame_count as i64),
             temperature: Some(m.temperature),
             gain: Some(m.gain),
             offset: Some(m.offset),
@@ -96,10 +127,10 @@ impl From<MasterDark> for CalibrationRecord {
         Self {
             id: Uuid::new_v4().to_string(),
             kind: MasterKind::Dark,
-            date: date_from_path(&m.path),
+            date: m.capture_date.format("%Y-%m-%d").to_string(),
             source_path: m.source.to_string_lossy().into_owned(),
             master_path: m.path.to_string_lossy().into_owned(),
-            frame_count: None,
+            frame_count: Some(m.frame_count as i64),
             temperature: Some(m.temperature),
             gain: Some(m.gain),
             offset: Some(m.offset),
@@ -115,10 +146,10 @@ impl From<MasterFlat> for CalibrationRecord {
         Self {
             id: Uuid::new_v4().to_string(),
             kind: MasterKind::Flat,
-            date: date_from_path(&m.path),
+            date: m.capture_date.format("%Y-%m-%d").to_string(),
             source_path: m.source.to_string_lossy().into_owned(),
             master_path: m.path.to_string_lossy().into_owned(),
-            frame_count: None,
+            frame_count: Some(m.frame_count as i64),
             temperature: Some(m.temperature),
             gain: Some(m.gain),
             offset: Some(m.offset),
@@ -127,23 +158,6 @@ impl From<MasterFlat> for CalibrationRecord {
             filter: Some(m.filter),
         }
     }
-}
-
-/// A row returned from `calibration_set`.
-#[derive(Debug, serde::Serialize, sqlx::FromRow)]
-pub struct CalibrationSetRow {
-    pub id: String,
-    pub kind: String,
-    pub source_path: String,
-    pub master_path: String,
-    pub date: String,
-    pub frame_count: Option<i64>,
-    pub temperature: Option<f64>,
-    pub gain: Option<i64>,
-    pub offset: Option<i64>,
-    pub binning: Option<String>,
-    pub exposure: Option<f64>,
-    pub filter: Option<String>,
 }
 
 /// Criteria for best-match lookup against `calibration_set`.
@@ -267,14 +281,87 @@ impl ProfileIndex {
         Ok(r.id)
     }
 
+    /// Insert or update a calibrated observation in the index. Returns the row id.
+    /// Upserts by `raw_path`: if the path already exists the metadata is refreshed in place.
+    pub async fn register_observation(
+        &self,
+        record: impl Into<ObservationRecord>,
+    ) -> Result<String, ProfileIndexError> {
+        let r = record.into();
+
+        let existing: Option<(String,)> =
+            sqlx::query_as("SELECT id FROM observation_set WHERE raw_path = ?")
+                .bind(&r.raw_path)
+                .fetch_optional(&self.pool)
+                .await?;
+
+        if let Some((id,)) = existing {
+            sqlx::query(
+                "UPDATE observation_set
+                 SET target_name=?, target_ra=?, target_dec=?, date=?, filter=?, exposure=?,
+                     frame_count=?, temperature=?, gain=?, offset=?, binning=?, calibrated_path=?,
+                     site_lat=?, site_long=?
+                 WHERE id=?",
+            )
+            .bind(&r.target_name)
+            .bind(r.target_ra)
+            .bind(r.target_dec)
+            .bind(&r.date)
+            .bind(&r.filter)
+            .bind(r.exposure)
+            .bind(r.frame_count)
+            .bind(r.temperature)
+            .bind(r.gain)
+            .bind(r.offset)
+            .bind(&r.binning)
+            .bind(&r.calibrated_path)
+            .bind(r.site_lat)
+            .bind(r.site_long)
+            .bind(&id)
+            .execute(&self.pool)
+            .await?;
+
+            return Ok(id);
+        }
+
+        sqlx::query(
+            "INSERT INTO observation_set
+             (id, target_name, target_ra, target_dec, date, filter, exposure,
+              frame_count, temperature, gain, offset, binning, raw_path, calibrated_path,
+              site_lat, site_long, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&r.id)
+        .bind(&r.target_name)
+        .bind(r.target_ra)
+        .bind(r.target_dec)
+        .bind(&r.date)
+        .bind(&r.filter)
+        .bind(r.exposure)
+        .bind(r.frame_count)
+        .bind(r.temperature)
+        .bind(r.gain)
+        .bind(r.offset)
+        .bind(&r.binning)
+        .bind(&r.raw_path)
+        .bind(&r.calibrated_path)
+        .bind(r.site_lat)
+        .bind(r.site_long)
+        .bind(Utc::now().to_rfc3339())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(r.id)
+    }
+
     /// List all calibration masters, optionally filtered by kind.
     pub async fn list_masters(
         &self,
         kind: Option<MasterKind>,
-    ) -> Result<Vec<CalibrationSetRow>, ProfileIndexError> {
-        let rows: Vec<CalibrationSetRow> = match kind {
+    ) -> Result<Vec<CalibrationRecord>, ProfileIndexError> {
+        let rows: Vec<CalibrationRecord> = match kind {
             Some(k) => {
-                sqlx::query_as::<_, CalibrationSetRow>(
+                sqlx::query_as::<_, CalibrationRecord>(
                     "SELECT id, kind, source_path, master_path, date, frame_count,
                             temperature, gain, offset, binning, exposure, filter
                      FROM calibration_set WHERE kind = ?",
@@ -284,7 +371,7 @@ impl ProfileIndex {
                 .await?
             }
             None => {
-                sqlx::query_as::<_, CalibrationSetRow>(
+                sqlx::query_as::<_, CalibrationRecord>(
                     "SELECT id, kind, source_path, master_path, date, frame_count,
                             temperature, gain, offset, binning, exposure, filter
                      FROM calibration_set ORDER BY date DESC",
@@ -303,10 +390,10 @@ impl ProfileIndex {
         &self,
         exposure: f64,
         criteria: &MatchCriteria,
-    ) -> Result<Option<CalibrationSetRow>, ProfileIndexError> {
+    ) -> Result<Option<CalibrationRecord>, ProfileIndexError> {
         let tolerance = criteria.temperature_tolerance.unwrap_or(2.0);
 
-        let rows: Vec<CalibrationSetRow> = sqlx::query_as::<_, CalibrationSetRow>(
+        let rows: Vec<CalibrationRecord> = sqlx::query_as::<_, CalibrationRecord>(
             "SELECT id, kind, source_path, master_path, date, frame_count,
                     temperature, gain, offset, binning, exposure, filter
              FROM calibration_set
@@ -342,10 +429,10 @@ impl ProfileIndex {
         &self,
         filter: &str,
         criteria: &MatchCriteria,
-    ) -> Result<Option<CalibrationSetRow>, ProfileIndexError> {
+    ) -> Result<Option<CalibrationRecord>, ProfileIndexError> {
         let tolerance = criteria.temperature_tolerance.unwrap_or(2.0);
 
-        let rows: Vec<CalibrationSetRow> = sqlx::query_as::<_, CalibrationSetRow>(
+        let rows: Vec<CalibrationRecord> = sqlx::query_as::<_, CalibrationRecord>(
             "SELECT id, kind, source_path, master_path, date, frame_count,
                     temperature, gain, offset, binning, exposure, filter
              FROM calibration_set

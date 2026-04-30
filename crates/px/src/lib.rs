@@ -169,7 +169,7 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
 
         Commands::Observation(ObservationNamespace {
             command: ObservationCommand::Calibrate(args),
-        }) => commands::calibrate_observation(args, printer).await,
+        }) => commands::calibrate_observation(args, printer, profile_index.unwrap()).await,
 
         Commands::Observation(ObservationNamespace {
             command: ObservationCommand::Preview(args),

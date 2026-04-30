@@ -19,6 +19,7 @@ px-nativeui = { workspace = true }
 px-pipeline = { workspace = true }
 siril-sys = { workspace = true }
 
+chrono = { workspace = true }
 anstream = { workspace = true }
 anyhow = { workspace = true }
 axoupdater = { workspace = true, features = [

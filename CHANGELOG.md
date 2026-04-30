@@ -34,7 +34,8 @@
 * Add output format to `px master list` to render as json
 * Ensure that the passed in filter to `px master flat` ends up in the resulting master fits header
 * Move siril calibrate steps into `px-pipeline`
-
+* Added observation to ProfileIndex on completion
+* Reworked the meta models in `px-fits` and how headers and capture dates were parsed
 
 ## 0.1.3
 

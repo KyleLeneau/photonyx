@@ -1,6 +1,10 @@
 pub mod display;
+mod meta;
 mod model;
 
+use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeZone, Utc};
+use fitsrs::hdu::header::Header;
+pub use meta::*;
 pub use model::*;
 
 // Soon to be wrapper around https://github.com/cds-astro/fitsrs
@@ -9,13 +13,11 @@ pub use model::*;
 // * doesn't write images well but that's ok
 // * can support wasm if all data loaded outside of wasm (fetch)
 
-use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use fitsrs::card::Value;
 use fitsrs::{
     Fits, HDU, fits,
     hdu::header::{ValueMapIter, extension::image::Image},
 };
-use regex::Regex;
 use std::io;
 use std::path::Path;
 use std::{
@@ -152,6 +154,8 @@ impl Display for FitsFile {
     }
 }
 
+/// Utility to check if all the files in a path are .fit or .fits
+///
 pub fn all_fits_files(raw_folder: &Path) -> io::Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     for ext in &["fit", "fits"] {
@@ -165,6 +169,8 @@ pub fn all_fits_files(raw_folder: &Path) -> io::Result<Vec<PathBuf>> {
     Ok(files)
 }
 
+/// Utility to check if all the files are fits files with 3 channels of Bayered images
+///
 pub fn all_color_raw_frames(raw_files: &Vec<PathBuf>) -> Result<bool, FitsError> {
     let mut all_color = true;
     for raw_file in raw_files {
@@ -179,7 +185,7 @@ pub fn all_color_raw_frames(raw_files: &Vec<PathBuf>) -> Result<bool, FitsError>
 }
 
 #[allow(unused)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Binning {
     x: u8,
     y: u8,
@@ -196,118 +202,51 @@ impl std::fmt::Display for Binning {
     }
 }
 
-#[derive(Debug)]
-pub struct CalibrationMetadata {
-    pub obs_date_utc: Option<DateTime<FixedOffset>>,
-    pub obs_date_local: Option<NaiveDateTime>,
-    pub exposure: Option<f64>,
-    pub temperature: Option<f64>,
-    pub filter: Option<String>,
-    pub offset: Option<i64>,
-    pub gain: Option<i64>,
-    pub binning: Binning,
-    // TODO: rotation
+pub(crate) trait HeaderUtil {
+    fn get_string(&self, key: &str) -> Option<String>;
+    fn get_float(&self, key: &str) -> Option<f64>;
+    fn get_int(&self, key: &str) -> Option<i64>;
+    fn get_date_utc(&self, key: &str) -> Option<DateTime<FixedOffset>>;
+    fn get_binning(&self) -> Binning;
 }
 
-impl CalibrationMetadata {
-    pub fn from(path: &Path) -> Result<Self, FitsError> {
-        let file = FitsFile::new(path.to_path_buf())?;
-        let header = file.primary_hdu.get_header();
+impl HeaderUtil for Header<Image> {
+    fn get_string(&self, key: &str) -> Option<String> {
+        match self.get(key)? {
+            Value::String { value, .. } => Some(value.clone()),
+            _ => None,
+        }
+    }
 
-        let get_string = |key: &str| -> Option<String> {
-            match header.get(key)? {
-                Value::String { value, .. } => Some(value.clone()),
-                _ => None,
-            }
-        };
+    fn get_float(&self, key: &str) -> Option<f64> {
+        match self.get(key)? {
+            Value::Float { value, .. } => Some(*value),
+            Value::Integer { value, .. } => Some(*value as f64),
+            _ => None,
+        }
+    }
 
-        let get_float = |key: &str| -> Option<f64> {
-            match header.get(key)? {
-                Value::Float { value, .. } => Some(*value),
-                Value::Integer { value, .. } => Some(*value as f64),
-                _ => None,
-            }
-        };
+    fn get_int(&self, key: &str) -> Option<i64> {
+        match self.get(key)? {
+            Value::Integer { value, .. } => Some(*value),
+            _ => None,
+        }
+    }
 
-        let get_int = |key: &str| -> Option<i64> {
-            match header.get(key)? {
-                Value::Integer { value, .. } => Some(*value),
-                _ => None,
-            }
-        };
-
-        let obs_date_local_time = path.file_stem().and_then(|s| s.to_str()).and_then(|stem| {
-            Regex::new(r"(\d{8}-\d{6})")
-                .ok()?
-                .captures(stem)
-                .and_then(|caps| NaiveDateTime::parse_from_str(&caps[1], "%Y%m%d-%H%M%S").ok())
-        });
-
-        let obs_date_local_date = path.parent().and_then(|p| p.to_str()).and_then(|parent| {
-            Regex::new(r"(\d{4}-\d{2}-\d{2})")
-                .ok()?
-                .captures(parent)
-                .and_then(|caps| NaiveDate::parse_from_str(&caps[1], "%Y-%m-%d").ok())
-                .and_then(|d| d.and_hms_opt(0, 0, 0))
-        });
-
-        let binning = Binning {
-            x: get_int("XBINNING").unwrap_or(1) as u8,
-            y: get_int("YBINNING").unwrap_or(1) as u8,
-        };
-
-        Ok(Self {
-            obs_date_local: obs_date_local_date.or(obs_date_local_time),
-            obs_date_utc: get_string("DATE-OBS").and_then(|s| {
-                DateTime::parse_from_rfc3339(&s).ok().or_else(|| {
-                    NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.f")
-                        .ok()
-                        .map(|ndt| Utc.from_utc_datetime(&ndt).fixed_offset())
-                })
-            }),
-            exposure: get_float("EXPOSURE").or_else(|| get_float("EXPTIME")),
-            temperature: get_float("SET-TEMP"),
-            filter: get_string("FILTER"),
-            offset: get_int("OFFSET"),
-            gain: get_int("GAIN"),
-            binning,
+    fn get_date_utc(&self, key: &str) -> Option<DateTime<FixedOffset>> {
+        self.get_string(key).and_then(|s| {
+            DateTime::parse_from_rfc3339(&s).ok().or_else(|| {
+                NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.f")
+                    .ok()
+                    .map(|ndt| Utc.from_utc_datetime(&ndt).fixed_offset())
+            })
         })
     }
 
-    fn best_obs_date(&self) -> Option<NaiveDateTime> {
-        self.obs_date_local
-            .or_else(|| self.obs_date_utc.map(|dt| dt.naive_local()))
-    }
-
-    /// Returns a formatted master bias name that matches this metadata
-    ///
-    pub fn master_bias_name(&self) -> String {
-        let date = self.best_obs_date().unwrap().format("%Y-%m-%d").to_string();
-        format!(
-            "{date}_BIAS_master_{}C",
-            self.temperature.unwrap_or_default()
-        )
-    }
-
-    /// Returns a formatted master dark name that matches this metadata
-    ///
-    pub fn master_dark_name(&self) -> String {
-        let date = self.best_obs_date().unwrap().format("%Y-%m-%d").to_string();
-        format!(
-            "{date}_DARK_master_{}s_{}C",
-            self.exposure.unwrap_or_default(),
-            self.temperature.unwrap_or_default()
-        )
-    }
-
-    /// Returns a formatted master flat name that matches this metadata
-    ///
-    pub fn master_flat_name(&self, filter: String) -> String {
-        let date = self.best_obs_date().unwrap().format("%Y-%m-%d").to_string();
-        format!(
-            "{date}_FLAT_master_{}C_{}",
-            self.temperature.unwrap_or_default(),
-            self.filter.clone().unwrap_or(filter)
-        )
+    fn get_binning(&self) -> Binning {
+        Binning {
+            x: self.get_int("XBINNING").unwrap_or(1) as u8,
+            y: self.get_int("YBINNING").unwrap_or(1) as u8,
+        }
     }
 }

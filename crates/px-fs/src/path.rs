@@ -3,6 +3,9 @@ use std::{
     sync::LazyLock,
 };
 
+use chrono::{NaiveDate, NaiveDateTime};
+use regex::Regex;
+
 /// The current working directory.
 #[expect(clippy::print_stderr)]
 pub static CWD: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -109,5 +112,34 @@ impl<T: AsRef<Path>> OptionPath for Option<T> {
 
     fn some_string(&self) -> Option<String> {
         self.some_display().map(|d| d.to_string())
+    }
+}
+
+pub trait DatePath {
+    /// Parse the file path looking for `YYYY-MM-DD` or `YYYYMMDD-hhmmss`
+    ///
+    fn with_date_time(&self) -> Option<NaiveDateTime>;
+}
+
+impl<T: AsRef<Path>> DatePath for T {
+    fn with_date_time(&self) -> Option<NaiveDateTime> {
+        // Look for a date + time in the path string (usually in file stem)
+        let date_local_time = self.as_ref().to_str().and_then(|stem| {
+            Regex::new(r"(\d{8}-\d{6})")
+                .ok()?
+                .captures(stem)
+                .and_then(|caps| NaiveDateTime::parse_from_str(&caps[1], "%Y%m%d-%H%M%S").ok())
+        });
+
+        // Look for a date in the path string (usually in a folder)
+        let date_local_date = self.as_ref().to_str().and_then(|parent| {
+            Regex::new(r"(\d{4}-\d{2}-\d{2})")
+                .ok()?
+                .captures(parent)
+                .and_then(|caps| NaiveDate::parse_from_str(&caps[1], "%Y-%m-%d").ok())
+                .and_then(|d| d.and_hms_opt(0, 0, 0))
+        });
+
+        date_local_date.or(date_local_time)
     }
 }

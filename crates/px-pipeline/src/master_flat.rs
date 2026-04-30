@@ -112,8 +112,10 @@ impl CreateMasterFlatPipeline {
             temperature: meta.temperature.unwrap_or_default(),
             gain: meta.gain.unwrap_or_default(),
             offset: meta.offset.unwrap_or_default(),
-            filter: meta.filter.unwrap_or(self.filter.clone()),
+            filter: meta.filter.clone().unwrap_or(self.filter.clone()),
             binning: meta.binning,
+            frame_count: raw_files.len(),
+            capture_date: meta.capture_date().expect("Missing capture date"),
         };
         Ok(bias)
     }

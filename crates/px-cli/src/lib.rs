@@ -179,8 +179,9 @@ impl Commands {
                 | Commands::Profile(ProfileNamespace {
                     command: ProfileCommand::Init(_),
                 })
-                // | Commands::Master(_)
-                | Commands::Observation(_)
+                | Commands::Observation(ObservationNamespace {
+                    command: ObservationCommand::List(_) | ObservationCommand::Preview(_),
+                })
                 | Commands::Project(_)
         )
     }

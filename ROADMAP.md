@@ -49,11 +49,14 @@
 * [ ] move the linear stack creation into px-pipeline
 * [ ] implement the pipelines for color samples
 * [ ] implement obs find best to manage calibration links
+* [ ] top level commands like `px scan` and `px calibrate` as shortcuts to do setup actions
+* [ ] need a tool to bulk edit or ensure a filter name is added to all files in a sequence (for scopes that omit this keyword)
 
 ### Bugs
 
 * [x] fix all places where relative paths could be passed in, they need to be resolved to full paths for Siril...
 * [x] fix why the master file names don't see the YYYY-MM-DD format in the path string
+* [x] better populate a Light frame into the observation_set table (ra, dec, date, target name)
 
 ### Future
 

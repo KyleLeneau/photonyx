@@ -4878,6 +4878,7 @@ dependencies = [
  "anstream",
  "anyhow",
  "axoupdater",
+ "chrono",
  "clap",
  "clap_complete",
  "crossterm 0.29.0",
@@ -4942,6 +4943,7 @@ version = "0.1.3"
 dependencies = [
  "chrono",
  "fitsrs",
+ "px-fs",
  "rayon",
  "regex",
  "rustafits",
@@ -4954,7 +4956,9 @@ dependencies = [
 name = "px-fs"
 version = "0.1.3"
 dependencies = [
+ "chrono",
  "dunce",
+ "regex",
 ]
 
 [[package]]

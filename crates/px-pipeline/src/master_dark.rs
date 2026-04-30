@@ -81,6 +81,8 @@ impl CreateMasterDarkPipeline {
             offset: meta.offset.unwrap_or_default(),
             exposure: meta.exposure.unwrap_or_default(),
             binning: meta.binning,
+            frame_count: raw_files.len(),
+            capture_date: meta.capture_date().expect("Missing capture date"),
         };
         Ok(bias)
     }
