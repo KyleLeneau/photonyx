@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
 use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
 use thiserror::Error;
 use uuid::Uuid;
@@ -22,6 +22,9 @@ pub enum ProfileIndexError {
 
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("temperature is required for bias matching")]
+    MissingTemperature,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
@@ -164,11 +167,15 @@ impl From<MasterFlat> for CalibrationRecord {
 #[derive(Debug, Default)]
 pub struct MatchCriteria {
     pub temperature: Option<f64>,
-    /// Allowed deviation in degrees C when matching temperature.
+    /// Allowed deviation in degrees C when matching temperature. Defaults to 2.0.
     pub temperature_tolerance: Option<f64>,
     pub gain: Option<i64>,
     pub offset: Option<i64>,
     pub binning: Option<String>,
+    /// Only consider masters captured on or before this date.
+    pub date: Option<NaiveDate>,
+    /// How many days before `date` are still acceptable. Defaults to 1.
+    pub date_tolerance_days: Option<i64>,
 }
 
 /// The primary profile handle: paths, config, and the SQLite index.
@@ -383,17 +390,64 @@ impl ProfileIndex {
         Ok(rows)
     }
 
+    /// Find the best-matching bias master for the given criteria.
+    /// Temperature is required. Matches gain, offset, binning, and temperature exactly
+    /// (within tolerance), then picks the most recent master on or before `criteria.date`.
+    pub async fn find_best_bias(
+        &self,
+        criteria: &MatchCriteria,
+    ) -> Result<Option<CalibrationRecord>, ProfileIndexError> {
+        let Some(temperature) = criteria.temperature else {
+            return Err(ProfileIndexError::MissingTemperature);
+        };
+        let temp_tolerance = criteria.temperature_tolerance.unwrap_or(2.0);
+        let date_tolerance = criteria.date_tolerance_days.unwrap_or(1);
+        let date = criteria.date.map(|d| d.to_string());
+
+        let row = sqlx::query_as::<_, CalibrationRecord>(
+            "SELECT id, kind, source_path, master_path, date, frame_count,
+                    temperature, gain, offset, binning, exposure, filter
+             FROM calibration_set
+             WHERE kind = 'bias'
+               AND (? IS NULL OR gain = ?)
+               AND (? IS NULL OR offset = ?)
+               AND (? IS NULL OR binning = ?)
+               AND ABS(COALESCE(temperature, 0) - ?) <= ?
+               AND (? IS NULL OR (date <= ? AND date >= date(?, '-' || ? || ' days')))
+             ORDER BY date DESC
+             LIMIT 1",
+        )
+        .bind(criteria.gain)
+        .bind(criteria.gain)
+        .bind(criteria.offset)
+        .bind(criteria.offset)
+        .bind(&criteria.binning)
+        .bind(&criteria.binning)
+        .bind(temperature)
+        .bind(temp_tolerance)
+        .bind(&date)
+        .bind(&date)
+        .bind(&date)
+        .bind(date_tolerance)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row)
+    }
+
     /// Find the best-matching dark master for the given criteria.
-    /// Matches on gain, offset, binning exactly (when provided), then picks
-    /// the closest temperature within the optional tolerance.
+    /// Matches gain, offset, binning, exposure, and temperature exactly (within tolerances),
+    /// then picks the most recent master on or before `criteria.date`.
     pub async fn find_best_dark(
         &self,
         exposure: f64,
         criteria: &MatchCriteria,
     ) -> Result<Option<CalibrationRecord>, ProfileIndexError> {
-        let tolerance = criteria.temperature_tolerance.unwrap_or(2.0);
+        let temp_tolerance = criteria.temperature_tolerance.unwrap_or(2.0);
+        let date_tolerance = criteria.date_tolerance_days.unwrap_or(1);
+        let date = criteria.date.map(|d| d.to_string());
 
-        let rows: Vec<CalibrationRecord> = sqlx::query_as::<_, CalibrationRecord>(
+        let row = sqlx::query_as::<_, CalibrationRecord>(
             "SELECT id, kind, source_path, master_path, date, frame_count,
                     temperature, gain, offset, binning, exposure, filter
              FROM calibration_set
@@ -402,7 +456,10 @@ impl ProfileIndex {
                AND (? IS NULL OR offset = ?)
                AND (? IS NULL OR binning = ?)
                AND ABS(COALESCE(exposure, 0) - ?) <= 0.5
-             ORDER BY ABS(COALESCE(temperature, 0) - COALESCE(?, 0))",
+               AND (? IS NULL OR ABS(COALESCE(temperature, 0) - ?) <= ?)
+               AND (? IS NULL OR (date <= ? AND date >= date(?, '-' || ? || ' days')))
+             ORDER BY date DESC
+             LIMIT 1",
         )
         .bind(criteria.gain)
         .bind(criteria.gain)
@@ -413,26 +470,30 @@ impl ProfileIndex {
         .bind(exposure)
         .bind(criteria.temperature)
         .bind(criteria.temperature)
-        .fetch_all(&self.pool)
+        .bind(temp_tolerance)
+        .bind(&date)
+        .bind(&date)
+        .bind(&date)
+        .bind(date_tolerance)
+        .fetch_optional(&self.pool)
         .await?;
 
-        Ok(rows
-            .into_iter()
-            .find(|r| match (r.temperature, criteria.temperature) {
-                (Some(t), Some(target)) => (t - target).abs() <= tolerance,
-                _ => true,
-            }))
+        Ok(row)
     }
 
     /// Find the best-matching flat master for the given filter and criteria.
+    /// Matches filter, gain, offset, binning, and temperature exactly (within tolerances),
+    /// then picks the most recent master on or before `criteria.date`.
     pub async fn find_best_flat(
         &self,
         filter: &str,
         criteria: &MatchCriteria,
     ) -> Result<Option<CalibrationRecord>, ProfileIndexError> {
-        let tolerance = criteria.temperature_tolerance.unwrap_or(2.0);
+        let temp_tolerance = criteria.temperature_tolerance.unwrap_or(2.0);
+        let date_tolerance = criteria.date_tolerance_days.unwrap_or(1);
+        let date = criteria.date.map(|d| d.to_string());
 
-        let rows: Vec<CalibrationRecord> = sqlx::query_as::<_, CalibrationRecord>(
+        let row = sqlx::query_as::<_, CalibrationRecord>(
             "SELECT id, kind, source_path, master_path, date, frame_count,
                     temperature, gain, offset, binning, exposure, filter
              FROM calibration_set
@@ -441,7 +502,10 @@ impl ProfileIndex {
                AND (? IS NULL OR gain = ?)
                AND (? IS NULL OR offset = ?)
                AND (? IS NULL OR binning = ?)
-             ORDER BY ABS(COALESCE(temperature, 0) - COALESCE(?, 0))",
+               AND (? IS NULL OR ABS(COALESCE(temperature, 0) - ?) <= ?)
+               AND (? IS NULL OR (date <= ? AND date >= date(?, '-' || ? || ' days')))
+             ORDER BY date DESC
+             LIMIT 1",
         )
         .bind(filter)
         .bind(criteria.gain)
@@ -452,14 +516,14 @@ impl ProfileIndex {
         .bind(&criteria.binning)
         .bind(criteria.temperature)
         .bind(criteria.temperature)
-        .fetch_all(&self.pool)
+        .bind(temp_tolerance)
+        .bind(&date)
+        .bind(&date)
+        .bind(&date)
+        .bind(date_tolerance)
+        .fetch_optional(&self.pool)
         .await?;
 
-        Ok(rows
-            .into_iter()
-            .find(|r| match (r.temperature, criteria.temperature) {
-                (Some(t), Some(target)) => (t - target).abs() <= tolerance,
-                _ => true,
-            }))
+        Ok(row)
     }
 }
