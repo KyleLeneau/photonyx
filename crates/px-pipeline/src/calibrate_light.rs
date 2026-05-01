@@ -17,7 +17,7 @@ use siril_sys::{
 use crate::{PipelineReporter, error::PipelineError};
 
 #[derive(bon::Builder)]
-pub struct CalibrateObservationSetPipeline {
+pub struct CalibrateLightSetPipeline {
     pub siril_builder: Builder,
     pub ext: FitsExt,
     pub raw_folder: PathBuf,
@@ -27,7 +27,7 @@ pub struct CalibrateObservationSetPipeline {
     pub out_folder: PathBuf,
 }
 
-impl CalibrateObservationSetPipeline {
+impl CalibrateLightSetPipeline {
     pub async fn run(
         &self,
         reporter: impl PipelineReporter,

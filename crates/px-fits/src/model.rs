@@ -63,3 +63,16 @@ pub struct CalibratedLight {
     pub site_lat: Option<f64>,
     pub site_long: Option<f64>, // TODO: rotation
 }
+
+#[derive(Debug)]
+pub struct MasterLight {
+    pub sources: Vec<PathBuf>,
+    pub path: PathBuf,
+    pub exposure: f64,
+    pub filter: String,
+    pub binning: Binning,
+    pub frame_count: usize,
+    pub target_name: String,
+    pub target_ra: Option<f64>,
+    pub target_dec: Option<f64>,
+}

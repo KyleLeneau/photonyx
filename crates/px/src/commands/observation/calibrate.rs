@@ -3,7 +3,7 @@ use px_cli::CalibrateObservationArgs;
 use px_conventions::observation::ObservationPath;
 use px_fits::all_fits_files;
 use px_index::ProfileIndex;
-use px_pipeline::calibrate_observation::CalibrateObservationSetPipeline;
+use px_pipeline::calibrate_light::CalibrateLightSetPipeline;
 use siril_sys::Builder;
 
 use crate::{ExitStatus, printer::Printer, reporters::DefaultPipelineReporter, utils::to_fits_ext};
@@ -78,7 +78,7 @@ pub(crate) async fn calibrate_observation(
         return Ok(ExitStatus::Error);
     }
 
-    let light = CalibrateObservationSetPipeline::builder()
+    let light = CalibrateLightSetPipeline::builder()
         .ext(to_fits_ext(args.ext))
         .siril_builder(Builder::default().output_sink(siril_sys::OutputSink::Discard))
         .raw_folder(args.raw_folder)

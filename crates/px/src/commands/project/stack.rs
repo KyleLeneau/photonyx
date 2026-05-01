@@ -4,14 +4,10 @@ use anyhow::Result;
 use px_cli::StackProjectArgs;
 use px_configuration::ProjectLinearStack;
 use px_conventions::{observation::ObservationPath, project::ProjectPath};
-use px_fs::Glob;
-use siril_sys::{
-    BestRejection, Builder, FitsExt,
-    commands::{Convert, Load, Register, SeqApplyReg, Stack},
-    siril_ext::{CdExt, MirrorxExt, SaveExt},
-};
+use px_pipeline::master_light::CreateMasterLightPipeline;
+use siril_sys::{Builder, FitsExt};
 
-use crate::{ExitStatus, printer::Printer};
+use crate::{ExitStatus, printer::Printer, reporters::DefaultPipelineReporter};
 
 pub(crate) async fn stack_project_observations(
     args: StackProjectArgs,
@@ -36,10 +32,10 @@ pub(crate) async fn stack_project_observations(
     for stack in config.linear_stacks {
         let ext = FitsExt::FIT;
         let builder = Builder::default()
-            .output_sink(siril_sys::OutputSink::Inherit)
+            .output_sink(siril_sys::OutputSink::Discard)
             .use_extension(ext.clone());
 
-        stack_linear(builder, &stack, &project.root, printer).await?;
+        stack_linear(builder, &stack, ext, &project.root, printer).await?;
         // utils::wait_for_confirm(printer).await;
     }
 
@@ -49,88 +45,28 @@ pub(crate) async fn stack_project_observations(
 async fn stack_linear(
     siril_builder: Builder,
     stack: &ProjectLinearStack,
+    ext: FitsExt,
     project_dir: &Path,
     printer: Printer,
 ) -> Result<()> {
-    // Setup siril
-    let ext = siril_builder.ext();
-    let mut siril = siril_builder.build().await?;
+    let light_folders = stack
+        .observations
+        .iter()
+        .map(|o| ObservationPath::single(&o.path).map(|op| op.pp_path().to_path_buf()))
+        .collect::<Result<Vec<_>, _>>()?;
 
-    // manage the sequence
-    let mut prefix = String::from("light_");
-
-    // convert each input directory
-    let mut start_idx = 1;
-    for obs in &stack.observations {
-        let observation = ObservationPath::single(&obs.path)?;
-        let count = observation.pp_path().count_by_ext(ext.to_string())?;
-        siril.cd(observation.pp_path()).await?;
-        siril
-            .execute(
-                &Convert::builder(&prefix)
-                    .output_dir(siril.initial_directory())
-                    .start_index(start_idx)
-                    .build(),
-            )
-            .await?;
-        start_idx += count as u8;
-    }
-
-    // Return to working directory
-    siril.cd(&siril.initial_directory()).await?;
-
-    // TODO: Optional: run bg extraction on every frame before stacking
-    // if extract_background:
-    //     await siril.command(seqsubsky(prefix))
-    //     prefix = f"bkg_{prefix}"
-
-    // Register all the images
-    siril
-        .execute(&Register::builder(&prefix).two_pass(true).build())
+    let master = CreateMasterLightPipeline::builder()
+        .siril_builder(siril_builder)
+        .ext(ext)
+        .light_folders(light_folders)
+        .name(stack.name.clone())
+        .out_folder(project_dir.to_path_buf())
+        .build()
+        .run(DefaultPipelineReporter::from(printer))
         .await?;
 
-    // Generate their transformed version
-    siril
-        .execute(&SeqApplyReg::builder(&prefix).build())
-        .await?;
-    prefix = format!("r_{prefix}");
-
-    // Find the best rejection method
-    let rejection = BestRejection::find(start_idx as usize);
-    printer.info(format!("Found best stacking rejection: {:?}", rejection))?;
-
-    // Stack the background extracted images
-    siril
-        .execute(
-            &Stack::builder(prefix)
-                .norm(siril_sys::StackNormFlag::AddScale)
-                .filter_included(true)
-                .output_norm(true)
-                .rgb_equalization(true)
-                .rejection(rejection.method)
-                .lower_rej(rejection.low_threshold)
-                .higher_rej(rejection.high_threshold)
-                .out("result")
-                .build(),
-        )
-        .await?;
-
-    // Load and flip the image if needed
-    siril.execute(&Load::builder("result").build()).await?;
-    siril.mirrorx(true).await?;
-    siril.execute(&Load::builder("result").build()).await?;
-
-    // TODO: output file naming and config for HDR
-    // TODO: include date?
-    // TODO: Save this output file name to the project config?
-
-    // Output file for the linear_stack
-    let filter_output_file = project_dir.join(format!("{}_linear_stack", stack.name));
-    siril.save(filter_output_file).await?;
-
-    // TODO: Split and save RGB from OSC image
-
-    printer.success(format!("{} linear stack complete", stack.name))?;
+    // Pretty print the result
+    printer.success(format!("Master LIGHT stacking completed: {:?}", master))?;
 
     Ok(())
 }
