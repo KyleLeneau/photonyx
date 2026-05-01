@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use px_fits::{Binning, MasterLight};
+use px_fits::{LinearStackMetadata, MasterLight};
 use px_fs::Glob;
 use siril_sys::{
     BestRejection, Builder, FitsExt,
@@ -20,14 +20,15 @@ pub struct CreateMasterLightPipeline {
     pub ext: FitsExt,
     pub light_folders: Vec<PathBuf>,
     pub name: String,
+    pub filter: Option<String>,
     pub out_folder: PathBuf,
-    #[builder(default = false)]
-    pub extract_background: bool,
 }
 
 impl CreateMasterLightPipeline {
     pub async fn run(&self, reporter: impl PipelineReporter) -> Result<MasterLight, PipelineError> {
-        // TODO: validate light_folder.len() > 0
+        if self.light_folders.is_empty() {
+            return Err(PipelineError::FileNotFound("missing light_folders".to_string()));
+        }
 
         // Setup siril
         let ext = self.siril_builder.ext();
@@ -56,11 +57,6 @@ impl CreateMasterLightPipeline {
 
         // Return to working directory
         siril.cd(&siril.initial_directory()).await?;
-
-        // TODO: Optional: run bg extraction on every frame before stacking
-        // if extract_background:
-        //     await siril.command(seqsubsky(prefix))
-        //     prefix = f"bkg_{prefix}"
 
         // Register all the images
         let id = reporter.step_started("[2/3] Registering light frames...");
@@ -106,26 +102,25 @@ impl CreateMasterLightPipeline {
 
         // TODO: output file naming and config for HDR
         // TODO: include date?
-        // TODO: Save this output file name to the project config?
 
         // Output file for the linear_stack
         let filter_output_file = self.out_folder.join(format!("{}_linear_stack", self.name));
         siril.save(filter_output_file.clone()).await?;
 
-        // TODO: Split and save RGB from OSC image
-
-        // TODO: Load new fit file and get metadata
+        // Load new fit file and get metadata
+        let path = filter_output_file.with_added_extension(ext.to_string());
+        let stack = LinearStackMetadata::from(path.clone())?;
 
         let master = MasterLight {
             sources: self.light_folders.clone(),
-            path: filter_output_file.with_added_extension(ext.to_string()),
-            exposure: 0.0,
-            filter: "".to_string(),
-            binning: Binning::default(),
-            frame_count: 0,
-            target_name: "".to_string(),
-            target_ra: None,
-            target_dec: None,
+            path,
+            exposure: stack.total_exposure.unwrap_or_default(),
+            filter: stack.filter.or(self.filter.clone()),
+            binning: stack.binning,
+            frame_count: stack.frame_count as usize,
+            target_name: stack.target_name,
+            target_ra: stack.target_ra,
+            target_dec: stack.target_dec,
         };
 
         Ok(master)

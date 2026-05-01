@@ -60,10 +60,13 @@ async fn stack_linear(
         .ext(ext)
         .light_folders(light_folders)
         .name(stack.name.clone())
+        .maybe_filter(stack.filter.clone())
         .out_folder(project_dir.to_path_buf())
         .build()
         .run(DefaultPipelineReporter::from(printer))
         .await?;
+
+    // TODO: Save this output file name to the project config?
 
     // Pretty print the result
     printer.success(format!("Master LIGHT stacking completed: {:?}", master))?;

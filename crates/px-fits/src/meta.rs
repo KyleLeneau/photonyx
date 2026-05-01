@@ -130,3 +130,31 @@ impl ObservationMetadata {
             .or_else(|| self.obs_date_utc.map(|dt| dt.naive_local()))
     }
 }
+
+#[derive(Debug)]
+pub struct LinearStackMetadata {
+    pub total_exposure: Option<f64>,
+    pub filter: Option<String>,
+    pub binning: Binning,
+    pub frame_count: i64,
+    pub target_name: String,
+    pub target_ra: Option<f64>,
+    pub target_dec: Option<f64>,
+}
+
+impl LinearStackMetadata {
+    pub fn from(path: PathBuf) -> Result<Self, FitsError> {
+        let file = FitsFile::new(path.to_path_buf())?;
+        let header = file.primary_hdu.get_header();
+
+        Ok(Self {
+            total_exposure: header.get_float("LIVETIME"),
+            filter: header.get_string("FILTER"),
+            binning: header.get_binning(),
+            frame_count: header.get_int("STACKCNT").unwrap_or_default(),
+            target_name: header.get_string("OBJECT").unwrap_or_default(),
+            target_ra: header.get_float("RA"),
+            target_dec: header.get_float("DEC"),
+        })
+    }
+}

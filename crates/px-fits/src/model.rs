@@ -69,7 +69,7 @@ pub struct MasterLight {
     pub sources: Vec<PathBuf>,
     pub path: PathBuf,
     pub exposure: f64,
-    pub filter: String,
+    pub filter: Option<String>,
     pub binning: Binning,
     pub frame_count: usize,
     pub target_name: String,

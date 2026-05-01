@@ -52,6 +52,9 @@ pub struct ProjectLinearStack {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comments: Option<String>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
+
     /// Observations registered with this project
     #[serde(default)]
     pub observations: Vec<ObservationEntry>,
@@ -136,6 +139,7 @@ impl ProjectConfig {
                 self.linear_stacks.push(ProjectLinearStack {
                     profile,
                     name: filter.clone(),
+                    filter: Some(filter.clone()),
                     panel,
                     comments: None,
                     observations: vec![ObservationEntry { path: obs_path }],
