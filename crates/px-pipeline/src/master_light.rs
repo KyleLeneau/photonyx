@@ -27,7 +27,9 @@ pub struct CreateMasterLightPipeline {
 impl CreateMasterLightPipeline {
     pub async fn run(&self, reporter: impl PipelineReporter) -> Result<MasterLight, PipelineError> {
         if self.light_folders.is_empty() {
-            return Err(PipelineError::FileNotFound("missing light_folders".to_string()));
+            return Err(PipelineError::FileNotFound(
+                "missing light_folders".to_string(),
+            ));
         }
 
         // Setup siril
