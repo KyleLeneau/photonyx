@@ -52,6 +52,8 @@
 * [ ] top level commands like `px scan` and `px calibrate` as shortcuts to do setup actions
 * [ ] need a tool to bulk edit or ensure a filter name is added to all files in a sequence (for scopes that omit this keyword)
 
+* [ ] The `px scan` should detect changes and ask to update things, like fill in incomplete Profile & Hardware information (kind of like import) - use a strategy pattern?
+
 ### Bugs
 
 * [x] fix all places where relative paths could be passed in, they need to be resolved to full paths for Siril...
