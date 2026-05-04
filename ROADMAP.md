@@ -59,6 +59,7 @@
 * [x] fix all places where relative paths could be passed in, they need to be resolved to full paths for Siril...
 * [x] fix why the master file names don't see the YYYY-MM-DD format in the path string
 * [x] better populate a Light frame into the observation_set table (ra, dec, date, target name)
+* [ ] for smart telescopes we may not have masters to let `px obs calibrate` work without those passed so that files could minimally be debayered
 
 ### Future
 
