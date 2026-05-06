@@ -53,13 +53,16 @@
 * [ ] need a tool to bulk edit or ensure a filter name is added to all files in a sequence (for scopes that omit this keyword)
 
 * [ ] The `px scan` should detect changes and ask to update things, like fill in incomplete Profile & Hardware information (kind of like import) - use a strategy pattern?
+* [ ] need an internal way to pause a pipeline to check output
+* [ ] px project init should should be a workflow TUI with prompts
 
 ### Bugs
 
 * [x] fix all places where relative paths could be passed in, they need to be resolved to full paths for Siril...
 * [x] fix why the master file names don't see the YYYY-MM-DD format in the path string
 * [x] better populate a Light frame into the observation_set table (ra, dec, date, target name)
-* [ ] for smart telescopes we may not have masters to let `px obs calibrate` work without those passed so that files could minimally be debayered
+* [x] for smart telescopes we may not have masters to let `px obs calibrate` work without those passed so that files could minimally be debayered
+* [ ] Convention to find observation path needs to be a bit more flexible for naming conventions (seestars)
 
 ### Future
 

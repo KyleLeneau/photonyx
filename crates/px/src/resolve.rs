@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 /// Internal implementation — call via the [`first_some!`] macro instead.
+#[allow(unused)]
 pub(crate) fn resolve_chain<'a, T>(
     strategies: Vec<Box<dyn FnOnce() -> Result<Option<T>> + 'a>>,
 ) -> Result<Option<T>> {
@@ -27,6 +28,7 @@ pub(crate) fn resolve_chain<'a, T>(
 ///     || prompt_filter(),
 /// ]?;
 /// ```
+#[allow(unused)]
 macro_rules! first_some {
     ($($strategy:expr),+ $(,)?) => {{
         // A typed helper so Rust can infer T from context without an explicit `as` cast.
@@ -37,4 +39,5 @@ macro_rules! first_some {
     }};
 }
 
+#[allow(unused)]
 pub(crate) use first_some;

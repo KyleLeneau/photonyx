@@ -37,6 +37,7 @@
 * Added observation to ProfileIndex on completion
 * Reworked the meta models in `px-fits` and how headers and capture dates were parsed
 * Change `--bias` to be optional on `px master flat` and allow the bias to be found in the index
+* `px obs calibrate` no longer enforces bias, dark, or flat to support smart scopes that just need debayering
 
 ## 0.1.3
 

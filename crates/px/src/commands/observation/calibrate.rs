@@ -48,20 +48,11 @@ pub(crate) async fn calibrate_observation(
         std::fs::remove_dir_all(&resolved_out_folder)?;
     }
 
-    // Create the out folder
-    if resolved_out_folder.exists() {
-        printer.warn("output folder already exists, use --clean")?;
-        return Ok(ExitStatus::Error);
-    } else {
-        std::fs::create_dir_all(&resolved_out_folder)?;
-        printer.info(format!("created output folder: {:?}", resolved_out_folder))?;
-    }
-
     // Validate we got some master's passed in
-    if args.bias.is_none() && args.dark.is_none() && args.flat.is_none() {
-        printer.error("dark, flat, or bias not specified")?;
-        return Ok(ExitStatus::Error);
-    }
+    // if args.bias.is_none() && args.dark.is_none() && args.flat.is_none() {
+    //     printer.error("dark, flat, or bias not specified")?;
+    //     return Ok(ExitStatus::Error);
+    // }
 
     if args.bias.is_some() && !args.bias.as_ref().unwrap().exists() {
         printer.error("bias specified does not exist")?;
@@ -76,6 +67,15 @@ pub(crate) async fn calibrate_observation(
     if args.flat.is_some() && !args.flat.as_ref().unwrap().exists() {
         printer.error("bias specified does not exist")?;
         return Ok(ExitStatus::Error);
+    }
+
+    // Create the out folder
+    if resolved_out_folder.exists() {
+        printer.warn("output folder already exists, use --clean")?;
+        return Ok(ExitStatus::Error);
+    } else {
+        std::fs::create_dir_all(&resolved_out_folder)?;
+        printer.info(format!("created output folder: {:?}", resolved_out_folder))?;
     }
 
     let light = CalibrateLightSetPipeline::builder()
