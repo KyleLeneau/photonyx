@@ -62,6 +62,7 @@
 * [x] better populate a Light frame into the observation_set table (ra, dec, date, target name)
 * [x] for smart telescopes we may not have masters to let `px obs calibrate` work without those passed so that files could minimally be debayered
 * [ ] Convention to find observation path needs to be a bit more flexible for naming conventions (seestars)
+* [ ] The project stack outputs need more consistent naming for when registration is not needed
 
 ### Future
 

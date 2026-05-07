@@ -68,10 +68,12 @@ async fn stack_single_framing(
         master_lights.push(master_light);
     }
 
-    let builder = Builder::default()
-        .output_sink(siril_sys::OutputSink::Inherit)
-        .use_extension(ext.clone());
-    register_single_framing(builder, master_lights, project_dir, printer).await?;
+    if master_lights.len() > 1 {
+        let builder = Builder::default()
+            .output_sink(siril_sys::OutputSink::Inherit)
+            .use_extension(ext.clone());
+        register_single_framing(builder, master_lights, project_dir, printer).await?;
+    }
 
     printer.success("Project Stacking completed")?;
     Ok(())
