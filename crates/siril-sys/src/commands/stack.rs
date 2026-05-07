@@ -100,6 +100,11 @@ pub struct Stack {
     #[builder(default = false)]
     rgb_equalization: bool,
 
+    #[builder(default = false)]
+    maximize: bool,
+
+    feather_pixels: Option<f32>,
+
     #[builder(into)]
     out: Option<String>,
 }
@@ -145,6 +150,8 @@ impl Command for Stack {
 
         args.extend([
             Argument::flag_option("rgb_equal", self.rgb_equalization),
+            Argument::flag_option("maximize", self.maximize),
+            Argument::option("feather", self.feather_pixels),
             Argument::option("out", self.out.as_deref()),
         ]);
 

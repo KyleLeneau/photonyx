@@ -1,30 +1,32 @@
 //! Pipeline for creating a linear stack (master light) from a set of calibrated light frames.
+//! Uses a maximum framing and feathered overlap for spiral based mosiacs (SeeStar)
 //! Outputs new linear stack to output folder.
 //!
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use px_fits::{LinearStackMetadata, MasterLight};
 use px_fs::Glob;
 use siril_sys::{
-    BestRejection, Builder, FitsExt,
-    commands::{Convert, Load, Register, SeqApplyReg, Stack},
-    siril_ext::{CdExt, MirrorxExt, SaveExt},
+    BestRejection, Builder, FitsExt, SequenceFraming,
+    commands::{Convert, Load, Platesolve, SeqApplyReg, Seqplatesolve, Stack},
+    siril_ext::{CdExt, SaveExt},
 };
 
-use crate::{PipelineReporter, error::PipelineError};
+use crate::{PipelineReporter, error::PipelineError, master_light::master_light_path};
 
 #[derive(bon::Builder)]
-pub struct CreateMasterLightPipeline {
+pub struct SpiralMosiacPipeline {
     pub siril_builder: Builder,
     pub ext: FitsExt,
     pub light_folders: Vec<PathBuf>,
     pub name: String,
     pub filter: Option<String>,
+    pub feather_pixels: Option<f32>,
     pub out_folder: PathBuf,
 }
 
-impl CreateMasterLightPipeline {
+impl SpiralMosiacPipeline {
     pub async fn run(&self, reporter: impl PipelineReporter) -> Result<MasterLight, PipelineError> {
         if self.light_folders.is_empty() {
             return Err(PipelineError::FileNotFound(
@@ -60,18 +62,30 @@ impl CreateMasterLightPipeline {
         // Return to working directory
         siril.cd(&siril.initial_directory()).await?;
 
-        // Register all the images
-        let id = reporter.step_started("[2/3] Registering light frames...");
+        //
+        // Seq Platsolve (disable near search, use as registration in)
+        //
+        // Sequence platsolve to get registration information
+        let id = reporter.step_started("[2/4] Platesolving light frames...");
         siril
-            .execute(&Register::builder(&prefix).two_pass(true).build())
-            .await?;
+            .execute(&Seqplatesolve::builder(&prefix).radius(0.0).build())
+            .await
+            .inspect(|_| reporter.step_ended(id, "[2/4] Platesolved light frames", true))
+            .inspect_err(|_| reporter.step_ended(id, "✗ Platesolving failed", false))?;
 
-        // Generate their transformed version
+        // Register all the images, Generate their transformed version
+        let id = reporter.step_started("[3/4] Registering light frames...");
         siril
-            .execute(&SeqApplyReg::builder(&prefix).build())
-            .await?;
+            .execute(
+                &SeqApplyReg::builder(&prefix)
+                    .framing(SequenceFraming::Max)
+                    .build(),
+            )
+            .await
+            .inspect(|_| reporter.step_ended(id, "[3/4] Registered maximum light frames", true))
+            .inspect_err(|_| reporter.step_ended(id, "✗ Registration failed", false))?;
 
-        reporter.step_ended(id, "[2/3] Registered light frames", true);
+        // new prefix
         prefix = format!("r_{prefix}");
 
         // Find the best rejection method
@@ -79,7 +93,7 @@ impl CreateMasterLightPipeline {
         // printer.info(format!("Found best stacking rejection: {:?}", rejection))?;
 
         // Stack the background extracted images
-        let id = reporter.step_started("[3/3] Stacking light frames...");
+        let id = reporter.step_started("[4/4] Stacking light frames...");
         siril
             .execute(
                 &Stack::builder(prefix)
@@ -87,6 +101,8 @@ impl CreateMasterLightPipeline {
                     .filter_included(true)
                     .output_norm(true)
                     .rgb_equalization(true)
+                    .maximize(true)
+                    .maybe_feather_pixels(self.feather_pixels)
                     .rejection(rejection.method)
                     .lower_rej(rejection.low_threshold)
                     .higher_rej(rejection.high_threshold)
@@ -94,16 +110,14 @@ impl CreateMasterLightPipeline {
                     .build(),
             )
             .await
-            .inspect(|_| reporter.step_ended(id, "[3/3] Stacked light frames", true))
+            .inspect(|_| reporter.step_ended(id, "[4/4] Stacked light frames", true))
             .inspect_err(|_| reporter.step_ended(id, "✗ Stacking failed", false))?;
 
-        // Load and flip the image if needed
+        // Load and platsolve the the image, flipping if needed
         siril.execute(&Load::builder("result").build()).await?;
-        siril.mirrorx(true).await?;
-        siril.execute(&Load::builder("result").build()).await?;
-
-        // TODO: output file naming and config for HDR
-        // TODO: include date?
+        siril
+            .execute(&Platesolve::builder().force(true).build())
+            .await?;
 
         // Output file for the linear_stack
         let filter_output_file = master_light_path(&self.out_folder, &self.name);
@@ -127,12 +141,4 @@ impl CreateMasterLightPipeline {
 
         Ok(master)
     }
-}
-
-pub fn master_light_path(folder: &Path, name: &String) -> PathBuf {
-    folder.join(format!("{}_linear_stack", name))
-}
-
-pub fn registered_master_light_path(folder: &Path, name: &String) -> PathBuf {
-    folder.join(format!("r_{}_linear_stack", name))
 }

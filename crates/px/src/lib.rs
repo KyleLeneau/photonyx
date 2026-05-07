@@ -180,10 +180,9 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
             command: ProjectCommand::Init(args),
         }) => commands::init_project(args, printer).await,
 
-        Commands::Project(ProjectNamespace {
-            command: ProjectCommand::Add(args),
-        }) => commands::add_project_observation(args, printer).await,
-
+        // Commands::Project(ProjectNamespace {
+        //     command: ProjectCommand::Add(args),
+        // }) => commands::add_project_observation(args, printer).await,
         Commands::Project(ProjectNamespace {
             command: ProjectCommand::List(args),
         }) => commands::list_projects(args, printer).await,
@@ -192,10 +191,9 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
             command: ProjectCommand::Stack(args),
         }) => commands::stack_project_observations(args, printer).await,
 
-        Commands::Project(ProjectNamespace {
-            command: ProjectCommand::Align(args),
-        }) => commands::align_project(args, printer).await,
-
+        // Commands::Project(ProjectNamespace {
+        //     command: ProjectCommand::Align(args),
+        // }) => commands::align_project(args, printer).await,
         Commands::Project(ProjectNamespace {
             command: ProjectCommand::Sample(args),
         }) => commands::create_project_samples(args, printer).await,

@@ -37,7 +37,7 @@ use crate::{
 ///
 #[derive(Builder)]
 pub struct Seqplatesolve {
-    #[builder(start_fn)]
+    #[builder(start_fn, into)]
     sequence: String,
     /// Force a new plate solve even if the image is already solved.
     #[builder(default = false)]

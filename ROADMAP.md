@@ -44,17 +44,16 @@
 * [ ] need to implement scan of observations so that an inventory of lights is managed and have a place to associate master calibration frames to
 * [ ] implement a profile level or top level "watcher" that watches for file drops in light obs folder, scans, finds best master and sets that link up and then calibrate individual sub frames as they come in
 * [ ] build on top of the per sub frame calibration and send to a livestacker (tasks & channels) that produces linear weighted stacks per target then send to another queue to beautify them with the latest beuty image added to a rolling motion movie stream
-* [ ] build a command that monitors the advanced API of nina and renders a video of the guiding results along with a history of events on the right side
-* [ ] simple web server to recieve events of where scopes are pointed (ra, dec, fov, pixel size, name) and render an event feed on a web UI, and display a bounding box on a stellarium view. Have the cli initialize and send this data through a LIGHT file watcher.
 * [ ] need a debug tool to trigger the similar flow of a file watcher to simulate file drops by by "playing" a folder of files
 * [ ] implement the pipelines for color samples
 * [ ] implement obs find best to manage calibration links
 * [ ] top level commands like `px scan` and `px calibrate` as shortcuts to do setup actions
 * [ ] need a tool to bulk edit or ensure a filter name is added to all files in a sequence (for scopes that omit this keyword)
-
 * [ ] The `px scan` should detect changes and ask to update things, like fill in incomplete Profile & Hardware information (kind of like import) - use a strategy pattern?
 * [ ] need an internal way to pause a pipeline to check output
 * [ ] px project init should should be a workflow TUI with prompts
+* [ ] It would be cool on a project level to be able to detect changes to config or rejections to inteligently auto-clean a stack
+* [ ] `mirrorx` may not be needed, if we can platsolve and let it flip the image on it's own
 
 ### Bugs
 
@@ -70,3 +69,5 @@
 * [ ] need to support and test multi pipes on windows now that MR is merged for support
 * [ ] need a better way to bump versions for a release
 * [ ] need a `.px` folder in the user home initialized at some point to store default or common config (https://crates.io/crates/etcetera) - can also use this for cross profile querying
+* [ ] simple web server to recieve events of where scopes are pointed (ra, dec, fov, pixel size, name) and render an event feed on a web UI, and display a bounding box on a stellarium view. Have the cli initialize and send this data through a LIGHT file watcher.
+* [ ] build a command that monitors the advanced API of nina and renders a video of the guiding results along with a history of events on the right side

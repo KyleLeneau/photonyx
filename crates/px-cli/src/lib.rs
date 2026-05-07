@@ -161,7 +161,6 @@ impl Commands {
                 })
                 | Commands::Project(ProjectNamespace {
                     command: ProjectCommand::Stack(_)
-                        | ProjectCommand::Align(_)
                         | ProjectCommand::Sample(_),
                 })
         )
@@ -452,17 +451,11 @@ pub enum ProjectCommand {
     /// new project setup
     Init(InitProjectArgs),
 
-    /// Add observation to the project
-    Add(AddProjectArgs),
-
     /// list all the projects for the profile
     List(ListProjectArgs),
 
     /// Create linear stacks of the observation + profile + filter combos
     Stack(StackProjectArgs),
-
-    /// Register all the linear stacks to one another
-    Align(AlignProjectArgs),
 
     /// Preview color samples of the project
     Sample(SampleProjectArgs),
@@ -484,25 +477,6 @@ pub struct InitProjectArgs {
 }
 
 #[derive(Args, Debug)]
-pub struct AddProjectArgs {
-    /// The path to the project; defaults to searching the current directory and its parents
-    #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
-    pub project: Option<PathBuf>,
-
-    /// The path to the RAW observation folder to add
-    #[arg(value_hint = ValueHint::DirPath, value_parser = absolute_path)]
-    pub obs_path: PathBuf,
-
-    /// Override the filter for this observation (auto-detected from FITS headers if not set)
-    #[arg(short, long)]
-    pub filter: Option<String>,
-
-    /// Mosaic panel identifier for this observation
-    #[arg(long)]
-    pub panel: Option<String>,
-}
-
-#[derive(Args, Debug)]
 pub struct ListProjectArgs {}
 
 #[derive(Args, Debug)]
@@ -510,13 +484,10 @@ pub struct StackProjectArgs {
     /// The path to the project; defaults to searching the current directory and its parents
     #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub project: Option<PathBuf>,
-}
 
-#[derive(Args, Debug)]
-pub struct AlignProjectArgs {
-    /// The path to the project; defaults to searching the current directory and its parents
-    #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
-    pub project: Option<PathBuf>,
+    /// Clean or remove the outputs from a previous run
+    #[arg(long)]
+    pub clean: bool,
 }
 
 #[derive(Args, Debug)]

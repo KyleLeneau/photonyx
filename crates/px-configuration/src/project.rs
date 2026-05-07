@@ -28,13 +28,8 @@ pub struct ProjectConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
-    /// Filter names present in this project (e.g. `["Ha", "OIII", "SII"]`).
-    #[serde(default)]
-    pub filters: Vec<String>,
-
-    /// The linear stacks this project will produce
-    #[serde(default)]
-    pub linear_stacks: Vec<ProjectLinearStack>,
+    /// The framing and observation content for this project
+    pub framing: Framing,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,15 +44,20 @@ pub struct ProjectLinearStack {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub panel: Option<String>,
 
+    /// A comment for this stack if needed
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comments: Option<String>,
 
+    /// The filter for this stack if needed
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filter: Option<String>,
 
     /// Observations registered with this project
     #[serde(default)]
     pub observations: Vec<ObservationEntry>,
+
+    #[serde(default)]
+    pub extract_background: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,14 +65,55 @@ pub struct ObservationEntry {
     pub path: PathBuf,
 }
 
-/// Outcome of [`ProjectConfig::add_observation`].
-#[derive(Debug, PartialEq, Eq)]
-pub enum AddObservationOutcome {
-    /// The observation was added to an existing or newly created linear stack.
-    Added,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", content = "config", rename_all = "snake_case")]
+pub enum Framing {
+    /// Single target framming where all linear stacks register to minimum framing
+    Single(SingleFraming),
 
-    /// The observation path was already registered in the matching stack; no change was made.
-    AlreadyRegistered,
+    /// A mosiac where the maximum framing needs to be done (smart telescopes like Seestar)
+    SpiralMosiac(SpiralMosiacFraming),
+
+    /// An X * Y grid layout mosiac done with multiple identified panels, resulting in a maximum framing
+    GridMosiac(GridMosiacFraming),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SingleFraming {
+    /// Create a master_light for every layer
+    pub master_lights: Vec<ProjectLinearStack>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpiralMosiacFraming {
+    /// The name that represents this linear stack. Will be used as the output name.
+    pub name: String,
+
+    /// Percent of minimum dimension to feather the edges by
+    #[serde(default)]
+    pub feather_pixels: f32,
+
+    /// The filter for this stack if needed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
+
+    /// Observations used for this spiral mosiac
+    #[serde(default)]
+    pub observations: Vec<ObservationEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GridMosiacFraming {
+    pub panels: GridMosiacPanel,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GridMosiacPanel {
+    /// The name that represents the panel. Will be used as the output name.
+    pub name: String,
+
+    /// Create a master_light for every layer
+    pub master_lights: Vec<ProjectLinearStack>,
 }
 
 impl ProjectConfig {
@@ -80,8 +121,11 @@ impl ProjectConfig {
         Self {
             name,
             description,
-            filters: Vec::new(),
-            linear_stacks: Vec::new(),
+            // filters: Vec::new(),
+            // linear_stacks: Vec::new(),
+            framing: Framing::Single(SingleFraming {
+                master_lights: Vec::new(),
+            }),
         }
     }
 
@@ -108,49 +152,5 @@ impl ProjectConfig {
         let content = serde_yaml::to_string(self)?;
         std::fs::write(path, content)?;
         Ok(())
-    }
-
-    /// Register an observation under the matching `(profile, filter, panel)` linear stack,
-    /// creating the stack if one does not yet exist. Also keeps the top-level `filters` list
-    /// in sync. Returns [`AddObservationOutcome::AlreadyRegistered`] if the path is already
-    /// present so the caller can warn the user without saving.
-    pub fn add_observation(
-        &mut self,
-        profile: PathBuf,
-        filter: String,
-        panel: Option<String>,
-        obs_path: PathBuf,
-    ) -> AddObservationOutcome {
-        let stack = self
-            .linear_stacks
-            .iter_mut()
-            .find(|s| s.profile == profile && s.name == filter && s.panel == panel);
-
-        match stack {
-            Some(existing) => {
-                if existing.observations.iter().any(|o| o.path == obs_path) {
-                    return AddObservationOutcome::AlreadyRegistered;
-                }
-                existing
-                    .observations
-                    .push(ObservationEntry { path: obs_path });
-            }
-            None => {
-                self.linear_stacks.push(ProjectLinearStack {
-                    profile,
-                    name: filter.clone(),
-                    filter: Some(filter.clone()),
-                    panel,
-                    comments: None,
-                    observations: vec![ObservationEntry { path: obs_path }],
-                });
-            }
-        }
-
-        if !self.filters.contains(&filter) {
-            self.filters.push(filter);
-        }
-
-        AddObservationOutcome::Added
     }
 }
