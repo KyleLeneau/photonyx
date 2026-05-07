@@ -51,7 +51,7 @@
 * [ ] need a tool to bulk edit or ensure a filter name is added to all files in a sequence (for scopes that omit this keyword)
 * [ ] The `px scan` should detect changes and ask to update things, like fill in incomplete Profile & Hardware information (kind of like import) - use a strategy pattern?
 * [ ] need an internal way to pause a pipeline to check output
-* [ ] px project init should should be a workflow TUI with prompts
+* [ ] `px project init` should should be a workflow TUI with prompts to build the config, probably need `px project edit` to do the same for updates
 * [ ] It would be cool on a project level to be able to detect changes to config or rejections to inteligently auto-clean a stack
 * [ ] `mirrorx` may not be needed, if we can platsolve and let it flip the image on it's own
 
