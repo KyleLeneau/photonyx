@@ -269,7 +269,7 @@ pub struct GenerateShellCompletionArgs {
 #[derive(Args)]
 pub struct InspectArgs {
     /// Fits file to inspect
-    #[arg(value_hint = ValueHint::FilePath)]
+    #[arg(value_hint = ValueHint::FilePath, value_parser = absolute_path)]
     pub file: PathBuf,
 
     /// Output format to display
