@@ -1,13 +1,67 @@
 use anyhow::Result;
-use px_cli::InitProjectArgs;
-use px_configuration::ProjectConfig;
+use inquire::{CustomType, Select, Text};
+use px_cli::{FramingType, InitProjectArgs};
+use px_configuration::{
+    Framing, GridMosiacFraming, GridMosiacPanel, ObservationEntry, ProjectConfig,
+    ProjectLinearStack, SingleFraming, SpiralMosiacFraming,
+};
+use px_index::ProfileIndex;
+use std::path::PathBuf;
 
 use crate::{ExitStatus, printer::Printer};
 
-pub(crate) async fn init_project(args: InitProjectArgs, printer: Printer) -> Result<ExitStatus> {
-    let project_dir = &args.path;
+pub(crate) async fn init_project(
+    args: InitProjectArgs,
+    printer: Printer,
+    profile_index: ProfileIndex,
+) -> Result<ExitStatus> {
+    let profile_root = profile_index.profile.root.clone();
 
-    if ProjectConfig::exists(project_dir) {
+    // Destructure so every field is independently owned.
+    let InitProjectArgs {
+        path: arg_path,
+        name: arg_name,
+        description: arg_description,
+        framing: arg_framing,
+        stack_name,
+        filter,
+        feather_pixels,
+        no_interactive,
+    } = args;
+
+    // --- name ---
+    let name = if let Some(n) = arg_name {
+        n
+    } else if no_interactive {
+        match &arg_path {
+            Some(p) => p
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unnamed")
+                .to_string(),
+            None => {
+                printer
+                    .error("--name is required in non-interactive mode when --path is omitted")?;
+                return Ok(ExitStatus::Failure);
+            }
+        }
+    } else {
+        let default = arg_path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .unwrap_or("my_project")
+            .to_string();
+        Text::new("Project name:").with_default(&default).prompt()?
+    };
+
+    // --- path ---
+    let project_dir = {
+        let slug = name.replace(' ', "_");
+        arg_path.unwrap_or_else(|| profile_root.join("PROJECTS").join(slug))
+    };
+
+    if ProjectConfig::exists(&project_dir) {
         printer.error(format!(
             "project already exists at `{}`",
             project_dir.display()
@@ -15,18 +69,63 @@ pub(crate) async fn init_project(args: InitProjectArgs, printer: Printer) -> Res
         return Ok(ExitStatus::Failure);
     }
 
-    tokio::fs::create_dir_all(project_dir).await?;
+    // --- description ---
+    let description = if let Some(d) = arg_description {
+        Some(d)
+    } else if no_interactive {
+        None
+    } else {
+        let input = Text::new("Description (optional):")
+            .with_default("")
+            .prompt()?;
+        if input.is_empty() { None } else { Some(input) }
+    };
 
-    let name = args.name.unwrap_or_else(|| {
-        project_dir
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("unnamed")
-            .to_string()
-    });
+    // --- framing type ---
+    let framing_type = if let Some(f) = arg_framing {
+        f
+    } else if no_interactive {
+        FramingType::Single
+    } else {
+        let options = vec!["single", "spiral-mosiac", "grid-mosiac"];
+        let choice = Select::new("Framing type:", options).prompt()?;
+        match choice {
+            "spiral-mosiac" => FramingType::SpiralMosiac,
+            "grid-mosiac" => FramingType::GridMosiac,
+            _ => FramingType::Single,
+        }
+    };
 
-    let config = ProjectConfig::new(name, args.description);
-    config.save(project_dir)?;
+    // --- build framing config ---
+    let framing = match framing_type {
+        FramingType::Single => build_single_framing(
+            stack_name.as_deref(),
+            filter.as_deref(),
+            no_interactive,
+            &profile_root,
+        )?,
+        FramingType::SpiralMosiac => build_spiral_framing(
+            stack_name.as_deref(),
+            filter.as_deref(),
+            feather_pixels,
+            no_interactive,
+        )?,
+        FramingType::GridMosiac => build_grid_framing(
+            stack_name.as_deref(),
+            filter.as_deref(),
+            no_interactive,
+            &profile_root,
+        )?,
+    };
+
+    tokio::fs::create_dir_all(&project_dir).await?;
+
+    let config = ProjectConfig {
+        name: name.clone(),
+        description,
+        framing,
+    };
+    config.save(&project_dir)?;
 
     printer.success(format!(
         "initialized project `{}` at `{}`",
@@ -35,4 +134,169 @@ pub(crate) async fn init_project(args: InitProjectArgs, printer: Printer) -> Res
     ))?;
 
     Ok(ExitStatus::Success)
+}
+
+fn build_single_framing(
+    stack_name: Option<&str>,
+    filter: Option<&str>,
+    no_interactive: bool,
+    profile_root: &std::path::Path,
+) -> Result<Framing> {
+    let example_obs = PathBuf::from("observations").join("session_2025_01_01");
+
+    let master_lights = if no_interactive {
+        // Non-interactive: single entry from flags
+        let name = stack_name.unwrap_or("L_300").to_string();
+        let filter = filter.filter(|f| !f.is_empty()).map(str::to_string);
+        vec![ProjectLinearStack {
+            profile: profile_root.to_path_buf(),
+            name,
+            panel: None,
+            comments: Some("edit this entry and add more layers as needed".to_string()),
+            filter,
+            observations: vec![ObservationEntry { path: example_obs }],
+            extract_background: false,
+        }]
+    } else {
+        let count = CustomType::<u32>::new("How many master light layers?")
+            .with_default(1)
+            .prompt()?;
+
+        let mut layers = Vec::with_capacity(count as usize);
+        for i in 1..=count {
+            let default_name = stack_name
+                .map(|s| {
+                    if count == 1 {
+                        s.to_string()
+                    } else {
+                        format!("{s}_{i}")
+                    }
+                })
+                .unwrap_or_else(|| {
+                    if count == 1 {
+                        "L_30".to_string()
+                    } else {
+                        format!("L_30_{i}")
+                    }
+                });
+
+            let name = Text::new(&format!("Layer {i} name:"))
+                .with_default(&default_name)
+                .prompt()?;
+
+            let default_filter = filter.unwrap_or("").to_string();
+            let filter_input = Text::new(&format!(
+                "Layer {i} filter (e.g. Ha, LRGB — leave blank to skip):"
+            ))
+            .with_default(&default_filter)
+            .prompt()?;
+            let layer_filter = if filter_input.is_empty() {
+                None
+            } else {
+                Some(filter_input)
+            };
+
+            layers.push(ProjectLinearStack {
+                profile: profile_root.to_path_buf(),
+                name,
+                panel: None,
+                comments: Some("edit observations and profile path as needed".to_string()),
+                filter: layer_filter,
+                observations: vec![ObservationEntry {
+                    path: example_obs.clone(),
+                }],
+                extract_background: false,
+            });
+        }
+        layers
+    };
+
+    Ok(Framing::Single(SingleFraming { master_lights }))
+}
+
+fn build_spiral_framing(
+    stack_name: Option<&str>,
+    filter: Option<&str>,
+    feather_pixels: Option<f32>,
+    no_interactive: bool,
+) -> Result<Framing> {
+    let mosaic_name =
+        resolve_optional_str(stack_name, no_interactive, "Mosaic name:", "my_mosaic")?;
+
+    let filter = resolve_optional_str(
+        filter,
+        no_interactive,
+        "Filter (e.g. Ha, OSC — leave blank to skip):",
+        "",
+    )?;
+    let filter = if filter.is_empty() {
+        None
+    } else {
+        Some(filter)
+    };
+
+    let feather_pixels = feather_pixels.unwrap_or(0.0);
+
+    let example_obs = PathBuf::from("observations").join("session_2025_01_01");
+
+    Ok(Framing::SpiralMosiac(SpiralMosiacFraming {
+        name: mosaic_name,
+        feather_pixels,
+        filter,
+        observations: vec![ObservationEntry { path: example_obs }],
+    }))
+}
+
+fn build_grid_framing(
+    stack_name: Option<&str>,
+    filter: Option<&str>,
+    no_interactive: bool,
+    profile_root: &std::path::Path,
+) -> Result<Framing> {
+    let panel_name = resolve_optional_str(stack_name, no_interactive, "Panel name:", "panel_01")?;
+
+    let filter = resolve_optional_str(
+        filter,
+        no_interactive,
+        "Filter (e.g. Ha, LRGB — leave blank to skip):",
+        "",
+    )?;
+    let filter = if filter.is_empty() {
+        None
+    } else {
+        Some(filter)
+    };
+
+    let example_obs = PathBuf::from("observations").join("session_2025_01_01");
+
+    Ok(Framing::GridMosiac(GridMosiacFraming {
+        panels: GridMosiacPanel {
+            name: panel_name,
+            master_lights: vec![ProjectLinearStack {
+                profile: profile_root.to_path_buf(),
+                name: "L_300".to_string(),
+                panel: Some("panel_01".to_string()),
+                comments: Some("edit this entry and add more panels as needed".to_string()),
+                filter,
+                observations: vec![ObservationEntry { path: example_obs }],
+                extract_background: false,
+            }],
+        },
+    }))
+}
+
+/// Prompt the user for an optional string value, or return the provided value / default directly.
+fn resolve_optional_str(
+    provided: Option<&str>,
+    no_interactive: bool,
+    prompt: &str,
+    default: &str,
+) -> Result<String> {
+    if let Some(v) = provided {
+        return Ok(v.to_string());
+    }
+    if no_interactive {
+        return Ok(default.to_string());
+    }
+    Ok(Text::new(prompt).with_default(default).prompt()?)
 }

@@ -160,8 +160,7 @@ impl Commands {
                     command: ObservationCommand::Calibrate(_),
                 })
                 | Commands::Project(ProjectNamespace {
-                    command: ProjectCommand::Stack(_)
-                        | ProjectCommand::Sample(_),
+                    command: ProjectCommand::Stack(_) | ProjectCommand::Sample(_),
                 })
         )
     }
@@ -181,7 +180,9 @@ impl Commands {
                 | Commands::Observation(ObservationNamespace {
                     command: ObservationCommand::List(_) | ObservationCommand::Preview(_),
                 })
-                | Commands::Project(_)
+                | Commands::Project(ProjectNamespace {
+                    command: ProjectCommand::List(_),
+                })
         )
     }
 }
@@ -461,19 +462,49 @@ pub enum ProjectCommand {
     Sample(SampleProjectArgs),
 }
 
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+pub enum FramingType {
+    /// Single target; all linear stacks register to minimum framing
+    Single,
+    /// Spiral mosaic (e.g. Seestar); uses maximum framing
+    SpiralMosiac,
+    /// Grid (X×Y panel) mosaic; uses maximum framing
+    GridMosiac,
+}
+
 #[derive(Args, Debug)]
 pub struct InitProjectArgs {
-    /// The path to use for the project (created if it does not exist)
-    #[arg(value_hint = ValueHint::DirPath, value_parser = absolute_path)]
-    pub path: PathBuf,
+    /// Path for the project directory (default: <profile_root>/PROJECTS/<name_snake>)
+    #[arg(long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
+    pub path: Option<PathBuf>,
 
-    /// The name of the project (defaults to the directory name)
+    /// The name of the project (prompted if omitted; path directory name used in non-interactive mode)
     #[arg(long)]
     pub name: Option<String>,
 
-    /// Set the project description
+    /// Short description of the project
     #[arg(long)]
     pub description: Option<String>,
+
+    /// Framing type for the project
+    #[arg(long, value_enum)]
+    pub framing: Option<FramingType>,
+
+    /// Name for the first stack (master_light name for single; mosaic name for spiral)
+    #[arg(long)]
+    pub stack_name: Option<String>,
+
+    /// Filter label applied to the stack (e.g. Ha, LRGB, OSC)
+    #[arg(long)]
+    pub filter: Option<String>,
+
+    /// Edge feather in pixels for spiral-mosiac framing
+    #[arg(long)]
+    pub feather_pixels: Option<f32>,
+
+    /// Skip all interactive prompts; uses flag values and defaults (fails only if name cannot be derived)
+    #[arg(long, short = 'y')]
+    pub no_interactive: bool,
 }
 
 #[derive(Args, Debug)]
