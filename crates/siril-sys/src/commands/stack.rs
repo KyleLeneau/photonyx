@@ -105,6 +105,9 @@ pub struct Stack {
 
     feather_pixels: Option<f32>,
 
+    #[builder(default = false)]
+    normalize_overlap: bool,
+
     #[builder(into)]
     out: Option<String>,
 }
@@ -152,6 +155,7 @@ impl Command for Stack {
             Argument::flag_option("rgb_equal", self.rgb_equalization),
             Argument::flag_option("maximize", self.maximize),
             Argument::option("feather", self.feather_pixels),
+            Argument::flag_option("overlap_norm", self.normalize_overlap),
             Argument::option("out", self.out.as_deref()),
         ]);
 

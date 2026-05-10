@@ -8,7 +8,10 @@ use px_configuration::{
 use px_conventions::{observation::ObservationPath, project::ProjectPath};
 use px_pipeline::{
     master_light::{self, CreateMasterLightPipeline},
-    project::{register::RegisterMasterLightPipeline, spiral_mosiac::SpiralMosiacPipeline},
+    project::{
+        grid_mosiac::GridMosiacPipeline, register::RegisterMasterLightPipeline,
+        spiral_mosiac::SpiralMosiacPipeline,
+    },
 };
 use siril_sys::{Builder, FitsExt};
 
@@ -193,15 +196,53 @@ async fn stack_spiral_mosiac_framing(
 }
 
 async fn stack_grid_mosiac_framing(
-    _framing: GridMosiacFraming,
-    _project_dir: &Path,
+    framing: GridMosiacFraming,
+    project_dir: &Path,
     printer: Printer,
-    _clean: bool,
+    clean: bool,
 ) -> Result<()> {
     let ext = FitsExt::FIT;
-    let _builder = Builder::default()
+    let builder = Builder::default()
         .output_sink(siril_sys::OutputSink::Discard)
         .use_extension(ext.clone());
+
+    // Hold all layers to register them into a min set now
+    let mut layers = Vec::new();
+
+    // Create each layer of the combined grid
+    for grid_layer in framing.master_lights {
+        // for each panel in the grid create a master_light
+        let mut layer_master_lights = Vec::new();
+        for linear_stack in grid_layer.panels {
+            let stack =
+                create_master_light(builder.clone(), &linear_stack, project_dir, printer, clean)
+                    .await?;
+            layer_master_lights.push(stack);
+        }
+
+        // maximum register all the panels of this layer (using platsolve)
+        // maximum stack all the panels with overlap
+
+        let layer_master_light = GridMosiacPipeline::builder()
+            .siril_builder(builder.clone())
+            .ext(ext.clone())
+            .tile_master_lights(layer_master_lights)
+            .name(grid_layer.name)
+            .maybe_filter(grid_layer.filter)
+            .out_folder(project_dir.to_path_buf())
+            .build()
+            .run(DefaultPipelineReporter::from(printer))
+            .await?;
+
+        printer.success(format!(
+            "Master LIGHT stacking completed: {:?}",
+            &layer_master_light
+        ))?;
+        layers.push(layer_master_light.path);
+    }
+
+    // Now MIN register these layers
+    register_single_framing(builder.clone(), layers, project_dir, printer).await?;
 
     printer.success("Project Stacking completed")?;
     Ok(())

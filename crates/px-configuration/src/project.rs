@@ -52,12 +52,12 @@ pub struct ProjectLinearStack {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filter: Option<String>,
 
+    #[serde(default)]
+    pub extract_background: bool,
+
     /// Observations registered with this project
     #[serde(default)]
     pub observations: Vec<ObservationEntry>,
-
-    #[serde(default)]
-    pub extract_background: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -104,16 +104,20 @@ pub struct SpiralMosiacFraming {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GridMosiacFraming {
-    pub panels: GridMosiacPanel,
+    pub master_lights: Vec<GridMosiacMasterLight>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GridMosiacPanel {
+pub struct GridMosiacMasterLight {
     /// The name that represents the panel. Will be used as the output name.
     pub name: String,
 
+    /// The filter for this stack if needed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
+
     /// Create a master_light for every layer
-    pub master_lights: Vec<ProjectLinearStack>,
+    pub panels: Vec<ProjectLinearStack>,
 }
 
 impl ProjectConfig {

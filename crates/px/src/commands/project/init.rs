@@ -2,7 +2,7 @@ use anyhow::Result;
 use inquire::{CustomType, Select, Text};
 use px_cli::{FramingType, InitProjectArgs};
 use px_configuration::{
-    Framing, GridMosiacFraming, GridMosiacPanel, ObservationEntry, ProjectConfig,
+    Framing, GridMosiacFraming, GridMosiacMasterLight, ObservationEntry, ProjectConfig,
     ProjectLinearStack, SingleFraming, SpiralMosiacFraming,
 };
 use px_index::ProfileIndex;
@@ -253,36 +253,77 @@ fn build_grid_framing(
     no_interactive: bool,
     profile_root: &std::path::Path,
 ) -> Result<Framing> {
-    let panel_name = resolve_optional_str(stack_name, no_interactive, "Panel name:", "panel_01")?;
+    let mosaic_name =
+        resolve_optional_str(stack_name, no_interactive, "Mosaic name:", "my_mosaic")?;
 
-    let filter = resolve_optional_str(
-        filter,
-        no_interactive,
-        "Filter (e.g. Ha, LRGB — leave blank to skip):",
-        "",
-    )?;
-    let filter = if filter.is_empty() {
-        None
+    let (rows, cols, filters) = if no_interactive {
+        let filters = filter
+            .filter(|f| !f.is_empty())
+            .map(|f| vec![f.to_string()])
+            .unwrap_or_else(|| vec!["OSC".to_string()]);
+        (2u32, 2u32, filters)
     } else {
-        Some(filter)
+        let cols = CustomType::<u32>::new("How many panels wide?")
+            .with_default(2)
+            .prompt()?;
+        let rows = CustomType::<u32>::new("How many panels tall?")
+            .with_default(2)
+            .prompt()?;
+
+        let filter_count = CustomType::<u32>::new("How many filters?")
+            .with_default(1)
+            .prompt()?;
+
+        let mut filters = Vec::with_capacity(filter_count as usize);
+        for i in 1..=filter_count {
+            let default = if i == 1 { filter.unwrap_or("OSC") } else { "" };
+            let f = Text::new(&format!("Filter {i} name:"))
+                .with_default(default)
+                .prompt()?;
+            filters.push(f);
+        }
+        (rows, cols, filters)
     };
 
     let example_obs = PathBuf::from("observations").join("session_2025_01_01");
+    let multi_filter = filters.len() > 1;
 
-    Ok(Framing::GridMosiac(GridMosiacFraming {
-        panels: GridMosiacPanel {
-            name: panel_name,
-            master_lights: vec![ProjectLinearStack {
-                profile: profile_root.to_path_buf(),
-                name: "L_300".to_string(),
-                panel: Some("panel_01".to_string()),
-                comments: Some("edit this entry and add more panels as needed".to_string()),
-                filter,
-                observations: vec![ObservationEntry { path: example_obs }],
-                extract_background: false,
-            }],
-        },
-    }))
+    let mut master_lights = Vec::new();
+    for f in filters {
+        let filter_val = if f.is_empty() { None } else { Some(f.clone()) };
+        let mut panels = Vec::new();
+
+        for row in 1..=rows {
+            for col in 1..=cols {
+                let panel_id = format!("{row}-{col}");
+                let name = if multi_filter {
+                    format!("{panel_id}_{f}")
+                } else {
+                    panel_id.clone()
+                };
+
+                panels.push(ProjectLinearStack {
+                    profile: profile_root.to_path_buf(),
+                    name,
+                    panel: Some(panel_id.clone()),
+                    comments: Some("edit observations and profile path as needed".to_string()),
+                    filter: filter_val.clone(),
+                    observations: vec![ObservationEntry {
+                        path: example_obs.clone(),
+                    }],
+                    extract_background: false,
+                });
+            }
+        }
+
+        master_lights.push(GridMosiacMasterLight {
+            name: mosaic_name.clone(),
+            filter: filter_val.clone(),
+            panels,
+        });
+    }
+
+    Ok(Framing::GridMosiac(GridMosiacFraming { master_lights }))
 }
 
 /// Prompt the user for an optional string value, or return the provided value / default directly.
