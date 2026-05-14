@@ -229,6 +229,7 @@ async fn stack_grid_mosiac_framing(
             .tile_master_lights(layer_master_lights)
             .name(grid_layer.name)
             .maybe_filter(grid_layer.filter)
+            .background_extract(true)
             .out_folder(project_dir.to_path_buf())
             .build()
             .run(DefaultPipelineReporter::from(printer))

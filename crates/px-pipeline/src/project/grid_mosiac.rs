@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use px_fits::{LinearStackMetadata, MasterLight};
 use siril_sys::{
     Builder, FitsExt, SequenceFraming,
-    commands::{Convert, Load, Platesolve, SeqApplyReg, Seqplatesolve, Stack},
+    commands::{Convert, Load, Platesolve, SeqApplyReg, SeqSubSky, Seqplatesolve, Stack},
     siril_ext::SaveExt,
 };
 
@@ -22,6 +22,8 @@ pub struct GridMosiacPipeline {
     pub name: String,
     pub filter: Option<String>,
     pub feather_pixels: Option<f32>,
+    #[builder(default = false)]
+    pub background_extract: bool,
     pub out_folder: PathBuf,
 }
 
@@ -49,6 +51,12 @@ impl GridMosiacPipeline {
 
         // convert what's in temp directory
         siril.execute(&Convert::builder(&prefix).build()).await?;
+
+        // Optional: run bg extraction on every frame before stacking
+        if self.background_extract {
+            siril.execute(&SeqSubSky::builder(&prefix).build()).await?;
+            prefix = format!("bkg_{prefix}");
+        }
 
         //
         // Seq Platsolve (use as registration in)

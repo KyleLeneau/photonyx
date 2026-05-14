@@ -8,7 +8,7 @@ use px_fits::{LinearStackMetadata, MasterLight};
 use px_fs::Glob;
 use siril_sys::{
     BestRejection, Builder, FitsExt,
-    commands::{Convert, Load, Register, SeqApplyReg, Stack},
+    commands::{Convert, Load, Register, SeqApplyReg, SeqSubSky, Stack},
     siril_ext::{CdExt, MirrorxExt, SaveExt},
 };
 
@@ -21,6 +21,8 @@ pub struct CreateMasterLightPipeline {
     pub light_folders: Vec<PathBuf>,
     pub name: String,
     pub filter: Option<String>,
+    #[builder(default = false)]
+    pub background_extract: bool,
     pub out_folder: PathBuf,
 }
 
@@ -59,6 +61,12 @@ impl CreateMasterLightPipeline {
 
         // Return to working directory
         siril.cd(&siril.initial_directory()).await?;
+
+        // Optional: run bg extraction on every frame before stacking
+        if self.background_extract {
+            siril.execute(&SeqSubSky::builder(&prefix).build()).await?;
+            prefix = format!("bkg_{prefix}");
+        }
 
         // Register all the images
         let id = reporter.step_started("[2/3] Registering light frames...");
