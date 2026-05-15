@@ -113,7 +113,7 @@ impl CreateMasterLightPipeline {
         // TODO: output file naming and config for HDR
         // TODO: include date?
 
-        // Output file for the linear_stack
+        // Output file for the master_light
         let filter_output_file = master_light_path(&self.out_folder, &self.name);
         siril.save(filter_output_file.clone()).await?;
 
@@ -138,9 +138,9 @@ impl CreateMasterLightPipeline {
 }
 
 pub fn master_light_path(folder: &Path, name: &String) -> PathBuf {
-    folder.join(format!("{}_linear_stack", name))
+    folder.join(format!("{}_LIGHT_master", name))
 }
 
 pub fn registered_master_light_path(folder: &Path, name: &String) -> PathBuf {
-    folder.join(format!("r_{}_linear_stack", name))
+    folder.join(format!("r_{}_LIGHT_master", name))
 }

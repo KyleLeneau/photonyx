@@ -125,8 +125,6 @@ impl ProjectConfig {
         Self {
             name,
             description,
-            // filters: Vec::new(),
-            // linear_stacks: Vec::new(),
             framing: Framing::Single(SingleFraming {
                 master_lights: Vec::new(),
             }),

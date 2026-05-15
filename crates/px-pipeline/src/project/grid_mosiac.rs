@@ -112,7 +112,7 @@ impl GridMosiacPipeline {
             .execute(&Platesolve::builder().force(true).build())
             .await?;
 
-        // Output file for the linear_stack
+        // Output file for the master_light
         let filter_output_file = master_light_path(&self.out_folder, &self.name);
         siril.save(filter_output_file.clone()).await?;
 

@@ -44,14 +44,17 @@ pub(crate) async fn stack_project_observations(
         Framing::SpiralMosiac(spiral_framing) => {
             stack_spiral_mosiac_framing(spiral_framing, &project.root, printer, args.clean).await?;
         }
-        Framing::GridMosiac(_grid_framing) => {
-            stack_grid_mosiac_framing(_grid_framing, &project.root, printer, args.clean).await?;
+        Framing::GridMosiac(grid_framing) => {
+            stack_grid_mosiac_framing(grid_framing, &project.root, printer, args.clean).await?;
         }
     }
 
     Ok(ExitStatus::Success)
 }
 
+/// Stack a single framing target project (same ra/dev).
+/// Uses minimum framing for registration
+///
 async fn stack_single_framing(
     framing: SingleFraming,
     project_dir: &Path,
@@ -67,7 +70,7 @@ async fn stack_single_framing(
             .use_extension(ext.clone());
 
         let master_light =
-            create_master_light(builder, &stack, project_dir, printer, clean).await?;
+            create_master_light(builder, &stack, project_dir, printer, clean, false).await?;
         master_lights.push(master_light);
     }
 
@@ -82,12 +85,15 @@ async fn stack_single_framing(
     Ok(())
 }
 
+/// Create a single master light of the same ra/dec combo
+///
 async fn create_master_light(
     siril_builder: Builder,
     stack: &ProjectLinearStack,
     project_dir: &Path,
     printer: Printer,
     clean: bool,
+    extract_background: bool,
 ) -> Result<PathBuf> {
     let ext = siril_builder.clone().ext();
 
@@ -111,6 +117,7 @@ async fn create_master_light(
         .light_folders(light_folders)
         .name(stack.name.clone())
         .maybe_filter(stack.filter.clone())
+        .background_extract(extract_background)
         .out_folder(project_dir.to_path_buf())
         .build()
         .run(DefaultPipelineReporter::from(printer))
@@ -124,6 +131,9 @@ async fn create_master_light(
     Ok(master.path)
 }
 
+/// Register a list of master lights that share a single framing
+/// Uses minimum framing to produce smallest image
+///
 async fn register_single_framing(
     siril_builder: Builder,
     master_lights: Vec<PathBuf>,
@@ -148,6 +158,8 @@ async fn register_single_framing(
     Ok(())
 }
 
+/// Create a single spiral mosiac from a set of observations using maximum framing
+///
 async fn stack_spiral_mosiac_framing(
     framing: SpiralMosiacFraming,
     project_dir: &Path,
@@ -195,6 +207,8 @@ async fn stack_spiral_mosiac_framing(
     Ok(master.path)
 }
 
+/// Stack a large grid mosiac with many panels and layers.
+///
 async fn stack_grid_mosiac_framing(
     framing: GridMosiacFraming,
     project_dir: &Path,
@@ -214,9 +228,15 @@ async fn stack_grid_mosiac_framing(
         // for each panel in the grid create a master_light
         let mut layer_master_lights = Vec::new();
         for linear_stack in grid_layer.panels {
-            let stack =
-                create_master_light(builder.clone(), &linear_stack, project_dir, printer, clean)
-                    .await?;
+            let stack = create_master_light(
+                builder.clone(),
+                &linear_stack,
+                project_dir,
+                printer,
+                clean,
+                linear_stack.extract_background,
+            )
+            .await?;
             layer_master_lights.push(stack);
         }
 

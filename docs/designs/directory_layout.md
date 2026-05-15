@@ -27,7 +27,7 @@ Based on a lot of experience from other imagers the best layout of your director
 |--|--|--|--|-- px_session.yaml
 |--|-- PROJECTS
 |--|--|-- {project-name}
-|--|--|--|-- {filter-key}_linear_stacked.{fit}
+|--|--|--|-- {filter-key}_master_light.{fit}
 ```
 
 ## Gaps to incorporate
