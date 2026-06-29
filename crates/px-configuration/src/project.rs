@@ -52,6 +52,55 @@ pub struct ProjectConfig {
 
     /// The framing and observation content for this project
     pub framing: Framing,
+
+    /// Settings controlling `px project sample`. Absent means all defaults apply.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color_sample: Option<ColorSampleConfig>,
+}
+
+/// Settings for the `px project sample` command, which auto-detects and produces color
+/// composites (RGB, SHO, HOO, LRGB, etc.) from the registered per-filter stacks.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ColorSampleConfig {
+    /// Run Photometric Color Calibration on true-color RGB/LRGB mixes before stretching.
+    /// Requires plate solve metadata (target coordinates, pixel size, focal length) on the
+    /// composed image, or a prior plate solve.
+    #[serde(default)]
+    pub enable_pcc: bool,
+
+    /// Output formats to write for each sample.
+    #[serde(default = "ColorSampleConfig::default_output_formats")]
+    pub output_formats: Vec<SampleOutputFormat>,
+
+    /// Mix names to skip even when the filters needed for them are available
+    /// (e.g. "SHO" to skip the Hubble palette). Matches [`ColorMixType`] names, case-insensitive.
+    #[serde(default)]
+    pub exclude_mixes: Vec<String>,
+}
+
+impl ColorSampleConfig {
+    fn default_output_formats() -> Vec<SampleOutputFormat> {
+        vec![SampleOutputFormat::Png, SampleOutputFormat::Jpg]
+    }
+}
+
+impl Default for ColorSampleConfig {
+    fn default() -> Self {
+        Self {
+            enable_pcc: false,
+            output_formats: Self::default_output_formats(),
+            exclude_mixes: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SampleOutputFormat {
+    Fit,
+    Tiff,
+    Png,
+    Jpg,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,6 +201,7 @@ impl ProjectConfig {
             framing: Framing::Single(SingleFraming {
                 master_lights: Vec::new(),
             }),
+            color_sample: None,
         }
     }
 

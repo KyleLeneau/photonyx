@@ -3,9 +3,7 @@ use std::{collections::HashSet, path::PathBuf};
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use px_cli::EditProjectArgs;
-use px_configuration::{
-    Framing, ObservationEntry, ProjectLinearStack, SyncPolicy,
-};
+use px_configuration::{Framing, ObservationEntry, ProjectLinearStack, SyncPolicy};
 use px_conventions::project::ProjectPath;
 use px_index::{ObservationRecord, ProfileIndex};
 use ratatui::{
@@ -13,9 +11,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{
-        Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Wrap,
-    },
+    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Wrap},
 };
 
 use crate::{ExitStatus, printer::Printer};
@@ -65,7 +61,10 @@ pub(crate) async fn edit_project(
 
     // Ensure every index filter has at least a placeholder layer so new ones can be added.
     for filter in &index_filters {
-        if !layers.iter().any(|l| l.filter.as_deref() == Some(filter.as_str())) {
+        if !layers
+            .iter()
+            .any(|l| l.filter.as_deref() == Some(filter.as_str()))
+        {
             layers.push(EditLayer::new_empty(filter.clone()));
         }
     }
@@ -139,7 +138,10 @@ fn apply_layers_to_framing(layers: &[EditLayer], framing: &mut Framing) {
     let make_obs = |layer: &EditLayer| -> Vec<ObservationEntry> {
         let mut paths: Vec<PathBuf> = layer.assigned.iter().cloned().collect();
         paths.sort();
-        paths.into_iter().map(|p| ObservationEntry { path: p }).collect()
+        paths
+            .into_iter()
+            .map(|p| ObservationEntry { path: p })
+            .collect()
     };
 
     match framing {
@@ -169,9 +171,7 @@ fn apply_layers_to_framing(layers: &[EditLayer], framing: &mut Framing) {
         Framing::GridMosiac(g) => {
             for layer in layers {
                 for ml in &mut g.master_lights {
-                    if let Some(panel) =
-                        ml.panels.iter_mut().find(|p| p.name == layer.name)
-                    {
+                    if let Some(panel) = ml.panels.iter_mut().find(|p| p.name == layer.name) {
                         panel.observations = make_obs(layer);
                     }
                 }
@@ -211,7 +211,11 @@ struct EditApp {
 }
 
 impl EditApp {
-    fn new(layers: Vec<EditLayer>, all_obs: Vec<ObservationRecord>, sync_policy: SyncPolicy) -> Self {
+    fn new(
+        layers: Vec<EditLayer>,
+        all_obs: Vec<ObservationRecord>,
+        sync_policy: SyncPolicy,
+    ) -> Self {
         let mut layer_state = ListState::default();
         if !layers.is_empty() {
             layer_state.select(Some(0));
@@ -243,7 +247,9 @@ impl EditApp {
     }
 
     fn selected_layer_mut(&mut self) -> Option<&mut EditLayer> {
-        self.layer_state.selected().and_then(|i| self.layers.get_mut(i))
+        self.layer_state
+            .selected()
+            .and_then(|i| self.layers.get_mut(i))
     }
 
     /// Observations from the index that match the currently selected layer's filter.
@@ -342,7 +348,11 @@ impl EditApp {
 
         let list = List::new(items)
             .block(block)
-            .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
+            .highlight_style(
+                Style::default()
+                    .bg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD),
+            )
             .highlight_symbol("▶ ");
 
         frame.render_stateful_widget(list, area, &mut self.layer_state);
@@ -421,7 +431,9 @@ impl EditApp {
             let list = List::new(items)
                 .block(block)
                 .highlight_style(
-                    Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .bg(Color::DarkGray)
+                        .add_modifier(Modifier::BOLD),
                 )
                 .highlight_symbol("  ");
             frame.render_stateful_widget(list, area, &mut self.obs_state);
@@ -436,15 +448,38 @@ impl EditApp {
         };
         let help = Line::from(vec![
             Span::raw(" "),
-            Span::styled("Tab", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Tab",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw(" switch panel  "),
-            Span::styled("↑↓", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "↑↓",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw(" navigate  "),
-            Span::styled("Space", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Space",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw(" toggle obs  "),
-            Span::styled("s", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "s",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw(" save  "),
-            Span::styled("q/Esc", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "q/Esc",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ),
             Span::raw(format!(" cancel{policy_note}")),
         ]);
         frame.render_widget(Paragraph::new(help), area);

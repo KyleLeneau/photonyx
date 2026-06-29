@@ -2,9 +2,7 @@ use std::{collections::HashSet, path::PathBuf};
 
 use anyhow::Result;
 use px_cli::SyncProjectArgs;
-use px_configuration::{
-    Framing, ObservationEntry, ProjectLinearStack, SyncPolicy,
-};
+use px_configuration::{Framing, ObservationEntry, ProjectLinearStack, SyncPolicy};
 use px_conventions::project::ProjectPath;
 use px_index::ProfileIndex;
 
@@ -49,7 +47,9 @@ pub(crate) async fn sync_project(
         .await?;
 
     if index_obs.is_empty() {
-        printer.warn(format!("no observations found in index for target `{target}`"))?;
+        printer.warn(format!(
+            "no observations found in index for target `{target}`"
+        ))?;
         return Ok(ExitStatus::Success);
     }
 
@@ -106,7 +106,9 @@ pub(crate) async fn sync_project(
     config.save(&project.root)?;
 
     if total_added > 0 {
-        printer.success(format!("synced {total_added} new observation(s) into project"))?;
+        printer.success(format!(
+            "synced {total_added} new observation(s) into project"
+        ))?;
     } else {
         printer.success("project is already up to date")?;
     }

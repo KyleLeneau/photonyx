@@ -131,7 +131,17 @@ pub(crate) async fn init_project(
     // --- build framing config ---
     // When a target is provided, query the index and auto-populate observations grouped by filter.
     let framing = if let Some(ref t) = target {
-        build_framing_from_index(framing_type, &profile_index, t, stack_name.as_deref(), filter.as_deref(), feather_pixels, no_interactive, &profile_root).await?
+        build_framing_from_index(
+            framing_type,
+            &profile_index,
+            t,
+            stack_name.as_deref(),
+            filter.as_deref(),
+            feather_pixels,
+            no_interactive,
+            &profile_root,
+        )
+        .await?
     } else {
         match framing_type {
             FramingType::Single => build_single_framing(
@@ -163,6 +173,7 @@ pub(crate) async fn init_project(
         target,
         sync_policy: SyncPolicy::Auto,
         framing,
+        color_sample: None,
     };
     config.save(&project_dir)?;
 
@@ -188,7 +199,9 @@ async fn build_framing_from_index(
     no_interactive: bool,
     profile_root: &std::path::Path,
 ) -> Result<Framing> {
-    let observations = profile_index.list_observations_by_target(Some(target)).await?;
+    let observations = profile_index
+        .list_observations_by_target(Some(target))
+        .await?;
 
     if observations.is_empty() {
         // Fall back to placeholder framing — the target may be new or not yet scanned.
@@ -222,7 +235,10 @@ async fn build_framing_from_index(
                     let name = stack_name
                         .map(|s| format!("{s}_{filter}"))
                         .unwrap_or_else(|| filter.clone());
-                    let observations = paths.into_iter().map(|p| ObservationEntry { path: p }).collect();
+                    let observations = paths
+                        .into_iter()
+                        .map(|p| ObservationEntry { path: p })
+                        .collect();
                     ProjectLinearStack {
                         profile: profile_root.to_path_buf(),
                         name,
@@ -239,15 +255,17 @@ async fn build_framing_from_index(
         FramingType::SpiralMosiac => {
             // Spiral mosaics have a single flat observation list; use first filter if ambiguous.
             let mosaic_name = stack_name.unwrap_or(target).to_string();
-            let (filter_name, all_paths): (Option<String>, Vec<PathBuf>) =
-                if by_filter.len() == 1 {
-                    let (f, paths) = by_filter.into_iter().next().unwrap();
-                    (Some(f), paths)
-                } else {
-                    let all: Vec<PathBuf> = by_filter.into_values().flatten().collect();
-                    (filter_flag.map(str::to_string), all)
-                };
-            let observations = all_paths.into_iter().map(|p| ObservationEntry { path: p }).collect();
+            let (filter_name, all_paths): (Option<String>, Vec<PathBuf>) = if by_filter.len() == 1 {
+                let (f, paths) = by_filter.into_iter().next().unwrap();
+                (Some(f), paths)
+            } else {
+                let all: Vec<PathBuf> = by_filter.into_values().flatten().collect();
+                (filter_flag.map(str::to_string), all)
+            };
+            let observations = all_paths
+                .into_iter()
+                .map(|p| ObservationEntry { path: p })
+                .collect();
             Ok(Framing::SpiralMosiac(SpiralMosiacFraming {
                 name: mosaic_name,
                 feather_pixels: feather_pixels.unwrap_or(0.0),
