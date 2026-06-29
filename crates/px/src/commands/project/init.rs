@@ -1,12 +1,13 @@
+use std::{collections::BTreeMap, path::PathBuf};
+
 use anyhow::Result;
 use inquire::{CustomType, Select, Text};
 use px_cli::{FramingType, InitProjectArgs};
 use px_configuration::{
     Framing, GridMosiacFraming, GridMosiacMasterLight, ObservationEntry, ProjectConfig,
-    ProjectLinearStack, SingleFraming, SpiralMosiacFraming,
+    ProjectLinearStack, SingleFraming, SpiralMosiacFraming, SyncPolicy,
 };
 use px_index::ProfileIndex;
-use std::path::PathBuf;
 
 use crate::{ExitStatus, printer::Printer};
 
@@ -26,6 +27,7 @@ pub(crate) async fn init_project(
         stack_name,
         filter,
         feather_pixels,
+        target: arg_target,
         no_interactive,
     } = args;
 
@@ -81,6 +83,36 @@ pub(crate) async fn init_project(
         if input.is_empty() { None } else { Some(input) }
     };
 
+    // --- target ---
+    // Resolve the canonical target name used to query the profile index. In interactive mode,
+    // offer a picker showing all targets currently in the index.
+    let target = if let Some(t) = arg_target {
+        Some(t)
+    } else if no_interactive {
+        None
+    } else {
+        let all_obs = profile_index.list_observations().await?;
+        let mut targets: Vec<String> = all_obs
+            .iter()
+            .map(|o| o.target_name.clone())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+
+        if targets.is_empty() {
+            printer.warn("No observations found in the profile index — target will be unset")?;
+            None
+        } else {
+            targets.insert(0, "(skip — no target)".to_string());
+            let choice = Select::new("Target (from profile index):", targets).prompt()?;
+            if choice == "(skip — no target)" {
+                None
+            } else {
+                Some(choice)
+            }
+        }
+    };
+
     // --- framing type ---
     let framing_type = if let Some(f) = arg_framing {
         f
@@ -97,25 +129,30 @@ pub(crate) async fn init_project(
     };
 
     // --- build framing config ---
-    let framing = match framing_type {
-        FramingType::Single => build_single_framing(
-            stack_name.as_deref(),
-            filter.as_deref(),
-            no_interactive,
-            &profile_root,
-        )?,
-        FramingType::SpiralMosiac => build_spiral_framing(
-            stack_name.as_deref(),
-            filter.as_deref(),
-            feather_pixels,
-            no_interactive,
-        )?,
-        FramingType::GridMosiac => build_grid_framing(
-            stack_name.as_deref(),
-            filter.as_deref(),
-            no_interactive,
-            &profile_root,
-        )?,
+    // When a target is provided, query the index and auto-populate observations grouped by filter.
+    let framing = if let Some(ref t) = target {
+        build_framing_from_index(framing_type, &profile_index, t, stack_name.as_deref(), filter.as_deref(), feather_pixels, no_interactive, &profile_root).await?
+    } else {
+        match framing_type {
+            FramingType::Single => build_single_framing(
+                stack_name.as_deref(),
+                filter.as_deref(),
+                no_interactive,
+                &profile_root,
+            )?,
+            FramingType::SpiralMosiac => build_spiral_framing(
+                stack_name.as_deref(),
+                filter.as_deref(),
+                feather_pixels,
+                no_interactive,
+            )?,
+            FramingType::GridMosiac => build_grid_framing(
+                stack_name.as_deref(),
+                filter.as_deref(),
+                no_interactive,
+                &profile_root,
+            )?,
+        }
     };
 
     tokio::fs::create_dir_all(&project_dir).await?;
@@ -123,6 +160,8 @@ pub(crate) async fn init_project(
     let config = ProjectConfig {
         name: name.clone(),
         description,
+        target,
+        sync_policy: SyncPolicy::Auto,
         framing,
     };
     config.save(&project_dir)?;
@@ -134,6 +173,94 @@ pub(crate) async fn init_project(
     ))?;
 
     Ok(ExitStatus::Success)
+}
+
+/// Build framing config by querying the profile index for all observations matching `target`,
+/// then grouping them by filter to produce one layer per unique filter.
+#[allow(clippy::too_many_arguments)]
+async fn build_framing_from_index(
+    framing_type: FramingType,
+    profile_index: &ProfileIndex,
+    target: &str,
+    stack_name: Option<&str>,
+    filter_flag: Option<&str>,
+    feather_pixels: Option<f32>,
+    no_interactive: bool,
+    profile_root: &std::path::Path,
+) -> Result<Framing> {
+    let observations = profile_index.list_observations_by_target(Some(target)).await?;
+
+    if observations.is_empty() {
+        // Fall back to placeholder framing — the target may be new or not yet scanned.
+        return match framing_type {
+            FramingType::Single => {
+                build_single_framing(stack_name, filter_flag, no_interactive, profile_root)
+            }
+            FramingType::SpiralMosiac => {
+                build_spiral_framing(stack_name, filter_flag, feather_pixels, no_interactive)
+            }
+            FramingType::GridMosiac => {
+                build_grid_framing(stack_name, filter_flag, no_interactive, profile_root)
+            }
+        };
+    }
+
+    // Group raw_path entries by filter, preserving alphabetical order.
+    let mut by_filter: BTreeMap<String, Vec<PathBuf>> = BTreeMap::new();
+    for obs in observations {
+        by_filter
+            .entry(obs.filter)
+            .or_default()
+            .push(PathBuf::from(obs.raw_path));
+    }
+
+    match framing_type {
+        FramingType::Single => {
+            let master_lights = by_filter
+                .into_iter()
+                .map(|(filter, paths)| {
+                    let name = stack_name
+                        .map(|s| format!("{s}_{filter}"))
+                        .unwrap_or_else(|| filter.clone());
+                    let observations = paths.into_iter().map(|p| ObservationEntry { path: p }).collect();
+                    ProjectLinearStack {
+                        profile: profile_root.to_path_buf(),
+                        name,
+                        panel: None,
+                        comments: None,
+                        filter: Some(filter),
+                        observations,
+                        extract_background: false,
+                    }
+                })
+                .collect();
+            Ok(Framing::Single(SingleFraming { master_lights }))
+        }
+        FramingType::SpiralMosiac => {
+            // Spiral mosaics have a single flat observation list; use first filter if ambiguous.
+            let mosaic_name = stack_name.unwrap_or(target).to_string();
+            let (filter_name, all_paths): (Option<String>, Vec<PathBuf>) =
+                if by_filter.len() == 1 {
+                    let (f, paths) = by_filter.into_iter().next().unwrap();
+                    (Some(f), paths)
+                } else {
+                    let all: Vec<PathBuf> = by_filter.into_values().flatten().collect();
+                    (filter_flag.map(str::to_string), all)
+                };
+            let observations = all_paths.into_iter().map(|p| ObservationEntry { path: p }).collect();
+            Ok(Framing::SpiralMosiac(SpiralMosiacFraming {
+                name: mosaic_name,
+                feather_pixels: feather_pixels.unwrap_or(0.0),
+                filter: filter_name,
+                observations,
+            }))
+        }
+        FramingType::GridMosiac => {
+            // Grid mosaics: fall back to the interactive builder — panel assignment
+            // requires the user to specify rows/cols and map observations to panels.
+            build_grid_framing(stack_name, filter_flag, no_interactive, profile_root)
+        }
+    }
 }
 
 fn build_single_framing(

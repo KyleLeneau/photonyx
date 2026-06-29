@@ -76,7 +76,7 @@ async fn stack_single_framing(
 
     if master_lights.len() > 1 {
         let builder = Builder::default()
-            .output_sink(siril_sys::OutputSink::Inherit)
+            .output_sink(siril_sys::OutputSink::Discard)
             .use_extension(ext.clone());
         register_single_framing(builder, master_lights, project_dir, printer).await?;
     }

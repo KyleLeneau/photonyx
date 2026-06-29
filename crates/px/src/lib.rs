@@ -201,5 +201,13 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Project(ProjectNamespace {
             command: ProjectCommand::Sample(args),
         }) => commands::create_project_samples(args, printer).await,
+
+        Commands::Project(ProjectNamespace {
+            command: ProjectCommand::Sync(args),
+        }) => commands::sync_project(args, printer, profile_index.unwrap()).await,
+
+        Commands::Project(ProjectNamespace {
+            command: ProjectCommand::Edit(args),
+        }) => commands::edit_project(args, printer, profile_index.unwrap()).await,
     }
 }

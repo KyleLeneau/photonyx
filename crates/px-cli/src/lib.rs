@@ -488,6 +488,12 @@ pub enum ProjectCommand {
 
     /// Preview color samples of the project
     Sample(SampleProjectArgs),
+
+    /// Sync project layers with new observations from the profile index
+    Sync(SyncProjectArgs),
+
+    /// Interactively edit project layers and observations via TUI
+    Edit(EditProjectArgs),
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -530,6 +536,11 @@ pub struct InitProjectArgs {
     #[arg(long)]
     pub feather_pixels: Option<f32>,
 
+    /// Canonical target name to query from the profile index (e.g. "NGC 1234").
+    /// When provided, layers are auto-populated from the index instead of using placeholders.
+    #[arg(long)]
+    pub target: Option<String>,
+
     /// Skip all interactive prompts; uses flag values and defaults (fails only if name cannot be derived)
     #[arg(long, short = 'y')]
     pub no_interactive: bool,
@@ -551,6 +562,20 @@ pub struct StackProjectArgs {
 
 #[derive(Args, Debug)]
 pub struct SampleProjectArgs {
+    /// The path to the project; defaults to searching the current directory and its parents
+    #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
+    pub project: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct SyncProjectArgs {
+    /// The path to the project; defaults to searching the current directory and its parents
+    #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
+    pub project: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct EditProjectArgs {
     /// The path to the project; defaults to searching the current directory and its parents
     #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub project: Option<PathBuf>,

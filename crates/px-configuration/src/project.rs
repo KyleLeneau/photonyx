@@ -5,6 +5,18 @@ use thiserror::Error;
 
 pub const PROJECT_CONFIG_FILE: &str = "px_project.yaml";
 
+/// Controls whether `px project sync` is allowed to automatically update this project.
+///
+/// Set to `manual` to opt out — sync will warn and refuse, leaving `px project edit` as the only
+/// update path.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SyncPolicy {
+    #[default]
+    Auto,
+    Manual,
+}
+
 #[derive(Debug, Error)]
 pub enum ProjectConfigError {
     #[error("project already exists at `{0}`")]
@@ -27,6 +39,16 @@ pub struct ProjectConfig {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+
+    /// Canonical target name used to query the profile index (e.g. "NGC 1234").
+    /// Required for `px project sync` and `px project edit`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+
+    /// Controls whether `px project sync` is permitted to run automatically.
+    /// Defaults to `auto`; set to `manual` to require `px project edit` instead.
+    #[serde(default)]
+    pub sync_policy: SyncPolicy,
 
     /// The framing and observation content for this project
     pub framing: Framing,
@@ -125,6 +147,8 @@ impl ProjectConfig {
         Self {
             name,
             description,
+            target: None,
+            sync_policy: SyncPolicy::Auto,
             framing: Framing::Single(SingleFraming {
                 master_lights: Vec::new(),
             }),

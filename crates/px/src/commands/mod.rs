@@ -13,10 +13,12 @@ pub(crate) use observation::preview::preview_observation;
 pub(crate) use profile::info::show_profile;
 pub(crate) use profile::init::init_profile;
 pub(crate) use profile::scan::scan_profile;
+pub(crate) use project::edit::edit_project;
 pub(crate) use project::init::init_project;
 pub(crate) use project::list::list_projects;
 pub(crate) use project::sample::create_project_samples;
 pub(crate) use project::stack::stack_project_observations;
+pub(crate) use project::sync::sync_project;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
 pub(crate) use siril_test::siril_test;
