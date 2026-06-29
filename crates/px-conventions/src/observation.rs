@@ -10,16 +10,28 @@ use regex::Regex;
 
 use crate::error::ConventionsError;
 
-/// Matches the leaf observation folder, e.g. `RAW_300_Ha` or `PP_120_OIII_Narrow`.
+/// Matches the leaf observation folder in the original format: `RAW_300_Ha` or `PP_120_OIII_Narrow`.
 ///
 /// Groups:
-///   1. kind    — `RAW` or `PP`
-///   2. exposure — integer seconds (e.g. `300`)
-///   3. filter  — remainder after exposure, may contain underscores (e.g. `OIII_Narrow`)
+///   1. kind     — `RAW` or `PP`
+///   2. exposure — seconds, integer or decimal (e.g. `300`)
+///   3. filter   — remainder after exposure, may contain underscores (e.g. `OIII_Narrow`)
 static FOLDER_RE: OnceLock<Regex> = OnceLock::new();
+
+/// Matches the leaf observation folder in the alternate format: `RAW_L_300.00s` or `PP_OIII_Narrow_120.5s`.
+///
+/// Groups:
+///   1. kind     — `RAW` or `PP`
+///   2. filter   — before exposure, may contain underscores (e.g. `OIII_Narrow`)
+///   3. exposure — seconds with `s` suffix, integer or decimal (e.g. `300.00`)
+static FOLDER_RE_ALT: OnceLock<Regex> = OnceLock::new();
 
 fn folder_regex() -> &'static Regex {
     FOLDER_RE.get_or_init(|| Regex::new(r"^(RAW|PP)_(\d+(?:\.\d+)?)_(.+)$").unwrap())
+}
+
+fn folder_regex_alt() -> &'static Regex {
+    FOLDER_RE_ALT.get_or_init(|| Regex::new(r"^(RAW|PP)_(.+)_(\d+(?:\.\d+)?)s$").unwrap())
 }
 
 #[derive(Debug)]
@@ -89,22 +101,23 @@ impl ObservationPath {
             .and_then(|n| n.to_str())
             .ok_or(ConventionsError::NotFound)?;
 
-        // Use regex to capture kind, exposure, and filter from the leaf folder name.
-        // Filter comes last so it can safely contain underscores (e.g. "OIII_Narrow").
-        let caps = folder_regex()
-            .captures(name)
-            .ok_or(ConventionsError::NotFound)?;
+        // Try both naming conventions:
+        //   Format 1: RAW_{exposure}_{filter}  e.g. RAW_300_Ha
+        //   Format 2: RAW_{filter}_{exposure}s e.g. RAW_L_300.00s
+        let (is_raw, exposure_str, filter) = if let Some(caps) = folder_regex().captures(name) {
+            (&caps[1] == "RAW", caps[2].to_string(), caps[3].to_string())
+        } else if let Some(caps) = folder_regex_alt().captures(name) {
+            (&caps[1] == "RAW", caps[3].to_string(), caps[2].to_string())
+        } else {
+            return Err(ConventionsError::NotFound);
+        };
 
-        let is_raw = &caps[1] == "RAW";
-
-        let exposure: f64 = caps[2].parse().map_err(|_| {
+        let exposure: f64 = exposure_str.parse().map_err(|_| {
             ConventionsError::InvalidFormat(format!(
                 "exposure '{}' is not a valid number",
-                &caps[2]
+                exposure_str
             ))
         })?;
-
-        let filter = caps[3].to_string();
 
         // Walk up the path hierarchy to extract date and target_name.
         //   parent      → date directory  (e.g. 2025-06-25)
@@ -123,11 +136,14 @@ impl ObservationPath {
             .ok_or(ConventionsError::NotFound)?
             .to_string();
 
+        // Derive the counterpart path by swapping the RAW/PP prefix while keeping the stem.
+        // "RAW_" = 4 chars, "PP_" = 3 chars — use the actual prefix length.
+        let stem = if is_raw { &name["RAW_".len()..] } else { &name["PP_".len()..] };
         let (raw, pp) = if is_raw {
-            let pp = path.with_file_name(format!("PP_{}_{}", exposure, filter));
+            let pp = path.with_file_name(format!("PP_{}", stem));
             (path.to_path_buf(), pp)
         } else {
-            let raw = path.with_file_name(format!("RAW_{}_{}", exposure, filter));
+            let raw = path.with_file_name(format!("RAW_{}", stem));
             (raw, path.to_path_buf())
         };
 
@@ -243,6 +259,25 @@ mod tests {
         assert_eq!(obs.pp_path(), &pp);
         assert_eq!(obs.raw_path(), &raw);
         assert_eq!(obs.filter(), Some("OIII_Narrow"));
+    }
+
+    #[test]
+    fn parses_raw_folder_with_filter_prefix_and_exposure_suffix() {
+        let dir = tempfile::tempdir().unwrap();
+        let raw = dir.path().join("NGC_7000_NA_Nebula/2025-06-25/RAW_L_300.00s");
+        fs::create_dir_all(&raw).unwrap();
+
+        let obs = ObservationPath::single(&raw).unwrap();
+
+        assert_eq!(obs.raw_path(), &raw);
+        assert_eq!(
+            obs.pp_path(),
+            dir.path().join("NGC_7000_NA_Nebula/2025-06-25/PP_L_300.00s")
+        );
+        assert_eq!(obs.target_name(), "NGC_7000_NA_Nebula");
+        assert_eq!(obs.date(), NaiveDate::from_ymd_opt(2025, 6, 25));
+        assert_eq!(obs.exposure(), Some(300.0));
+        assert_eq!(obs.filter(), Some("L"));
     }
 
     #[test]
