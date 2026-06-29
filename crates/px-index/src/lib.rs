@@ -6,8 +6,8 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use px_configuration::{ProfileConfig, ProfileConfigError};
-use px_conventions::profile::ProfilePath;
-use px_fits::{CalibratedLight, MasterBias, MasterDark, MasterFlat};
+use px_conventions::{observation::ObservationPath, profile::ProfilePath};
+use px_fits::{CalibratedLight, MasterBias, MasterDark, MasterFlat, ObservationMetadata};
 
 #[derive(Debug, Error)]
 pub enum ProfileIndexError {
@@ -85,6 +85,53 @@ impl From<CalibratedLight> for ObservationRecord {
             calibrated_path: Some(l.path.to_string_lossy().into_owned()),
             site_lat: l.site_lat,
             site_long: l.site_long,
+        }
+    }
+}
+
+impl ObservationRecord {
+    /// Build a record from a discovered `ObservationPath` and its FITS metadata.
+    /// Path-derived fields (target, date, filter, exposure) take precedence over FITS where both
+    /// exist, since the folder structure is authoritative for those values.
+    pub fn from_scan(
+        obs: &ObservationPath,
+        meta: &ObservationMetadata,
+        calibrated_path: Option<String>,
+    ) -> Self {
+        let date = obs
+            .date()
+            .map(|d| d.to_string())
+            .or_else(|| {
+                meta.capture_date()
+                    .map(|dt| dt.format("%Y-%m-%d").to_string())
+            })
+            .unwrap_or_default();
+
+        let filter = obs
+            .filter()
+            .map(|s| s.to_string())
+            .or_else(|| meta.filter.clone())
+            .unwrap_or_default();
+
+        let exposure = obs.exposure().or(meta.exposure).unwrap_or(0.0);
+
+        Self {
+            id: Uuid::new_v4().to_string(),
+            target_name: obs.target_name().to_string(),
+            target_ra: meta.target_ra,
+            target_dec: meta.target_dec,
+            date,
+            filter,
+            exposure,
+            frame_count: Some(meta.frame_count as i64),
+            temperature: meta.temperature,
+            gain: meta.gain,
+            offset: meta.offset,
+            binning: Some(meta.binning.to_string()),
+            raw_path: obs.raw_path().to_string_lossy().into_owned(),
+            calibrated_path,
+            site_lat: meta.site_lat,
+            site_long: meta.site_long,
         }
     }
 }
@@ -479,6 +526,174 @@ impl ProfileIndex {
         .await?;
 
         Ok(row)
+    }
+
+    /// Look up a calibration master by its exact `master_path`. Returns `None` if not registered.
+    pub async fn find_master_by_path(
+        &self,
+        master_path: &str,
+    ) -> Result<Option<CalibrationRecord>, ProfileIndexError> {
+        let row = sqlx::query_as::<_, CalibrationRecord>(
+            "SELECT id, kind, source_path, master_path, date, frame_count,
+                    temperature, gain, offset, binning, exposure, filter
+             FROM calibration_set WHERE master_path = ?",
+        )
+        .bind(master_path)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    /// Returns true if an observation with this exact `raw_path` is already in the index.
+    pub async fn observation_exists(&self, raw_path: &str) -> Result<bool, ProfileIndexError> {
+        let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM observation_set WHERE raw_path = ?")
+            .bind(raw_path)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row.0 > 0)
+    }
+
+    /// Return all observation records ordered by date descending.
+    pub async fn list_observations(&self) -> Result<Vec<ObservationRecord>, ProfileIndexError> {
+        let rows = sqlx::query_as::<_, ObservationRecord>(
+            "SELECT id, target_name, target_ra, target_dec, date, filter, exposure,
+                    frame_count, temperature, gain, offset, binning, raw_path, calibrated_path,
+                    site_lat, site_long
+             FROM observation_set ORDER BY date DESC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Delete all `calibration_link` rows for the given observation.
+    /// Used before re-running calibration matching so stale links are replaced.
+    pub async fn clear_calibration_links(
+        &self,
+        observation_id: &str,
+    ) -> Result<(), ProfileIndexError> {
+        sqlx::query("DELETE FROM calibration_link WHERE observation_id = ?")
+            .bind(observation_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Insert a row into `calibration_link` linking an observation to a calibration master.
+    /// Uses INSERT OR IGNORE so repeated calls for the same (observation, kind) are safe.
+    pub async fn link_calibration(
+        &self,
+        observation_id: &str,
+        master_id: &str,
+        kind: MasterKind,
+    ) -> Result<(), ProfileIndexError> {
+        sqlx::query(
+            "INSERT OR IGNORE INTO calibration_link (observation_id, master_id, kind)
+             VALUES (?, ?, ?)",
+        )
+        .bind(observation_id)
+        .bind(master_id)
+        .bind(kind.as_str())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Return all observations, optionally filtered by exact target name.
+    pub async fn list_observations_by_target(
+        &self,
+        target: Option<&str>,
+    ) -> Result<Vec<ObservationRecord>, ProfileIndexError> {
+        let rows = match target {
+            Some(name) => {
+                sqlx::query_as::<_, ObservationRecord>(
+                    "SELECT id, target_name, target_ra, target_dec, date, filter, exposure,
+                            frame_count, temperature, gain, offset, binning, raw_path, calibrated_path,
+                            site_lat, site_long
+                     FROM observation_set WHERE target_name = ?
+                     ORDER BY date DESC",
+                )
+                .bind(name)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            None => {
+                sqlx::query_as::<_, ObservationRecord>(
+                    "SELECT id, target_name, target_ra, target_dec, date, filter, exposure,
+                            frame_count, temperature, gain, offset, binning, raw_path, calibrated_path,
+                            site_lat, site_long
+                     FROM observation_set ORDER BY date DESC",
+                )
+                .fetch_all(&self.pool)
+                .await?
+            }
+        };
+        Ok(rows)
+    }
+
+    /// Return all observations where `calibrated_path IS NULL`, optionally filtered by exact target name.
+    pub async fn list_uncalibrated_observations(
+        &self,
+        target: Option<&str>,
+    ) -> Result<Vec<ObservationRecord>, ProfileIndexError> {
+        let rows = match target {
+            Some(name) => {
+                sqlx::query_as::<_, ObservationRecord>(
+                    "SELECT id, target_name, target_ra, target_dec, date, filter, exposure,
+                            frame_count, temperature, gain, offset, binning, raw_path, calibrated_path,
+                            site_lat, site_long
+                     FROM observation_set WHERE calibrated_path IS NULL AND target_name = ?
+                     ORDER BY date DESC",
+                )
+                .bind(name)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            None => {
+                sqlx::query_as::<_, ObservationRecord>(
+                    "SELECT id, target_name, target_ra, target_dec, date, filter, exposure,
+                            frame_count, temperature, gain, offset, binning, raw_path, calibrated_path,
+                            site_lat, site_long
+                     FROM observation_set WHERE calibrated_path IS NULL
+                     ORDER BY date DESC",
+                )
+                .fetch_all(&self.pool)
+                .await?
+            }
+        };
+        Ok(rows)
+    }
+
+    /// Return all calibration masters linked to the given observation.
+    pub async fn get_linked_masters(
+        &self,
+        obs_id: &str,
+    ) -> Result<Vec<CalibrationRecord>, ProfileIndexError> {
+        let rows = sqlx::query_as::<_, CalibrationRecord>(
+            "SELECT cs.id, cs.kind, cs.source_path, cs.master_path, cs.date, cs.frame_count,
+                    cs.temperature, cs.gain, cs.offset, cs.binning, cs.exposure, cs.filter
+             FROM calibration_set cs
+             JOIN calibration_link cl ON cl.master_id = cs.id
+             WHERE cl.observation_id = ?",
+        )
+        .bind(obs_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Update `calibrated_path` for an observation after successful calibration.
+    pub async fn update_calibrated_path(
+        &self,
+        obs_id: &str,
+        path: &str,
+    ) -> Result<(), ProfileIndexError> {
+        sqlx::query("UPDATE observation_set SET calibrated_path = ? WHERE id = ?")
+            .bind(path)
+            .bind(obs_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     /// Find the best-matching flat master for the given filter and criteria.

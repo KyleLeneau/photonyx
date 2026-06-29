@@ -6,6 +6,7 @@ pub(crate) use masters::create_dark::create_master_dark;
 pub(crate) use masters::create_flat::create_master_flat;
 pub(crate) use masters::find_best::find_best_master;
 pub(crate) use masters::list::list_masters;
+pub(crate) use observation::batch_calibrate::batch_calibrate_observations;
 pub(crate) use observation::calibrate::calibrate_observation;
 pub(crate) use observation::list::list_observations;
 pub(crate) use observation::preview::preview_observation;

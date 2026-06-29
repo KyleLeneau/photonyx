@@ -139,7 +139,7 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
 
         Commands::Profile(ProfileNamespace {
             command: ProfileCommand::Scan(args),
-        }) => commands::scan_profile(args, printer).await,
+        }) => commands::scan_profile(args, printer, profile_index.unwrap()).await,
 
         // Masters
         Commands::Master(MasterNamespace {
@@ -170,6 +170,10 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Observation(ObservationNamespace {
             command: ObservationCommand::Calibrate(args),
         }) => commands::calibrate_observation(args, printer, profile_index.unwrap()).await,
+
+        Commands::Observation(ObservationNamespace {
+            command: ObservationCommand::BatchCalibrate(args),
+        }) => commands::batch_calibrate_observations(args, printer, profile_index.unwrap()).await,
 
         Commands::Observation(ObservationNamespace {
             command: ObservationCommand::Preview(args),

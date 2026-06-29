@@ -157,7 +157,8 @@ impl Commands {
                         | MasterCommand::Flat(_),
                 })
                 | Commands::Observation(ObservationNamespace {
-                    command: ObservationCommand::Calibrate(_),
+                    command: ObservationCommand::Calibrate(_)
+                        | ObservationCommand::BatchCalibrate(_),
                 })
                 | Commands::Project(ProjectNamespace {
                     command: ProjectCommand::Stack(_) | ProjectCommand::Sample(_),
@@ -222,7 +223,12 @@ pub struct InitProfileArgs {
 }
 
 #[derive(Args, Debug)]
-pub struct ScanProfileArgs {}
+pub struct ScanProfileArgs {
+    /// Re-run calibration linking for all already-indexed observations.
+    /// Clears existing links and matches against the current calibration set.
+    #[arg(long, default_value_t = false)]
+    pub relink: bool,
+}
 
 #[derive(Args)]
 pub struct SelfNamespace {
@@ -387,6 +393,9 @@ pub enum ObservationCommand {
     #[command(alias = "process")]
     Calibrate(CalibrateObservationArgs),
 
+    /// calibrate all uncalibrated observations recorded in the profile index
+    BatchCalibrate(BatchCalibrateObservationArgs),
+
     /// Preview the observation data to cull frames
     Preview(PreviewObservationArgs),
 }
@@ -428,6 +437,25 @@ pub struct CalibrateObservationArgs {
     /// Location of the master FLAT
     #[arg(long, value_hint = ValueHint::FilePath, value_parser = absolute_path)]
     pub flat: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct BatchCalibrateObservationArgs {
+    /// Only calibrate observations for this target name (exact match).
+    #[arg(long)]
+    pub target: Option<String>,
+
+    /// Output file extension
+    #[arg(short, long, default_value = "fit", env = EnvVars::PX_DEFAULT_FIT_EXT)]
+    pub ext: Option<FitFileExtension>,
+
+    /// Remove the output folder before calibrating if it already exists on disk.
+    #[arg(long)]
+    pub clean: bool,
+
+    /// Print what would be calibrated without running the pipeline.
+    #[arg(long)]
+    pub dry_run: bool,
 }
 
 #[derive(Args, Debug)]

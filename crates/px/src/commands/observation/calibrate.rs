@@ -1,8 +1,10 @@
+use std::path::Path;
+
 use anyhow::Result;
 use px_cli::CalibrateObservationArgs;
 use px_conventions::observation::ObservationPath;
 use px_fits::all_fits_files;
-use px_index::ProfileIndex;
+use px_index::{MasterKind, ProfileIndex};
 use px_pipeline::calibrate_light::CalibrateLightSetPipeline;
 use siril_sys::Builder;
 
@@ -78,6 +80,11 @@ pub(crate) async fn calibrate_observation(
         printer.info(format!("created output folder: {:?}", resolved_out_folder))?;
     }
 
+    // Clone before the pipeline moves them so we can look them up in the index afterward.
+    let dark_path = args.dark.clone();
+    let flat_path = args.flat.clone();
+    let bias_path = args.bias.clone();
+
     let light = CalibrateLightSetPipeline::builder()
         .ext(to_fits_ext(args.ext))
         .siril_builder(Builder::default().output_sink(siril_sys::OutputSink::Discard))
@@ -95,8 +102,65 @@ pub(crate) async fn calibrate_observation(
         light
     ))?;
 
-    index.register_observation(light).await?;
+    let obs_id = index.register_observation(light).await?;
     printer.info("Observation registered in profile index")?;
 
+    // Link whichever masters were explicitly passed to this run.
+    // Masters not in the calibration_set are skipped with a warning — the
+    // calibration itself already succeeded, we just can't record the link.
+    link_master_if_registered(
+        &index,
+        &obs_id,
+        dark_path.as_deref(),
+        MasterKind::Dark,
+        &printer,
+    )
+    .await?;
+    link_master_if_registered(
+        &index,
+        &obs_id,
+        flat_path.as_deref(),
+        MasterKind::Flat,
+        &printer,
+    )
+    .await?;
+    link_master_if_registered(
+        &index,
+        &obs_id,
+        bias_path.as_deref(),
+        MasterKind::Bias,
+        &printer,
+    )
+    .await?;
+
     Ok(ExitStatus::Success)
+}
+
+async fn link_master_if_registered(
+    index: &ProfileIndex,
+    obs_id: &str,
+    master_path: Option<&Path>,
+    kind: MasterKind,
+    printer: &Printer,
+) -> Result<()> {
+    let Some(path) = master_path else {
+        return Ok(());
+    };
+
+    let path_str = path.to_string_lossy();
+    match index.find_master_by_path(&path_str).await? {
+        Some(master) => {
+            index.link_calibration(obs_id, &master.id, kind).await?;
+            printer.info(format!("Linked {} master: {}", kind.as_str(), path_str))?;
+        }
+        None => {
+            printer.warn(format!(
+                "{} master at {} is not in the calibration index — link skipped",
+                kind.as_str(),
+                path_str
+            ))?;
+        }
+    }
+
+    Ok(())
 }

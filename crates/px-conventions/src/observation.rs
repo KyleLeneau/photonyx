@@ -138,7 +138,11 @@ impl ObservationPath {
 
         // Derive the counterpart path by swapping the RAW/PP prefix while keeping the stem.
         // "RAW_" = 4 chars, "PP_" = 3 chars — use the actual prefix length.
-        let stem = if is_raw { &name["RAW_".len()..] } else { &name["PP_".len()..] };
+        let stem = if is_raw {
+            &name["RAW_".len()..]
+        } else {
+            &name["PP_".len()..]
+        };
         let (raw, pp) = if is_raw {
             let pp = path.with_file_name(format!("PP_{}", stem));
             (path.to_path_buf(), pp)
@@ -264,7 +268,9 @@ mod tests {
     #[test]
     fn parses_raw_folder_with_filter_prefix_and_exposure_suffix() {
         let dir = tempfile::tempdir().unwrap();
-        let raw = dir.path().join("NGC_7000_NA_Nebula/2025-06-25/RAW_L_300.00s");
+        let raw = dir
+            .path()
+            .join("NGC_7000_NA_Nebula/2025-06-25/RAW_L_300.00s");
         fs::create_dir_all(&raw).unwrap();
 
         let obs = ObservationPath::single(&raw).unwrap();
@@ -272,7 +278,8 @@ mod tests {
         assert_eq!(obs.raw_path(), &raw);
         assert_eq!(
             obs.pp_path(),
-            dir.path().join("NGC_7000_NA_Nebula/2025-06-25/PP_L_300.00s")
+            dir.path()
+                .join("NGC_7000_NA_Nebula/2025-06-25/PP_L_300.00s")
         );
         assert_eq!(obs.target_name(), "NGC_7000_NA_Nebula");
         assert_eq!(obs.date(), NaiveDate::from_ymd_opt(2025, 6, 25));
