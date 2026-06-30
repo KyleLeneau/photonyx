@@ -32,9 +32,9 @@ pub(crate) async fn stack_project_observations(
 
     let config = project.load_config()?;
     printer.info(format!(
-        "project_dir: {:?}, config: {:?}",
+        "project_dir: {}, framing: {}\n",
         project.root.display(),
-        config
+        config.framing
     ))?;
 
     match config.framing {
@@ -69,6 +69,7 @@ async fn stack_single_framing(
             .output_sink(siril_sys::OutputSink::Discard)
             .use_extension(ext.clone());
 
+        printer.info(format!("stacking single framing layer: {:?}", stack.name))?;
         let master_light =
             create_master_light(builder, &stack, project_dir, printer, clean, false).await?;
         master_lights.push(master_light);
@@ -126,7 +127,10 @@ async fn create_master_light(
     // TODO: Save this output file name to the project config?
 
     // Pretty print the result
-    printer.success(format!("Master LIGHT stacking completed: {:?}", master))?;
+    printer.success(format!(
+        "Master LIGHT stacking completed: {:?}\n",
+        master.path
+    ))?;
 
     Ok(master.path)
 }

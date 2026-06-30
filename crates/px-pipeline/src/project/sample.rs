@@ -407,7 +407,6 @@ async fn compose_rgb(
 
     if let Some(lum) = luminance {
         // Case 2: 4 images in input to create a simple LRGB image
-
         if mix_type.is_true_color() && enable_pcc {
             // we run pcc before stretching: we need to create an RGB image from the 3 colors only to calibrate it,
             // save that as a color image, then do the LRGB composition using the luminance and this color image

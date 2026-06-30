@@ -1,3 +1,4 @@
+use std::fmt;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -189,6 +190,56 @@ pub struct GridMosiacMasterLight {
 
     /// Create a master_light for every layer
     pub panels: Vec<ProjectLinearStack>,
+}
+
+impl fmt::Display for Framing {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Framing::Single(s) => write!(f, "{s}"),
+            Framing::SpiralMosiac(s) => write!(f, "{s}"),
+            Framing::GridMosiac(g) => write!(f, "{g}"),
+        }
+    }
+}
+
+impl fmt::Display for SingleFraming {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Single ({} layers)", self.master_lights.len())?;
+        for layer in &self.master_lights {
+            write!(f, "\n  - {}", layer.name)?;
+            if let Some(filter) = &layer.filter {
+                write!(f, " [{filter}]")?;
+            }
+            if let Some(panel) = &layer.panel {
+                write!(f, " (panel: {panel})")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for SpiralMosiacFraming {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Spiral Mosaic: {}", self.name)?;
+        if let Some(filter) = &self.filter {
+            write!(f, " [{filter}]")?;
+        }
+        write!(f, " ({} observations)", self.observations.len())
+    }
+}
+
+impl fmt::Display for GridMosiacFraming {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Grid Mosaic ({} panels)", self.master_lights.len())?;
+        for panel in &self.master_lights {
+            write!(f, "\n  - {}", panel.name)?;
+            if let Some(filter) = &panel.filter {
+                write!(f, " [{filter}]")?;
+            }
+            write!(f, " ({} stacks)", panel.panels.len())?;
+        }
+        Ok(())
+    }
 }
 
 impl ProjectConfig {
