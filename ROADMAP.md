@@ -44,16 +44,17 @@
 * [x] top level commands like `px profile scan` and `px obs batch-calibrate` as shortcuts to do setup actions
 * [x] The `px scan` should detect changes and ask to update things, like fill in incomplete Profile & Hardware information (kind of like import) - use a strategy pattern?
 * [x] `px project init` should should be a workflow TUI with prompts to build the config, probably need `px project edit` to do the same for updates
-* [ ] need to implement scan of observations so that an inventory of lights is managed and have a place to associate master calibration frames to
+* [x] need to implement scan of observations so that an inventory of lights is managed and have a place to associate master calibration frames to
+* [x] implement the pipelines for color samples
+* [x] It would be cool on a project level to be able to detect changes to config or rejections to inteligently auto-clean a stack
 * [ ] implement a profile level or top level "watcher" that watches for file drops in light obs folder, scans, finds best master and sets that link up and then calibrate individual sub frames as they come in
 * [ ] build on top of the per sub frame calibration and send to a livestacker (tasks & channels) that produces linear weighted stacks per target then send to another queue to beautify them with the latest beuty image added to a rolling motion movie stream
 * [ ] need a debug tool to trigger the similar flow of a file watcher to simulate file drops by by "playing" a folder of files
-* [ ] implement the pipelines for color samples
 * [ ] implement obs find best to manage calibration links
 * [ ] need a tool to bulk edit or ensure a filter name is added to all files in a sequence (for scopes that omit this keyword)
 * [ ] need an internal way to pause a pipeline to check output
-* [ ] It would be cool on a project level to be able to detect changes to config or rejections to inteligently auto-clean a stack
 * [ ] `mirrorx` may not be needed, if we can platsolve and let it flip the image on it's own
+* [ ] Add the ability to review all frames for a project stacking and human reject the bad ones (should be part of lock change detection)
 
 ### Bugs
 
@@ -61,8 +62,8 @@
 * [x] fix why the master file names don't see the YYYY-MM-DD format in the path string
 * [x] better populate a Light frame into the observation_set table (ra, dec, date, target name)
 * [x] for smart telescopes we may not have masters to let `px obs calibrate` work without those passed so that files could minimally be debayered
+* [x] The project stack outputs need more consistent naming for when registration is not needed
 * [ ] Convention to find observation path needs to be a bit more flexible for naming conventions (seestars)
-* [ ] The project stack outputs need more consistent naming for when registration is not needed
 
 ### Future
 

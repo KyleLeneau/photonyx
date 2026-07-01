@@ -3,7 +3,8 @@ use std::path::Path;
 use anyhow::Result;
 use px_cli::SampleProjectArgs;
 use px_configuration::{
-    ColorSampleConfig, Framing, GridMosiacFraming, SampleOutputFormat, SingleFraming,
+    ColorSampleConfig, FramingLock, Framing, GridMosiacFraming, ProjectLock, SampleOutputFormat,
+    SingleFraming,
 };
 use px_conventions::project::ProjectPath;
 use px_pipeline::{
@@ -32,9 +33,16 @@ pub(crate) async fn create_project_samples(
     let sample_config = config.color_sample.unwrap_or_default();
     let ext = FitsExt::FIT;
 
+    // Load lock for precise output paths; falls back to naming conventions when absent.
+    let lock = ProjectLock::load(&project.root)?;
+
     let stacks = match &config.framing {
-        Framing::Single(framing) => collect_single_framing(framing, &project.root, &ext),
-        Framing::GridMosiac(framing) => collect_grid_mosiac_framing(framing, &project.root, &ext),
+        Framing::Single(framing) => {
+            collect_single_framing(framing, &project.root, &ext, lock.as_ref())
+        }
+        Framing::GridMosiac(framing) => {
+            collect_grid_mosiac_framing(framing, &project.root, &ext, lock.as_ref())
+        }
         Framing::SpiralMosiac(_) => {
             printer.warn(
                 "px project sample does not support SpiralMosiac framing \
@@ -110,49 +118,83 @@ pub(crate) async fn create_project_samples(
     Ok(ExitStatus::Success)
 }
 
+/// Collect `FilteredStack` entries for a `SingleFraming` project.
+///
+/// When a lock is available, `registered_master_light` is used directly (it is always set,
+/// even for single-layer projects where it mirrors the master light). Without a lock the
+/// function falls back to the naming-convention helpers.
 fn collect_single_framing(
     framing: &SingleFraming,
     project_dir: &Path,
     ext: &FitsExt,
+    lock: Option<&ProjectLock>,
 ) -> Vec<FilteredStack> {
-    let multi = framing.master_lights.len() > 1;
+    let lock_single = lock.and_then(|l| {
+        if let FramingLock::Single(s) = &l.framing { Some(s) } else { None }
+    });
+
     framing
         .master_lights
         .iter()
         .map(|stack| {
-            let base = if multi {
-                registered_master_light_path(project_dir, &stack.name)
-            } else {
-                master_light_path(project_dir, &stack.name)
-            };
+            let path = lock_single
+                .and_then(|s| s.find_layer(&stack.name))
+                .and_then(|l| l.registered_master_light.clone())
+                .unwrap_or_else(|| {
+                    // Fallback: use naming convention
+                    let multi = framing.master_lights.len() > 1;
+                    if multi {
+                        registered_master_light_path(project_dir, &stack.name)
+                    } else {
+                        master_light_path(project_dir, &stack.name)
+                    }
+                    .with_extension(ext.to_string())
+                });
+
             FilteredStack {
                 name: stack.name.clone(),
                 filter: stack.filter.clone(),
-                path: base.with_extension(ext.to_string()),
+                path,
             }
         })
         .collect()
 }
 
+/// Collect `FilteredStack` entries for a `GridMosiac` project.
+///
+/// Uses lock `registered_master_light` per grid layer when available.
 fn collect_grid_mosiac_framing(
     framing: &GridMosiacFraming,
     project_dir: &Path,
     ext: &FitsExt,
+    lock: Option<&ProjectLock>,
 ) -> Vec<FilteredStack> {
-    let multi = framing.master_lights.len() > 1;
+    let lock_grid = lock.and_then(|l| {
+        if let FramingLock::GridMosiac(g) = &l.framing { Some(g) } else { None }
+    });
+
     framing
         .master_lights
         .iter()
         .map(|layer| {
-            let base = if multi {
-                registered_master_light_path(project_dir, &layer.name)
-            } else {
-                master_light_path(project_dir, &layer.name)
-            };
+            let path = lock_grid
+                .and_then(|g| g.find_layer(&layer.name))
+                .and_then(|l| l.registered_master_light.clone())
+                .unwrap_or_else(|| {
+                    // Fallback: use naming convention
+                    let multi = framing.master_lights.len() > 1;
+                    if multi {
+                        registered_master_light_path(project_dir, &layer.name)
+                    } else {
+                        master_light_path(project_dir, &layer.name)
+                    }
+                    .with_extension(ext.to_string())
+                });
+
             FilteredStack {
                 name: layer.name.clone(),
                 filter: layer.filter.clone(),
-                path: base.with_extension(ext.to_string()),
+                path,
             }
         })
         .collect()
