@@ -165,7 +165,7 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         // Observations
         Commands::Observation(ObservationNamespace {
             command: ObservationCommand::List(args),
-        }) => commands::list_observations(args, printer).await,
+        }) => commands::list_observations(args, printer, profile_index.unwrap()).await,
 
         Commands::Observation(ObservationNamespace {
             command: ObservationCommand::Calibrate(args),

@@ -66,6 +66,31 @@ pub struct ObservationRecord {
     pub site_long: Option<f64>,
 }
 
+/// `ObservationRecord` extended with the file paths of any linked calibration masters.
+/// Populated by a single LEFT-JOIN query — fields are `None` when no link exists.
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct ObservationWithMasters {
+    pub id: String,
+    pub target_name: String,
+    pub target_ra: Option<f64>,
+    pub target_dec: Option<f64>,
+    pub date: String,
+    pub filter: String,
+    pub exposure: f64,
+    pub frame_count: Option<i64>,
+    pub temperature: Option<f64>,
+    pub gain: Option<i64>,
+    pub offset: Option<i64>,
+    pub binning: Option<String>,
+    pub raw_path: String,
+    pub calibrated_path: Option<String>,
+    pub site_lat: Option<f64>,
+    pub site_long: Option<f64>,
+    pub bias_path: Option<String>,
+    pub dark_path: Option<String>,
+    pub flat_path: Option<String>,
+}
+
 impl From<CalibratedLight> for ObservationRecord {
     fn from(l: CalibratedLight) -> Self {
         Self {
@@ -551,6 +576,33 @@ impl ProfileIndex {
             .fetch_one(&self.pool)
             .await?;
         Ok(row.0 > 0)
+    }
+
+    /// Return all observations joined with their linked calibration master paths (one row per
+    /// observation; None for any master kind that has no link).
+    pub async fn list_observations_with_masters(
+        &self,
+    ) -> Result<Vec<ObservationWithMasters>, ProfileIndexError> {
+        let rows = sqlx::query_as::<_, ObservationWithMasters>(
+            "SELECT
+                o.id, o.target_name, o.target_ra, o.target_dec, o.date, o.filter, o.exposure,
+                o.frame_count, o.temperature, o.gain, o.offset, o.binning,
+                o.raw_path, o.calibrated_path, o.site_lat, o.site_long,
+                bias.master_path  AS bias_path,
+                dark.master_path  AS dark_path,
+                flat.master_path  AS flat_path
+             FROM observation_set o
+             LEFT JOIN calibration_link cl_b ON cl_b.observation_id = o.id AND cl_b.kind = 'bias'
+             LEFT JOIN calibration_set  bias  ON bias.id = cl_b.master_id
+             LEFT JOIN calibration_link cl_d ON cl_d.observation_id = o.id AND cl_d.kind = 'dark'
+             LEFT JOIN calibration_set  dark  ON dark.id = cl_d.master_id
+             LEFT JOIN calibration_link cl_f ON cl_f.observation_id = o.id AND cl_f.kind = 'flat'
+             LEFT JOIN calibration_set  flat  ON flat.id = cl_f.master_id
+             ORDER BY o.date DESC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
     }
 
     /// Return all observation records ordered by date descending.

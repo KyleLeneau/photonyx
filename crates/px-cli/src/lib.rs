@@ -179,7 +179,7 @@ impl Commands {
                     command: ProfileCommand::Init(_),
                 })
                 | Commands::Observation(ObservationNamespace {
-                    command: ObservationCommand::List(_) | ObservationCommand::Preview(_),
+                    command: ObservationCommand::Preview(_),
                 })
                 | Commands::Project(ProjectNamespace {
                     command: ProjectCommand::List(_),
@@ -400,8 +400,44 @@ pub enum ObservationCommand {
     Preview(PreviewObservationArgs),
 }
 
-#[derive(Args)]
-pub struct ListObservationArgs {}
+#[derive(Args, Debug)]
+pub struct ListObservationArgs {
+    /// Filter by target name (case-insensitive substring match)
+    #[arg(short, long)]
+    pub target: Option<String>,
+
+    /// Only show observations captured in the last N days
+    #[arg(long)]
+    pub days: Option<u32>,
+
+    /// Filter by filter name (e.g. Ha, OIII, SII, L, R, G, B)
+    #[arg(short, long = "filter")]
+    pub filter: Option<String>,
+
+    /// Only show calibrated observations
+    #[arg(long, conflicts_with = "uncalibrated")]
+    pub calibrated: bool,
+
+    /// Only show uncalibrated observations
+    #[arg(long, conflicts_with = "calibrated")]
+    pub uncalibrated: bool,
+
+    /// Only show observations with at least this many frames
+    #[arg(long)]
+    pub min_frames: Option<u32>,
+
+    /// Only show observations on or after this date (YYYY-MM-DD)
+    #[arg(long)]
+    pub from: Option<String>,
+
+    /// Only show observations on or before this date (YYYY-MM-DD)
+    #[arg(long)]
+    pub to: Option<String>,
+
+    /// Output format
+    #[arg(long, short, default_value = "pretty")]
+    pub output: OutputFormat,
+}
 
 #[derive(Args, Debug)]
 pub struct CalibrateObservationArgs {
