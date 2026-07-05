@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::Result;
 use px_cli::SampleProjectArgs;
 use px_configuration::{
-    ColorSampleConfig, FramingLock, Framing, GridMosiacFraming, ProjectLock, SampleOutputFormat,
+    ColorSampleConfig, Framing, FramingLock, GridMosiacFraming, ProjectLock, SampleOutputFormat,
     SingleFraming,
 };
 use px_conventions::project::ProjectPath;
@@ -130,7 +130,11 @@ fn collect_single_framing(
     lock: Option<&ProjectLock>,
 ) -> Vec<FilteredStack> {
     let lock_single = lock.and_then(|l| {
-        if let FramingLock::Single(s) = &l.framing { Some(s) } else { None }
+        if let FramingLock::Single(s) = &l.framing {
+            Some(s)
+        } else {
+            None
+        }
     });
 
     framing
@@ -170,7 +174,11 @@ fn collect_grid_mosiac_framing(
     lock: Option<&ProjectLock>,
 ) -> Vec<FilteredStack> {
     let lock_grid = lock.and_then(|l| {
-        if let FramingLock::GridMosiac(g) = &l.framing { Some(g) } else { None }
+        if let FramingLock::GridMosiac(g) = &l.framing {
+            Some(g)
+        } else {
+            None
+        }
     });
 
     framing

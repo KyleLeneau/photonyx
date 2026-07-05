@@ -4,10 +4,9 @@ use anyhow::Result;
 use chrono::Utc;
 use px_cli::StackProjectArgs;
 use px_configuration::{
-    FramingLock, GridLayerLock, GridMosiacFraming, GridMosiacLock, LayerLock, PanelLock,
-    ProjectLinearStack, SingleFramingLock, SpiralMosiacLock, Framing,
-    ProjectLock, SingleFraming, SpiralMosiacFraming,
-    hash_linear_stack, hash_spiral_framing,
+    Framing, FramingLock, GridLayerLock, GridMosiacFraming, GridMosiacLock, LayerLock, PanelLock,
+    ProjectLinearStack, ProjectLock, SingleFraming, SingleFramingLock, SpiralMosiacFraming,
+    SpiralMosiacLock, hash_linear_stack, hash_spiral_framing,
 };
 use px_conventions::{observation::ObservationPath, project::ProjectPath};
 use px_pipeline::{
@@ -73,7 +72,11 @@ async fn stack_single_framing(
     };
 
     let old_single = existing_lock.as_ref().and_then(|l| {
-        if let FramingLock::Single(s) = &l.framing { Some(s) } else { None }
+        if let FramingLock::Single(s) = &l.framing {
+            Some(s)
+        } else {
+            None
+        }
     });
 
     let mut new_single = SingleFramingLock::default();
@@ -117,9 +120,7 @@ async fn stack_single_framing(
 
     if needs_reg {
         let reg_dirty = any_restacked
-            || old_single.is_none_or(|s| {
-                s.master_lights.iter().any(|l| l.is_registration_dirty())
-            });
+            || old_single.is_none_or(|s| s.master_lights.iter().any(|l| l.is_registration_dirty()));
 
         if reg_dirty {
             let builder = Builder::default()
@@ -127,7 +128,11 @@ async fn stack_single_framing(
                 .use_extension(ext.clone());
             register_layers(builder, master_light_paths, project_dir, printer).await?;
 
-            for (entry, stack) in new_single.master_lights.iter_mut().zip(&framing.master_lights) {
+            for (entry, stack) in new_single
+                .master_lights
+                .iter_mut()
+                .zip(&framing.master_lights)
+            {
                 entry.registered_master_light = Some(
                     registered_master_light_path(project_dir, &stack.name)
                         .with_extension(ext.to_string()),
@@ -135,7 +140,11 @@ async fn stack_single_framing(
             }
         } else {
             printer.info("registration: up to date, skipping")?;
-            for (entry, stack) in new_single.master_lights.iter_mut().zip(&framing.master_lights) {
+            for (entry, stack) in new_single
+                .master_lights
+                .iter_mut()
+                .zip(&framing.master_lights)
+            {
                 let reg_path = old_single
                     .and_then(|s| s.find_layer(&stack.name))
                     .and_then(|l| l.registered_master_light.clone());
@@ -163,10 +172,18 @@ async fn stack_spiral_mosiac_framing(
 ) -> Result<()> {
     let ext = FitsExt::FIT;
 
-    let existing_lock = if clean { None } else { ProjectLock::load(project_dir)? };
+    let existing_lock = if clean {
+        None
+    } else {
+        ProjectLock::load(project_dir)?
+    };
 
     let old_spiral = existing_lock.as_ref().and_then(|l| {
-        if let FramingLock::SpiralMosiac(s) = &l.framing { Some(s) } else { None }
+        if let FramingLock::SpiralMosiac(s) = &l.framing {
+            Some(s)
+        } else {
+            None
+        }
     });
 
     let hash = hash_spiral_framing(&framing);
@@ -199,7 +216,10 @@ async fn stack_spiral_mosiac_framing(
             .run(DefaultPipelineReporter::from(printer))
             .await?;
 
-        printer.success(format!("Master LIGHT stacking completed: {:?}", master.path))?;
+        printer.success(format!(
+            "Master LIGHT stacking completed: {:?}",
+            master.path
+        ))?;
         master.path
     };
 
@@ -229,10 +249,18 @@ async fn stack_grid_mosiac_framing(
         .output_sink(siril_sys::OutputSink::Discard)
         .use_extension(ext.clone());
 
-    let existing_lock = if clean { None } else { ProjectLock::load(project_dir)? };
+    let existing_lock = if clean {
+        None
+    } else {
+        ProjectLock::load(project_dir)?
+    };
 
     let old_grid = existing_lock.as_ref().and_then(|l| {
-        if let FramingLock::GridMosiac(g) = &l.framing { Some(g) } else { None }
+        if let FramingLock::GridMosiac(g) = &l.framing {
+            Some(g)
+        } else {
+            None
+        }
     });
 
     let mut new_grid = GridMosiacLock::default();
@@ -259,13 +287,7 @@ async fn stack_grid_mosiac_framing(
             } else {
                 any_panel_restacked = true;
                 printer.info(format!("stacking grid panel: {:?}", panel.name))?;
-                run_master_light(
-                    builder.clone(),
-                    panel,
-                    project_dir,
-                    printer,
-                )
-                .await?
+                run_master_light(builder.clone(), panel, project_dir, printer).await?
             };
 
             panel_locks.push(PanelLock {
@@ -278,12 +300,14 @@ async fn stack_grid_mosiac_framing(
         }
 
         // Stitch panels into a grid master light for this layer.
-        let grid_dirty = any_panel_restacked
-            || old_grid_layer.is_none_or(|l| l.is_grid_dirty());
+        let grid_dirty = any_panel_restacked || old_grid_layer.is_none_or(|l| l.is_grid_dirty());
 
         let grid_ml_path = if !grid_dirty {
             let cached = old_grid_layer.unwrap().master_light.clone().unwrap();
-            printer.info(format!("grid layer `{}`: up to date, skipping", grid_layer.name))?;
+            printer.info(format!(
+                "grid layer `{}`: up to date, skipping",
+                grid_layer.name
+            ))?;
             cached
         } else {
             any_layer_restacked = true;
@@ -324,15 +348,15 @@ async fn stack_grid_mosiac_framing(
 
     if needs_reg {
         let reg_dirty = any_layer_restacked
-            || old_grid.is_none_or(|g| {
-                g.master_lights.iter().any(|l| l.is_registration_dirty())
-            });
+            || old_grid.is_none_or(|g| g.master_lights.iter().any(|l| l.is_registration_dirty()));
 
         if reg_dirty {
             register_layers(builder, layer_paths, project_dir, printer).await?;
 
-            for (entry, config_layer) in
-                new_grid.master_lights.iter_mut().zip(&framing.master_lights)
+            for (entry, config_layer) in new_grid
+                .master_lights
+                .iter_mut()
+                .zip(&framing.master_lights)
             {
                 entry.registered_master_light = Some(
                     registered_master_light_path(project_dir, &config_layer.name)
@@ -341,8 +365,10 @@ async fn stack_grid_mosiac_framing(
             }
         } else {
             printer.info("registration: up to date, skipping")?;
-            for (entry, config_layer) in
-                new_grid.master_lights.iter_mut().zip(&framing.master_lights)
+            for (entry, config_layer) in new_grid
+                .master_lights
+                .iter_mut()
+                .zip(&framing.master_lights)
             {
                 let reg_path = old_grid
                     .and_then(|g| g.find_layer(&config_layer.name))
@@ -419,7 +445,11 @@ async fn register_layers(
 }
 
 fn save_lock(project_dir: &Path, framing: FramingLock) -> Result<()> {
-    ProjectLock { schema_version: 1, framing }.save(project_dir)?;
+    ProjectLock {
+        schema_version: 1,
+        framing,
+    }
+    .save(project_dir)?;
     Ok(())
 }
 

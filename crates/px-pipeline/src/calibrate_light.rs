@@ -10,7 +10,7 @@ use px_fits::{
 use px_fs::OptionPath;
 use siril_sys::{
     Builder, ConversionFile, FitsExt,
-    commands::{Calibrate, Convert},
+    commands::{Calibrate, CalibrateSingle, Convert},
     siril_ext::CdExt,
 };
 
@@ -47,46 +47,81 @@ impl CalibrateLightSetPipeline {
             .build()
             .await?;
 
-        // Move to the raw folder to convert into a sequence
-        let id = reporter.step_started("[1/3] Converting light frames...");
-        siril.cd(&self.raw_folder).await?;
-        siril
-            .execute(
-                &Convert::builder("light_")
-                    .output_dir(siril.initial_directory())
-                    .build(),
-            )
-            .await
-            .inspect(|_| reporter.step_ended(id, "[1/3] Converted light frames", true))
-            .inspect_err(|_| reporter.step_ended(id, "✗ Convert failed", false))?;
+        if raw_files.len() == 1
+            && let Some(first) = raw_files.first()
+        {
+            // Calibrate the single light frame using the masters
+            let id = reporter.step_started("[1/2] Calibrating single light frame...");
+            siril
+                .execute(
+                    &CalibrateSingle::builder(first.display().to_string())
+                        .maybe_bias(self.bias.some_string())
+                        .maybe_dark(self.dark.some_string())
+                        .maybe_flat(self.flat.some_string())
+                        .cfa(all_color)
+                        .debayer(all_color)
+                        .equalize_cfa(all_color)
+                        .build(),
+                )
+                .await
+                .inspect(|_| reporter.step_ended(id, "[1/2] Calibrated single light frame", true))
+                .inspect_err(|_| reporter.step_ended(id, "✗ Calibration failed", false))?;
 
-        // Return to working directory
-        siril.cd(&siril.initial_directory()).await?;
+            // Load the conversion file and move final files to output
+            let id = reporter.step_started("[2/2] Moving calibrated single light frame...");
+            let single_name = format!(
+                "pp_{}",
+                first.file_name().unwrap_or_default().to_string_lossy()
+            );
+            let src = &siril
+                .initial_directory()
+                .join(&single_name)
+                .with_extension(self.ext.to_string());
+            let dst = self.out_folder.join(&single_name);
+            std::fs::rename(src, dst)?;
+            reporter.step_ended(id, "[2/2] Moved calibrated light frames", true);
+        } else {
+            // Move to the raw folder to convert into a sequence
+            let id = reporter.step_started("[1/3] Converting light frames...");
+            siril.cd(&self.raw_folder).await?;
+            siril
+                .execute(
+                    &Convert::builder("light_")
+                        .output_dir(siril.initial_directory())
+                        .build(),
+                )
+                .await
+                .inspect(|_| reporter.step_ended(id, "[1/3] Converted light frames", true))
+                .inspect_err(|_| reporter.step_ended(id, "✗ Convert failed", false))?;
 
-        // Calibrate the light frames using the master bias
-        let id = reporter.step_started("[2/3] Calibrating light frames...");
-        siril
-            .execute(
-                &Calibrate::builder("light_")
-                    .maybe_bias(self.bias.some_string())
-                    .maybe_dark(self.dark.some_string())
-                    .maybe_flat(self.flat.some_string())
-                    .cfa(all_color)
-                    .debayer(all_color)
-                    .equalize_cfa(all_color)
-                    .build(),
-            )
-            .await
-            .inspect(|_| reporter.step_ended(id, "[2/3] Calibrated light frames", true))
-            .inspect_err(|_| reporter.step_ended(id, "✗ Calibration failed", false))?;
+            // Return to working directory
+            siril.cd(&siril.initial_directory()).await?;
 
-        // Load the conversion file and move final files to output
-        let id = reporter.step_started("[3/3] Moving calibrated light frames...");
-        let conversion_file = siril.initial_directory().join("light_conversion.txt");
-        let conversion = ConversionFile::new(conversion_file)?;
-        match conversion.move_converted_files(&self.out_folder, "pp_") {
-            Ok(_) => reporter.step_ended(id, "[3/3] Moved calibrated light frames", true),
-            Err(_) => reporter.step_ended(id, "✗ Move failed", false),
+            // Calibrate the light frames using the masters
+            let id = reporter.step_started("[2/3] Calibrating light frames...");
+            siril
+                .execute(
+                    &Calibrate::builder("light_")
+                        .maybe_bias(self.bias.some_string())
+                        .maybe_dark(self.dark.some_string())
+                        .maybe_flat(self.flat.some_string())
+                        .cfa(all_color)
+                        .debayer(all_color)
+                        .equalize_cfa(all_color)
+                        .build(),
+                )
+                .await
+                .inspect(|_| reporter.step_ended(id, "[2/3] Calibrated light frames", true))
+                .inspect_err(|_| reporter.step_ended(id, "✗ Calibration failed", false))?;
+
+            // Load the conversion file and move final files to output
+            let id = reporter.step_started("[3/3] Moving calibrated light frames...");
+            let conversion_file = siril.initial_directory().join("light_conversion.txt");
+            let conversion = ConversionFile::new(conversion_file)?;
+            match conversion.move_converted_files(&self.out_folder, "pp_") {
+                Ok(_) => reporter.step_ended(id, "[3/3] Moved calibrated light frames", true),
+                Err(_) => reporter.step_ended(id, "✗ Move failed", false),
+            }
         }
 
         // Try to get the filter from calibrated file OR flat

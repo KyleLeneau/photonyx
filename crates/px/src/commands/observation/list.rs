@@ -119,7 +119,10 @@ fn render_table(rows: &[&ObservationWithMasters], profile_root: &Path) -> anyhow
         .iter()
         .map(|r| {
             let exposure = format!("{:.0}s", r.exposure);
-            let frames = r.frame_count.map(|f| f.to_string()).unwrap_or_else(|| dash.to_string());
+            let frames = r
+                .frame_count
+                .map(|f| f.to_string())
+                .unwrap_or_else(|| dash.to_string());
             let (cal_symbol, cal_color) = if r.calibrated_path.is_some() {
                 ("\u{2713}", Color::Green)
             } else {
