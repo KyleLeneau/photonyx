@@ -55,6 +55,9 @@
 * [ ] need an internal way to pause a pipeline to check output
 * [ ] `mirrorx` may not be needed, if we can platsolve and let it flip the image on it's own
 * [ ] Add the ability to review all frames for a project stacking and human reject the bad ones (should be part of lock change detection)
+* [ ] Need a way to delete / audit obs no longer at their path
+* [ ] Need a way to relink calibration masters to obs
+* [ ] What about a rich terminal UI to edit & manage the profile...
 
 ### Bugs
 
