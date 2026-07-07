@@ -58,6 +58,7 @@
 * [ ] Need a way to delete / audit obs no longer at their path
 * [ ] Need a way to relink calibration masters to obs
 * [ ] What about a rich terminal UI to edit & manage the profile...
+* [ ] What about a way to to organize a profile based on a bunch of data dropped, organize it into the convention and make sure there is a dry run approach for it (solves the seestar capture & organize issue)
 
 ### Bugs
 
