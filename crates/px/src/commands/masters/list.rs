@@ -111,7 +111,7 @@ fn render_table(rows: &[&CalibrationRecord]) -> anyhow::Result<()> {
             [
                 Constraint::Length(6),
                 Constraint::Length(12),
-                Constraint::Length(8),
+                Constraint::Length(10),
                 Constraint::Length(10),
                 Constraint::Length(9),
                 Constraint::Length(8),
