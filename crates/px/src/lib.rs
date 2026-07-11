@@ -125,7 +125,6 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
                 "px was not installed with the installer and cannot update itself.";
             anyhow::bail!(BASE_MESSAGE);
         }
-        Commands::Tui => commands::terminal_ui(printer).await,
         Commands::Inspect(args) => commands::inspect_file(args, printer).await,
 
         // Profile

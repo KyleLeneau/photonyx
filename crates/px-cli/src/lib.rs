@@ -120,10 +120,6 @@ pub enum Commands {
     #[command(hide = true)]
     SirilTest,
 
-    /// Launch a terminal UI poc
-    #[command(hide = true)]
-    Tui,
-
     /// Manage hardware profiles
     #[command()]
     Profile(ProfileNamespace),
@@ -173,7 +169,6 @@ impl Commands {
             Commands::GenerateShellCompletion(_)
                 | Commands::Self_(_)
                 | Commands::SirilTest
-                | Commands::Tui
                 | Commands::Inspect(_)
                 | Commands::Profile(ProfileNamespace {
                     command: ProfileCommand::Init(_),
