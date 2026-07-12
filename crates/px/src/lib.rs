@@ -208,5 +208,7 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Project(ProjectNamespace {
             command: ProjectCommand::Edit(args),
         }) => commands::edit_project(args, printer, profile_index.unwrap()).await,
+
+        Commands::Tui => commands::run_tui(printer, profile_index.unwrap()).await,
     }
 }

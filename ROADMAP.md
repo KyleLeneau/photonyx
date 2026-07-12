@@ -47,18 +47,13 @@
 * [x] need to implement scan of observations so that an inventory of lights is managed and have a place to associate master calibration frames to
 * [x] implement the pipelines for color samples
 * [x] It would be cool on a project level to be able to detect changes to config or rejections to inteligently auto-clean a stack
-* [ ] implement a profile level or top level "watcher" that watches for file drops in light obs folder, scans, finds best master and sets that link up and then calibrate individual sub frames as they come in
-* [ ] build on top of the per sub frame calibration and send to a livestacker (tasks & channels) that produces linear weighted stacks per target then send to another queue to beautify them with the latest beuty image added to a rolling motion movie stream
-* [ ] need a debug tool to trigger the similar flow of a file watcher to simulate file drops by by "playing" a folder of files
 * [ ] implement obs find best to manage calibration links
-* [ ] need a tool to bulk edit or ensure a filter name is added to all files in a sequence (for scopes that omit this keyword)
 * [ ] need an internal way to pause a pipeline to check output
 * [ ] `mirrorx` may not be needed, if we can platsolve and let it flip the image on it's own
 * [ ] Add the ability to review all frames for a project stacking and human reject the bad ones (should be part of lock change detection)
 * [ ] Need a way to delete / audit obs no longer at their path
 * [ ] Need a way to relink calibration masters to obs
 * [ ] What about a rich terminal UI to edit & manage the profile...
-* [ ] What about a way to to organize a profile based on a bunch of data dropped, organize it into the convention and make sure there is a dry run approach for it (solves the seestar capture & organize issue)
 
 ### Bugs
 
@@ -74,6 +69,14 @@
 * [ ] should the project config type exist in the DB instead?
 * [ ] need to support and test multi pipes on windows now that MR is merged for support
 * [ ] need a better way to bump versions for a release
-* [ ] need a `.px` folder in the user home initialized at some point to store default or common config (https://crates.io/crates/etcetera) - can also use this for cross profile querying
-* [ ] simple web server to recieve events of where scopes are pointed (ra, dec, fov, pixel size, name) and render an event feed on a web UI, and display a bounding box on a stellarium view. Have the cli initialize and send this data through a LIGHT file watcher.
+* [ ] What about a way to to organize a profile based on a bunch of data dropped, organize it into the convention and make sure there is a dry run approach for it (solves the seestar capture & organize issue)
+
+### Parking Lot
+
+* [ ] need a tool to bulk edit or ensure a filter name is added to all files in a sequence (for scopes that omit this keyword)
+* [ ] need a debug tool to trigger the similar flow of a file watcher to simulate file drops by by "playing" a folder of files
+* [ ] implement a profile level or top level "watcher" that watches for file drops in light obs folder, scans, finds best master and sets that link up and then calibrate individual sub frames as they come in
+* [ ] build on top of the per sub frame calibration and send to a livestacker (tasks & channels) that produces linear weighted stacks per target then send to another queue to beautify them with the latest beuty image added to a rolling motion movie stream
 * [ ] build a command that monitors the advanced API of nina and renders a video of the guiding results along with a history of events on the right side
+* [ ] simple web server to recieve events of where scopes are pointed (ra, dec, fov, pixel size, name) and render an event feed on a web UI, and display a bounding box on a stellarium view. Have the cli initialize and send this data through a LIGHT file watcher.
+* [ ] need a `.px` folder in the user home initialized at some point to store default or common config (https://crates.io/crates/etcetera) - can also use this for cross profile querying

@@ -139,6 +139,10 @@ pub enum Commands {
     /// Manage and create projects from observations
     #[command()]
     Project(ProjectNamespace),
+
+    /// Launch the interactive terminal UI
+    #[command()]
+    Tui,
 }
 
 impl Commands {
