@@ -383,7 +383,7 @@ impl eframe::App for BlinkApp {
                             img_rect,
                             egui::Rounding::ZERO,
                             egui::Stroke::new(
-                                4.0,
+                                4.0_f32,
                                 egui::Color32::from_rgba_unmultiplied(220, 30, 30, 200),
                             ),
                         );
