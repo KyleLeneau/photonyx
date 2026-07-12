@@ -69,6 +69,7 @@ impl ColorMixType {
 
 /// A single sample to produce: a multi-filter composite, or a mono passthrough when no
 /// composite mix can be formed from the available filters.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum ColorSample {
     Single {
