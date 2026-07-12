@@ -150,7 +150,7 @@ impl flags::MergeSirilCommands {
 
             let replaced = doc_re.replace(&impl_contents, format!("{new_docs}#[derive(Builder)]"));
             if replaced != impl_contents {
-                print!("Updatings docs on: {:?}", &impl_file);
+                print!("Updatings docs on: {:?}", impl_file);
                 sh.write_file(&impl_file, replaced.as_ref())?;
                 updated += 1;
             } else {

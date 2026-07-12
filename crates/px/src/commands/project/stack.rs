@@ -325,7 +325,7 @@ async fn stack_grid_mosiac_framing(
 
             printer.success(format!(
                 "Master LIGHT stacking completed: {:?}",
-                &grid_master.path
+                grid_master.path
             ))?;
             grid_master.path
         };

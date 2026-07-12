@@ -23,7 +23,7 @@ impl ProjectPath {
         std::fs::create_dir_all(&root)?;
 
         let name = root.file_name().unwrap().display().to_string();
-        let desc = format!("Photonyx project for: {}", &name);
+        let desc = format!("Photonyx project for: {}", name);
         let config = ProjectConfig::new(name, Some(desc));
         config.save(&root)?;
 

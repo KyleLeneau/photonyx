@@ -47,7 +47,7 @@ impl ProfilePath {
         }
 
         let name = root.file_name().unwrap().display().to_string();
-        let desc = format!("Photonyx profile for: {}", &name);
+        let desc = format!("Photonyx profile for: {}", name);
         let config = ProfileConfig::new(name, Some(desc));
         config.save(&root)?;
 
@@ -89,7 +89,7 @@ impl ProfilePath {
         std::fs::create_dir_all(&projects)?;
 
         let name = root.file_name().unwrap().display().to_string();
-        let desc = format!("Photonyx profile for: {}", &name);
+        let desc = format!("Photonyx profile for: {}", name);
         let config = ProfileConfig::new(name, Some(desc));
         config.save(&root)?;
 
