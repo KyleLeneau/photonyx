@@ -80,3 +80,7 @@
 * [ ] build a command that monitors the advanced API of nina and renders a video of the guiding results along with a history of events on the right side
 * [ ] simple web server to recieve events of where scopes are pointed (ra, dec, fov, pixel size, name) and render an event feed on a web UI, and display a bounding box on a stellarium view. Have the cli initialize and send this data through a LIGHT file watcher.
 * [ ] need a `.px` folder in the user home initialized at some point to store default or common config (https://crates.io/crates/etcetera) - can also use this for cross profile querying
+
+### Housekeeping
+
+* [ ] Update iced.rs beyond 0.14.0 so it included wgpu 29+ which has migrated to block2 to remove future rust version warning
