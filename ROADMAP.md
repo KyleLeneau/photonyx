@@ -54,6 +54,7 @@
 * [ ] Need a way to delete / audit obs no longer at their path
 * [ ] Need a way to relink calibration masters to obs
 * [ ] What about a rich terminal UI to edit & manage the profile...
+* [ ] Batch calibrate and calibrate dont work the same when there are no masters like in the case of the seestar data
 
 ### Bugs
 
