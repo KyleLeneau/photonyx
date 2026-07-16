@@ -191,9 +191,6 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
             command: ProjectCommand::Stack(args),
         }) => commands::stack_project_observations(args, printer).await,
 
-        // Commands::Project(ProjectNamespace {
-        //     command: ProjectCommand::Align(args),
-        // }) => commands::align_project(args, printer).await,
         Commands::Project(ProjectNamespace {
             command: ProjectCommand::Sample(args),
         }) => commands::create_project_samples(args, printer).await,
