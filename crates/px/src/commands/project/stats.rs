@@ -366,7 +366,7 @@ fn render_layers_table(stats: &ProjectStats) -> Result<()> {
                 Constraint::Length(10),
                 Constraint::Length(9),
                 Constraint::Length(7),
-                Constraint::Length(23),
+                Constraint::Length(26),
                 Constraint::Length(14),
             ],
         )
