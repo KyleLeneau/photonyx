@@ -529,6 +529,9 @@ pub enum ProjectCommand {
 
     /// Interactively edit project layers and observations via TUI
     Edit(EditProjectArgs),
+
+    /// Show integration-time and layer statistics for a project
+    Stats(StatsProjectArgs),
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -614,4 +617,15 @@ pub struct EditProjectArgs {
     /// The path to the project; defaults to searching the current directory and its parents
     #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
     pub project: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct StatsProjectArgs {
+    /// The path to the project; defaults to searching the current directory and its parents
+    #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
+    pub project: Option<PathBuf>,
+
+    /// Output format
+    #[arg(long, short, default_value = "pretty")]
+    pub output: OutputFormat,
 }

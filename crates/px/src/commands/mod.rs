@@ -18,6 +18,7 @@ pub(crate) use project::init::init_project;
 pub(crate) use project::list::list_projects;
 pub(crate) use project::sample::create_project_samples;
 pub(crate) use project::stack::stack_project_observations;
+pub(crate) use project::stats::show_project_stats;
 pub(crate) use project::sync::sync_project;
 #[cfg(feature = "self-update")]
 pub(crate) use self_update::self_update;
