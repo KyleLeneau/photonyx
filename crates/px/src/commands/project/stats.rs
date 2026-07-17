@@ -14,6 +14,7 @@ use px_fits::all_fits_files;
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
+    border,
     layout::Constraint,
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -56,6 +57,7 @@ struct FilterStats {
 #[derive(Debug, Serialize)]
 struct ProjectStats {
     name: String,
+    description: Option<String>,
     framing: String,
     layers: Vec<LayerStats>,
     filters: Vec<FilterStats>,
@@ -88,7 +90,13 @@ pub(crate) async fn show_project_stats(
         Framing::GridMosiac(grid) => grid_layer_stats(grid, lock.as_ref())?,
     };
 
-    let stats = build_project_stats(config.name.clone(), &config.framing, layers, &all_aggs);
+    let stats = build_project_stats(
+        config.name.clone(),
+        config.description.clone(),
+        &config.framing,
+        layers,
+        &all_aggs,
+    );
 
     match args.output {
         OutputFormat::Json => {
@@ -96,8 +104,8 @@ pub(crate) async fn show_project_stats(
             writeln!(printer.stdout(), "{json}")?;
         }
         OutputFormat::Pretty => {
-            render_layers_table(&stats)?;
             render_summary(&stats)?;
+            render_layers_table(&stats)?;
         }
     }
 
@@ -261,6 +269,7 @@ fn grid_layer_stats(
 
 fn build_project_stats(
     name: String,
+    description: Option<String>,
     framing: &Framing,
     layers: Vec<LayerStats>,
     all_aggs: &[ObservationAgg],
@@ -297,6 +306,7 @@ fn build_project_stats(
 
     ProjectStats {
         name,
+        description,
         framing: framing.kind_str().to_string(),
         layers,
         filters,
@@ -362,7 +372,7 @@ fn render_layers_table(stats: &ProjectStats) -> Result<()> {
         )
         .block(
             Block::bordered()
-                .title(format!("Project Layers — {}", stats.name))
+                .title(" Project Layers ")
                 .padding(Padding::horizontal(1)),
         )
         .header(
@@ -386,7 +396,7 @@ const FILTER_BAR_WIDTH: usize = 24;
 fn render_summary(stats: &ProjectStats) -> Result<()> {
     let lines = summary_lines(stats);
 
-    let height = lines.len() as u16 + 3;
+    let height = lines.len() as u16 + 4;
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::with_options(
         backend,
@@ -398,8 +408,9 @@ fn render_summary(stats: &ProjectStats) -> Result<()> {
     terminal.draw(|frame| {
         let paragraph = Paragraph::new(lines.clone()).block(
             Block::bordered()
+                .borders(border!(TOP, LEFT, RIGHT))
                 .title(" Summary ")
-                .padding(Padding::horizontal(1)),
+                .padding(Padding::uniform(1)),
         );
         frame.render_widget(paragraph, frame.area());
     })?;
@@ -410,6 +421,25 @@ fn render_summary(stats: &ProjectStats) -> Result<()> {
 fn summary_lines(stats: &ProjectStats) -> Vec<Line<'static>> {
     let label_style = Style::default().fg(Color::DarkGray);
     let mut lines: Vec<Line> = Vec::new();
+
+    lines.push(Line::from(vec![
+        Span::styled("target", label_style),
+        Span::raw(": "),
+        Span::styled(
+            stats.name.clone(),
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(Color::Cyan),
+        ),
+    ]));
+
+    if let Some(desc) = stats.description.clone() {
+        lines.push(Line::from(vec![
+            Span::styled("description", label_style),
+            Span::raw(": "),
+            Span::styled(desc, Style::default().fg(Color::Cyan)),
+        ]));
+    }
 
     lines.push(Line::from(vec![
         Span::styled("framing", label_style),
