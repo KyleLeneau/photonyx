@@ -192,6 +192,16 @@ pub struct GridMosiacMasterLight {
     pub panels: Vec<ProjectLinearStack>,
 }
 
+impl Framing {
+    pub fn kind_str(&self) -> &'static str {
+        match self {
+            Framing::Single(_) => "single",
+            Framing::SpiralMosiac(_) => "spiral_mosaic",
+            Framing::GridMosiac(_) => "grid_mosaic",
+        }
+    }
+}
+
 impl fmt::Display for Framing {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

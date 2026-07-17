@@ -16,7 +16,8 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::Constraint,
     style::{Color, Modifier, Style},
-    widgets::{Block, Cell, Padding, Row, Table},
+    text::{Line, Span},
+    widgets::{Block, Cell, Padding, Paragraph, Row, Table},
 };
 use serde::Serialize;
 
@@ -96,7 +97,7 @@ pub(crate) async fn show_project_stats(
         }
         OutputFormat::Pretty => {
             render_layers_table(&stats)?;
-            render_summary(&stats, printer)?;
+            render_summary(&stats)?;
         }
     }
 
@@ -296,7 +297,7 @@ fn build_project_stats(
 
     ProjectStats {
         name,
-        framing: framing_kind(framing).to_string(),
+        framing: framing.kind_str().to_string(),
         layers,
         filters,
         total_exposure_secs,
@@ -305,14 +306,6 @@ fn build_project_stats(
         first_light: dates.first().map(NaiveDate::to_string),
         last_light: dates.last().map(NaiveDate::to_string),
         layers_needing_restack,
-    }
-}
-
-fn framing_kind(framing: &Framing) -> &'static str {
-    match framing {
-        Framing::Single(_) => "single",
-        Framing::SpiralMosiac(_) => "spiral_mosaic",
-        Framing::GridMosiac(_) => "grid_mosaic",
     }
 }
 
@@ -388,44 +381,121 @@ fn render_layers_table(stats: &ProjectStats) -> Result<()> {
     Ok(())
 }
 
-fn render_summary(stats: &ProjectStats, printer: Printer) -> Result<()> {
-    printer.info(format!(
-        "framing: {} | total: {} across {} subs over {} night(s)",
-        stats.framing,
-        format_duration(stats.total_exposure_secs),
-        stats.total_subs,
-        stats.nights,
-    ))?;
+const FILTER_BAR_WIDTH: usize = 24;
+
+fn render_summary(stats: &ProjectStats) -> Result<()> {
+    let lines = summary_lines(stats);
+
+    let height = lines.len() as u16 + 3;
+    let backend = CrosstermBackend::new(io::stdout());
+    let mut terminal = Terminal::with_options(
+        backend,
+        ratatui::TerminalOptions {
+            viewport: ratatui::Viewport::Inline(height),
+        },
+    )?;
+
+    terminal.draw(|frame| {
+        let paragraph = Paragraph::new(lines.clone()).block(
+            Block::bordered()
+                .title(" Summary ")
+                .padding(Padding::horizontal(1)),
+        );
+        frame.render_widget(paragraph, frame.area());
+    })?;
+
+    Ok(())
+}
+
+fn summary_lines(stats: &ProjectStats) -> Vec<Line<'static>> {
+    let label_style = Style::default().fg(Color::DarkGray);
+    let mut lines: Vec<Line> = Vec::new();
+
+    lines.push(Line::from(vec![
+        Span::styled("framing", label_style),
+        Span::raw(": "),
+        Span::styled(
+            stats.framing.clone(),
+            Style::default().add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("    "),
+        Span::styled("total", label_style),
+        Span::raw(": "),
+        Span::styled(
+            format_duration(stats.total_exposure_secs),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(format!(
+            " across {} subs over {} night(s)",
+            stats.total_subs, stats.nights
+        )),
+    ]));
 
     if let (Some(first), Some(last)) = (&stats.first_light, &stats.last_light) {
-        printer.info(format!("first light: {first} | last light: {last}"))?;
+        lines.push(Line::from(vec![
+            Span::styled("first light", label_style),
+            Span::raw(": "),
+            Span::styled(first.clone(), Style::default().fg(Color::Yellow)),
+            Span::raw("    "),
+            Span::styled("last light", label_style),
+            Span::raw(": "),
+            Span::styled(last.clone(), Style::default().fg(Color::Yellow)),
+        ]));
     }
 
     if stats.layers_needing_restack > 0 {
-        printer.info(format!(
-            "{} layer(s) need restacking (run `px project stack`)",
-            stats.layers_needing_restack
-        ))?;
+        lines.push(Line::from(Span::styled(
+            format!(
+                "{} layer(s) need restacking — run `px project stack`",
+                stats.layers_needing_restack
+            ),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )));
     }
 
     if !stats.filters.is_empty() {
-        let mut line = String::from("filter balance: ");
-        for (i, f) in stats.filters.iter().enumerate() {
-            if i > 0 {
-                line.push_str(", ");
-            }
-            let _ = write!(
-                line,
-                "{} {} ({:.0}%)",
-                f.filter,
-                format_duration(f.total_exposure_secs),
-                f.percent_of_total
+        lines.push(Line::default());
+        lines.push(Line::from(Span::styled(
+            "filter balance",
+            Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+        )));
+
+        let name_width = stats
+            .filters
+            .iter()
+            .map(|f| f.filter.len())
+            .max()
+            .unwrap_or(0);
+        for f in &stats.filters {
+            let filled = ((f.percent_of_total / 100.0) * FILTER_BAR_WIDTH as f64).round() as usize;
+            let filled = filled.min(FILTER_BAR_WIDTH);
+            let bar = format!(
+                "{}{}",
+                "█".repeat(filled),
+                "░".repeat(FILTER_BAR_WIDTH - filled)
             );
+
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("{:<name_width$}", f.filter),
+                    Style::default().fg(Color::Magenta),
+                ),
+                Span::raw("  "),
+                Span::styled(bar, Style::default().fg(Color::Cyan)),
+                Span::raw(format!("  {:>5.1}%  ", f.percent_of_total)),
+                Span::styled(
+                    format_duration(f.total_exposure_secs),
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ]));
         }
-        printer.info(line)?;
     }
 
-    Ok(())
+    lines
 }
 
 fn format_duration(total_secs: f64) -> String {
