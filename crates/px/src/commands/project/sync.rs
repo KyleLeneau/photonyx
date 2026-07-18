@@ -9,11 +9,12 @@ use px_index::ProfileIndex;
 use crate::{ExitStatus, printer::Printer};
 
 pub(crate) async fn sync_project(
-    args: SyncProjectArgs,
+    project_path: Option<PathBuf>,
+    _args: SyncProjectArgs,
     printer: Printer,
     profile_index: ProfileIndex,
 ) -> Result<ExitStatus> {
-    let project = match ProjectPath::find(args.project) {
+    let project = match ProjectPath::find(project_path) {
         Ok(p) => p,
         Err(e) => {
             printer.error(format!("{e}"))?;

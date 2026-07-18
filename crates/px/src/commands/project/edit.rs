@@ -17,11 +17,12 @@ use ratatui::{
 use crate::{ExitStatus, printer::Printer};
 
 pub(crate) async fn edit_project(
-    args: EditProjectArgs,
+    project_path: Option<PathBuf>,
+    _args: EditProjectArgs,
     printer: Printer,
     profile_index: ProfileIndex,
 ) -> Result<ExitStatus> {
-    let project = match ProjectPath::find(args.project) {
+    let project = match ProjectPath::find(project_path) {
         Ok(p) => p,
         Err(e) => {
             printer.error(format!("{e}"))?;

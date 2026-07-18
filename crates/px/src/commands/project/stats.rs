@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::io;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use chrono::NaiveDate;
@@ -70,10 +71,11 @@ struct ProjectStats {
 }
 
 pub(crate) async fn show_project_stats(
+    project_path: Option<PathBuf>,
     args: StatsProjectArgs,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let project = match ProjectPath::find(args.project) {
+    let project = match ProjectPath::find(project_path) {
         Ok(path) => path,
         Err(e) => {
             printer.error(format!("{e}"))?;

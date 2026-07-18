@@ -181,31 +181,38 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         // Project
         Commands::Project(ProjectNamespace {
             command: ProjectCommand::Init(args),
+            ..
         }) => commands::init_project(args, printer, profile_index.unwrap()).await,
 
         Commands::Project(ProjectNamespace {
             command: ProjectCommand::List(args),
+            ..
         }) => commands::list_projects(args, printer).await,
 
         Commands::Project(ProjectNamespace {
+            project,
             command: ProjectCommand::Stack(args),
-        }) => commands::stack_project_observations(args, printer).await,
+        }) => commands::stack_project_observations(project, args, printer).await,
 
         Commands::Project(ProjectNamespace {
+            project,
             command: ProjectCommand::Sample(args),
-        }) => commands::create_project_samples(args, printer).await,
+        }) => commands::create_project_samples(project, args, printer).await,
 
         Commands::Project(ProjectNamespace {
+            project,
             command: ProjectCommand::Sync(args),
-        }) => commands::sync_project(args, printer, profile_index.unwrap()).await,
+        }) => commands::sync_project(project, args, printer, profile_index.unwrap()).await,
 
         Commands::Project(ProjectNamespace {
+            project,
             command: ProjectCommand::Edit(args),
-        }) => commands::edit_project(args, printer, profile_index.unwrap()).await,
+        }) => commands::edit_project(project, args, printer, profile_index.unwrap()).await,
 
         Commands::Project(ProjectNamespace {
+            project,
             command: ProjectCommand::Stats(args),
-        }) => commands::show_project_stats(args, printer).await,
+        }) => commands::show_project_stats(project, args, printer).await,
 
         Commands::Tui => commands::run_tui(printer, profile_index.unwrap()).await,
     }

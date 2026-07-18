@@ -162,6 +162,7 @@ impl Commands {
                 })
                 | Commands::Project(ProjectNamespace {
                     command: ProjectCommand::Stack(_) | ProjectCommand::Sample(_),
+                    ..
                 })
         )
     }
@@ -182,6 +183,7 @@ impl Commands {
                 })
                 | Commands::Project(ProjectNamespace {
                     command: ProjectCommand::List(_),
+                    ..
                 })
         )
     }
@@ -508,6 +510,10 @@ pub struct PreviewObservationArgs {
 pub struct ProjectNamespace {
     #[command(subcommand)]
     pub command: ProjectCommand,
+
+    /// The path to the project; defaults to searching the current directory and its parents
+    #[arg(short, long, global = true, value_hint = ValueHint::DirPath, value_parser = absolute_path, help_heading = "Project options")]
+    pub project: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -589,42 +595,22 @@ pub struct ListProjectArgs {}
 
 #[derive(Args, Debug)]
 pub struct StackProjectArgs {
-    /// The path to the project; defaults to searching the current directory and its parents
-    #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
-    pub project: Option<PathBuf>,
-
     /// Clean or remove the outputs from a previous run
     #[arg(long)]
     pub clean: bool,
 }
 
 #[derive(Args, Debug)]
-pub struct SampleProjectArgs {
-    /// The path to the project; defaults to searching the current directory and its parents
-    #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
-    pub project: Option<PathBuf>,
-}
+pub struct SampleProjectArgs {}
 
 #[derive(Args, Debug)]
-pub struct SyncProjectArgs {
-    /// The path to the project; defaults to searching the current directory and its parents
-    #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
-    pub project: Option<PathBuf>,
-}
+pub struct SyncProjectArgs {}
 
 #[derive(Args, Debug)]
-pub struct EditProjectArgs {
-    /// The path to the project; defaults to searching the current directory and its parents
-    #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
-    pub project: Option<PathBuf>,
-}
+pub struct EditProjectArgs {}
 
 #[derive(Args, Debug)]
 pub struct StatsProjectArgs {
-    /// The path to the project; defaults to searching the current directory and its parents
-    #[arg(short, long, value_hint = ValueHint::DirPath, value_parser = absolute_path)]
-    pub project: Option<PathBuf>,
-
     /// Output format
     #[arg(long, short, default_value = "pretty")]
     pub output: OutputFormat,

@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use px_cli::SampleProjectArgs;
@@ -18,10 +18,11 @@ use siril_sys::{Builder, FitsExt, OutputSink};
 use crate::{ExitStatus, printer::Printer, reporters::DefaultPipelineReporter};
 
 pub(crate) async fn create_project_samples(
-    args: SampleProjectArgs,
+    project_path: Option<PathBuf>,
+    _args: SampleProjectArgs,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let project = match ProjectPath::find(args.project) {
+    let project = match ProjectPath::find(project_path) {
         Ok(path) => path,
         Err(e) => {
             printer.error(format!("{e}"))?;

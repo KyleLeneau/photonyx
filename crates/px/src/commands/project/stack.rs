@@ -21,10 +21,11 @@ use siril_sys::{Builder, FitsExt};
 use crate::{ExitStatus, printer::Printer, reporters::DefaultPipelineReporter};
 
 pub(crate) async fn stack_project_observations(
+    project_path: Option<PathBuf>,
     args: StackProjectArgs,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let project = match ProjectPath::find(args.project) {
+    let project = match ProjectPath::find(project_path) {
         Ok(path) => path,
         Err(e) => {
             printer.error(format!("{e}"))?;
