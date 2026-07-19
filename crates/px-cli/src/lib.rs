@@ -181,10 +181,6 @@ impl Commands {
                 | Commands::Observation(ObservationNamespace {
                     command: ObservationCommand::Preview(_),
                 })
-                | Commands::Project(ProjectNamespace {
-                    command: ProjectCommand::List(_),
-                    ..
-                })
         )
     }
 }
@@ -591,7 +587,11 @@ pub struct InitProjectArgs {
 }
 
 #[derive(Args, Debug)]
-pub struct ListProjectArgs {}
+pub struct ListProjectArgs {
+    /// Output format
+    #[arg(long, short, default_value = "pretty")]
+    pub output: OutputFormat,
+}
 
 #[derive(Args, Debug)]
 pub struct StackProjectArgs {

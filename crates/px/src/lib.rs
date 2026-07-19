@@ -187,7 +187,7 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Project(ProjectNamespace {
             command: ProjectCommand::List(args),
             ..
-        }) => commands::list_projects(args, printer).await,
+        }) => commands::list_projects(args, printer, profile_index.unwrap()).await,
 
         Commands::Project(ProjectNamespace {
             project,
