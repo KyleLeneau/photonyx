@@ -605,6 +605,41 @@ impl ProfileIndex {
         Ok(rows)
     }
 
+    /// Replace the calibration link for `(observation_id, kind)` with `master_id`. Unlike
+    /// `link_calibration`, this overwrites any existing link of the same kind — used when the
+    /// user manually re-links an observation to a different master.
+    pub async fn set_calibration_link(
+        &self,
+        observation_id: &str,
+        master_id: &str,
+        kind: MasterKind,
+    ) -> Result<(), ProfileIndexError> {
+        sqlx::query(
+            "INSERT OR REPLACE INTO calibration_link (observation_id, master_id, kind)
+             VALUES (?, ?, ?)",
+        )
+        .bind(observation_id)
+        .bind(master_id)
+        .bind(kind.as_str())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Remove the calibration link for `(observation_id, kind)`, if any.
+    pub async fn unlink_calibration(
+        &self,
+        observation_id: &str,
+        kind: MasterKind,
+    ) -> Result<(), ProfileIndexError> {
+        sqlx::query("DELETE FROM calibration_link WHERE observation_id = ? AND kind = ?")
+            .bind(observation_id)
+            .bind(kind.as_str())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     /// Return all observation records ordered by date descending.
     pub async fn list_observations(&self) -> Result<Vec<ObservationRecord>, ProfileIndexError> {
         let rows = sqlx::query_as::<_, ObservationRecord>(

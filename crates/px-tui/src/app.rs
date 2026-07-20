@@ -112,6 +112,24 @@ impl App {
             return Ok(());
         }
 
+        // While the calibration-link editor is open, keys drive the overlay instead of
+        // navigating the observation table.
+        if self.active == ActiveTab::Observation && self.observation.is_editing() {
+            match code {
+                KeyCode::Enter => self.commit_calibration_link()?,
+                KeyCode::Esc => self.observation.cancel_edit(),
+                KeyCode::Left | KeyCode::Char('h') => self.observation.editor_prev_kind(),
+                KeyCode::Right | KeyCode::Char('l') | KeyCode::Tab => {
+                    self.observation.editor_next_kind()
+                }
+                KeyCode::Down | KeyCode::Char('j') => self.observation.editor_select_next(),
+                KeyCode::Up | KeyCode::Char('k') => self.observation.editor_select_previous(),
+                KeyCode::Char('x') => self.observation.editor_select_none(),
+                _ => {}
+            }
+            return Ok(());
+        }
+
         match code {
             KeyCode::Char('q') | KeyCode::Esc => self.exit = true,
             KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => self.active = self.active.next(),
@@ -126,8 +144,42 @@ impl App {
             KeyCode::Up | KeyCode::Char('k') => self.select_previous(),
             KeyCode::Char('r') => self.refresh()?,
             KeyCode::Enter if self.active == ActiveTab::Profile => self.profile.begin_edit(),
+            KeyCode::Enter if self.active == ActiveTab::Observation => {
+                self.observation.begin_edit()
+            }
             KeyCode::Char('s') if self.active == ActiveTab::Profile => self.save_profile()?,
             _ => {}
+        }
+        Ok(())
+    }
+
+    /// Persist the calibration-link editor's staged selection to the index, close the editor on
+    /// success, and reload so the table reflects the new link.
+    fn commit_calibration_link(&mut self) -> Result<()> {
+        let Some(pending) = self.observation.pending_commit() else {
+            self.observation.cancel_edit();
+            return Ok(());
+        };
+
+        let result = match &pending.master_id {
+            Some(master_id) => block_on(self.index.set_calibration_link(
+                &pending.observation_id,
+                master_id,
+                pending.kind,
+            )),
+            None => block_on(
+                self.index
+                    .unlink_calibration(&pending.observation_id, pending.kind),
+            ),
+        };
+
+        match result {
+            Ok(()) => {
+                self.observation.cancel_edit();
+                block_on(self.observation.load(&self.index))?;
+                self.status = Some(format!("{} link updated", pending.kind.as_str()));
+            }
+            Err(e) => self.status = Some(format!("link update failed: {e}")),
         }
         Ok(())
     }
@@ -214,6 +266,12 @@ impl App {
             ActiveTab::Profile if self.profile.is_editing() => "Enter: commit  Esc: cancel",
             ActiveTab::Profile => {
                 "Up/Down: field  Enter: edit  s: save  Tab/1-4: switch tab  r: refresh  q: quit"
+            }
+            ActiveTab::Observation if self.observation.is_editing() => {
+                "Left/Right: kind  Up/Down: select  Enter: link  x: clear  Esc: close"
+            }
+            ActiveTab::Observation => {
+                "Up/Down or j/k: navigate  Enter: edit calibration  Tab/1-4: switch tab  r: refresh  q: quit"
             }
             _ => "Up/Down or j/k: navigate  Tab/1-4: switch tab  r: refresh  q: quit",
         };
