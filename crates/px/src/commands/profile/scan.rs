@@ -160,7 +160,9 @@ pub(crate) async fn scan_profile(
     printer: Printer,
     index: ProfileIndex,
 ) -> Result<ExitStatus> {
-    if args.relink {
+    if args.purge {
+        purge(&printer, &index).await
+    } else if args.relink {
         relink(&printer, &index).await
     } else {
         scan(&printer, &index).await
@@ -300,6 +302,58 @@ async fn relink(printer: &Printer, index: &ProfileIndex) -> Result<ExitStatus> {
         observations.len()
     ))?;
     print_link_summary(printer, &counts)?;
+
+    Ok(ExitStatus::Success)
+}
+
+/// Remove indexed observations whose raw path no longer exists on disk.
+async fn purge(printer: &Printer, index: &ProfileIndex) -> Result<ExitStatus> {
+    let observations = index.list_observations().await?;
+
+    let missing: Vec<ObservationRecord> = observations
+        .into_iter()
+        .filter(|record| !std::path::Path::new(&record.raw_path).exists())
+        .collect();
+
+    if missing.is_empty() {
+        printer.info("No missing observations found — index is clean")?;
+        return Ok(ExitStatus::Success);
+    }
+
+    printer.info(format!(
+        "Found {} observation(s) with missing raw path:",
+        missing.len()
+    ))?;
+    for record in &missing {
+        printer.info(format!(
+            "  {}  →  {}",
+            obs_label(
+                &record.target_name,
+                &record.date,
+                &record.filter,
+                record.exposure
+            ),
+            record.raw_path
+        ))?;
+    }
+
+    let confirmed = inquire::Confirm::new(&format!(
+        "Remove {} observation(s) from the index?",
+        missing.len()
+    ))
+    .with_default(false)
+    .prompt()?;
+
+    if !confirmed {
+        printer.info("Purge cancelled")?;
+        return Ok(ExitStatus::Success);
+    }
+
+    for record in &missing {
+        index.delete_observation(&record.id).await?;
+    }
+
+    printer.success(format!("Purge complete: {} removed", missing.len()))?;
 
     Ok(ExitStatus::Success)
 }

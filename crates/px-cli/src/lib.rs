@@ -225,6 +225,11 @@ pub struct ScanProfileArgs {
     /// Clears existing links and matches against the current calibration set.
     #[arg(long, default_value_t = false)]
     pub relink: bool,
+
+    /// Remove indexed observations whose raw path no longer exists on disk.
+    /// Lists the observations found and asks for confirmation before deleting.
+    #[arg(long, default_value_t = false)]
+    pub purge: bool,
 }
 
 #[derive(Args)]

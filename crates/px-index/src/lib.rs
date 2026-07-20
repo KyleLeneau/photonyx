@@ -666,6 +666,18 @@ impl ProfileIndex {
         Ok(())
     }
 
+    /// Delete an observation and its `calibration_link` rows from the index.
+    /// Used by `px profile scan --purge` to drop observations whose raw path
+    /// no longer exists on disk.
+    pub async fn delete_observation(&self, observation_id: &str) -> Result<(), ProfileIndexError> {
+        self.clear_calibration_links(observation_id).await?;
+        sqlx::query("DELETE FROM observation_set WHERE id = ?")
+            .bind(observation_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     /// Insert a row into `calibration_link` linking an observation to a calibration master.
     /// Uses INSERT OR IGNORE so repeated calls for the same (observation, kind) are safe.
     pub async fn link_calibration(
