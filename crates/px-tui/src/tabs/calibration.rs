@@ -103,7 +103,7 @@ impl CalibrationTab {
             vec![
                 Constraint::Length(6),
                 Constraint::Length(12),
-                Constraint::Length(10),
+                Constraint::Length(12),
                 Constraint::Length(10),
                 Constraint::Length(9),
                 Constraint::Length(8),

@@ -90,7 +90,7 @@ impl ObservationTab {
             vec![
                 Constraint::Length(18),
                 Constraint::Length(12),
-                Constraint::Length(8),
+                Constraint::Length(12),
                 Constraint::Length(8),
                 Constraint::Length(6),
                 Constraint::Length(4),
