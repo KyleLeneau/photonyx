@@ -69,7 +69,9 @@ pub(crate) async fn batch_calibrate_observations(
 
         let masters = index.get_linked_masters(&record.id).await?;
         if masters.is_empty() {
-            printer.warn(format!("  {label}  →  no masters linked, proceeding without"))?;
+            printer.warn(format!(
+                "  {label}  →  no masters linked, proceeding without"
+            ))?;
         }
 
         let dark = masters

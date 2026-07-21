@@ -281,6 +281,8 @@ impl CreateColorSamplePipeline {
             pre_stretched = compose_result.unwrap();
         }
 
+        crate::pause!(siril.initial_directory(), "after RGB composition").await?;
+
         // # Photometric color calibration and plate solving, will work with no parameter only if the image header
         // # contains correct target coordinates, pixel size and focal length, or if it has already been plate solved
         let mut used_pcc: bool = false;

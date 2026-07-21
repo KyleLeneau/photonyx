@@ -34,4 +34,9 @@ impl EnvVars {
 
     /// Equivalent to the `--profile` command-line argument.
     pub const PX_PROFILE: &'static str = "PX_PROFILE";
+
+    /// Opt-in switch for `px_pipeline::pause!`. When set to a truthy value (`1`, `true`,
+    /// `yes`, case-insensitive), pipeline pause points prompt interactively instead of
+    /// being a no-op. Unset (or any other value) in normal use.
+    pub const PX_PIPELINE_PAUSE: &'static str = "PX_PIPELINE_PAUSE";
 }

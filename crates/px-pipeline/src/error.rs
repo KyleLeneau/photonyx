@@ -18,4 +18,7 @@ pub enum PipelineError {
 
     #[error("Output file(s) not found: {0}")]
     OutputFileNotFound(String),
+
+    #[error("pipeline aborted at pause point: {0}")]
+    Aborted(String),
 }
