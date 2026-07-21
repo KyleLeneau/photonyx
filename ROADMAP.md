@@ -70,7 +70,6 @@
 ### Future
 
 * [ ] need to support and test multi pipes on windows now that MR is merged for support
-* [ ] should the project config type exist in the DB instead?
 * [ ] What about a way to to organize a profile based on a bunch of data dropped, organize it into the convention and make sure there is a dry run approach for it (solves the seestar capture & organize issue)
 
 ### Parking Lot
