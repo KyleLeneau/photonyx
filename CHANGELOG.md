@@ -2,6 +2,10 @@
 
 <!-- prettier-ignore-start -->
 
+## 0.2.0
+
+* Add new `xtask bump <version>` command to edit crate versions
+
 ## 0.1.4
 
 * Add shell completion, use `px generate-shell-completion zsh` to generate
@@ -40,6 +44,21 @@
 * `px obs calibrate` no longer enforces bias, dark, or flat to support smart scopes that just need debayering
 * Rework project config and implement `single` and `spiral_mosiac` stacking for projects
 * Changed `px project init` to be interactive and build a project config.
+* Add `grid_mosiac` project types and stack
+* Fixed how observations are found
+* Add `px profile scan` to automtically find and link calibration & observation data
+* Add `px obs batch-calibrate` to calibrate many observations at once by target name
+* Add `px project sync` to quickly update a project with a match target name
+* Add `px project sample` to quickly see a variety of color samples from the project (rough start)
+* Add `px_project.lock` file that tracks the last step a project has done to provide quicker stacking of unchanged layers
+* Add `px obs list` to list currently scanned observations
+* Add `px tui` for a basic terminal UI or the profile data
+* Add `px project stats` command to print basic stats of the project to see progress
+* Add `px project -p <path>` can now operate on any project regardless of CWD
+* Add `px project list` to list all projects in the profile
+* Add `px tui` now allows you to edit the observation calibration links to change BIAS, DARK, FLAT
+* Add `px profile scan --purge` option to clean up what no longer exists on disk
+* Add ability to pause pipeline for development
 
 ## 0.1.3
 

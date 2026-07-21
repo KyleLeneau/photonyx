@@ -93,7 +93,7 @@ impl flags::Bump {
 
         bumped_deps.sort();
         println!(
-            "Updated {} workspace.dependencies entr(y/ies) in {}:",
+            "Updated {} workspace.dependencies in {}:",
             bumped_deps.len(),
             root_manifest_path.display()
         );
