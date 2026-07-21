@@ -100,6 +100,25 @@ impl<T: AsRef<Path>> Simplified for T {
     }
 }
 
+/// Move a file from `src` to `dst`.
+///
+/// Tries a plain rename first. If `src` and `dst` are on different volumes/filesystems
+/// (e.g. different drive letters on Windows), a rename isn't possible, so this falls back
+/// to copying the file to `dst` and removing `src`.
+pub fn move_file(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    let src = src.as_ref();
+    let dst = dst.as_ref();
+    match std::fs::rename(src, dst) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::CrossesDevices => {
+            std::fs::copy(src, dst)?;
+            std::fs::remove_file(src)?;
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
 pub trait OptionPath {
     fn some_display(&self) -> Option<impl std::fmt::Display>;
     fn some_string(&self) -> Option<String>;
@@ -141,5 +160,36 @@ impl<T: AsRef<Path>> DatePath for T {
         });
 
         date_local_date.or(date_local_time)
+    }
+}
+
+#[cfg(test)]
+mod move_file_tests {
+    use super::move_file;
+
+    #[test]
+    fn renames_within_same_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src.txt");
+        let dst = dir.path().join("dst.txt");
+        std::fs::write(&src, b"hello").unwrap();
+
+        move_file(&src, &dst).unwrap();
+
+        assert!(!src.exists());
+        assert_eq!(std::fs::read(&dst).unwrap(), b"hello");
+    }
+
+    #[test]
+    fn falls_back_to_copy_when_rename_fails_for_a_non_cross_device_reason() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("missing.txt");
+        let dst = dir.path().join("dst.txt");
+
+        // src doesn't exist, so the initial rename fails with NotFound, not
+        // CrossesDevices; move_file must propagate that error rather than
+        // attempting (and failing) a copy.
+        let err = move_file(&src, &dst).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
     }
 }

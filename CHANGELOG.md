@@ -2,6 +2,10 @@
 
 <!-- prettier-ignore-start -->
 
+## 0.2.1
+
+* Fix windows cross disk rename falls back to move
+
 ## 0.2.0
 
 * Add new `xtask bump <version>` command to edit crate versions

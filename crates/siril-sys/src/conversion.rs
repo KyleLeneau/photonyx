@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use px_fs::move_file;
 use regex::Regex;
 
 /// A single entry in a Siril conversion file, mapping an original filename to its converted name.
@@ -75,7 +76,7 @@ impl ConversionFile {
                     .unwrap_or_default()
                     .to_string_lossy()
             ));
-            std::fs::rename(src, dst)?;
+            move_file(src, dst)?;
         }
         Ok(())
     }

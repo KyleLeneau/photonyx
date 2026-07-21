@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use px_fits::{
     CalibratedLight, CalibrationMetadata, ObservationMetadata, all_color_raw_frames, all_fits_files,
 };
-use px_fs::OptionPath;
+use px_fs::{OptionPath, move_file};
 use siril_sys::{
     Builder, ConversionFile, FitsExt,
     commands::{Calibrate, CalibrateSingle, Convert},
@@ -78,7 +78,7 @@ impl CalibrateLightSetPipeline {
                 .join(&single_name)
                 .with_extension(self.ext.to_string());
             let dst = self.out_folder.join(&single_name);
-            std::fs::rename(src, dst)?;
+            move_file(src, dst)?;
             reporter.step_ended(id, "[2/2] Moved calibrated light frames", true);
         } else {
             // Move to the raw folder to convert into a sequence
@@ -118,10 +118,10 @@ impl CalibrateLightSetPipeline {
             let id = reporter.step_started("[3/3] Moving calibrated light frames...");
             let conversion_file = siril.initial_directory().join("light_conversion.txt");
             let conversion = ConversionFile::new(conversion_file)?;
-            match conversion.move_converted_files(&self.out_folder, "pp_") {
-                Ok(_) => reporter.step_ended(id, "[3/3] Moved calibrated light frames", true),
-                Err(_) => reporter.step_ended(id, "✗ Move failed", false),
-            }
+            conversion
+                .move_converted_files(&self.out_folder, "pp_")
+                .inspect(|_| reporter.step_ended(id, "[3/3] Moved calibrated light frames", true))
+                .inspect_err(|_| reporter.step_ended(id, "✗ Move failed", false))?;
         }
 
         // Try to get the filter from calibrated file OR flat

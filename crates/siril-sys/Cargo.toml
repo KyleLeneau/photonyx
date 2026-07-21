@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 bon = { workspace = true }
 libc = { workspace = true }
+px-fs = { workspace = true }
 regex = { workspace = true }
 tokio = { workspace = true }
 strum = { workspace = true }

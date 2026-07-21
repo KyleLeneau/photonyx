@@ -65,6 +65,7 @@
 * [x] for smart telescopes we may not have masters to let `px obs calibrate` work without those passed so that files could minimally be debayered
 * [x] The project stack outputs need more consistent naming for when registration is not needed
 * [ ] Convention to find observation path needs to be a bit more flexible for naming conventions (seestars)
+* [ ] Windows cross disk use is slow cause siril is having to copy across boundary for the temp folder (from D to C)
 
 ### Future
 
