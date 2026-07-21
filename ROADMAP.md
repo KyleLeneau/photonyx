@@ -51,10 +51,9 @@
 * [x] What about a rich terminal UI to edit & manage the profile...
 * [x] Batch calibrate and calibrate dont work the same when there are no masters like in the case of the seestar data
 * [x] need an internal way to pause a pipeline to check output
+* [x] Need a way to delete / audit obs no longer at their path
 * [ ] implement obs find best to manage calibration links
-* [ ] `mirrorx` may not be needed, if we can platsolve and let it flip the image on it's own
 * [ ] Add the ability to review all frames for a project stacking and human reject the bad ones (should be part of lock change detection)
-* [ ] Need a way to delete / audit obs no longer at their path
 * [ ] Need a way to relink calibration masters to obs - obs command
 
 ### Bugs
@@ -68,9 +67,9 @@
 
 ### Future
 
-* [ ] should the project config type exist in the DB instead?
-* [ ] need to support and test multi pipes on windows now that MR is merged for support
 * [ ] need a better way to bump versions for a release
+* [ ] need to support and test multi pipes on windows now that MR is merged for support
+* [ ] should the project config type exist in the DB instead?
 * [ ] What about a way to to organize a profile based on a bunch of data dropped, organize it into the convention and make sure there is a dry run approach for it (solves the seestar capture & organize issue)
 
 ### Parking Lot
@@ -82,6 +81,7 @@
 * [ ] build a command that monitors the advanced API of nina and renders a video of the guiding results along with a history of events on the right side
 * [ ] simple web server to recieve events of where scopes are pointed (ra, dec, fov, pixel size, name) and render an event feed on a web UI, and display a bounding box on a stellarium view. Have the cli initialize and send this data through a LIGHT file watcher.
 * [ ] need a `.px` folder in the user home initialized at some point to store default or common config (https://crates.io/crates/etcetera) - can also use this for cross profile querying
+* [ ] `mirrorx` may not be needed, if we can platsolve and let it flip the image on it's own
 
 ### Housekeeping
 

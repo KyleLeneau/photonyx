@@ -21,6 +21,12 @@ xflags::xflags! {
             // How the missing implementations
             optional --show-missing
         }
+
+        /// Bump the version of all local workspace crates and the root Cargo.toml
+        cmd bump {
+            /// New version string, e.g. "1.0.4"
+            required version: String
+        }
     }
 }
 
@@ -37,6 +43,7 @@ pub enum XtaskCmd {
     Check(Check),
     ExportSirilCommands(ExportSirilCommands),
     MergeSirilCommands(MergeSirilCommands),
+    Bump(Bump),
 }
 
 #[derive(Debug)]
@@ -52,6 +59,11 @@ pub struct ExportSirilCommands {
 #[derive(Debug)]
 pub struct MergeSirilCommands {
     pub show_missing: bool,
+}
+
+#[derive(Debug)]
+pub struct Bump {
+    pub version: String,
 }
 
 impl Xtask {
