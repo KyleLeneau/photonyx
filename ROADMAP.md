@@ -49,12 +49,12 @@
 * [x] It would be cool on a project level to be able to detect changes to config or rejections to inteligently auto-clean a stack
 * [x] Need a way to relink calibration masters to obs - terminal UI
 * [x] What about a rich terminal UI to edit & manage the profile...
+* [x] Batch calibrate and calibrate dont work the same when there are no masters like in the case of the seestar data
 * [ ] implement obs find best to manage calibration links
 * [ ] need an internal way to pause a pipeline to check output
 * [ ] `mirrorx` may not be needed, if we can platsolve and let it flip the image on it's own
 * [ ] Add the ability to review all frames for a project stacking and human reject the bad ones (should be part of lock change detection)
 * [ ] Need a way to delete / audit obs no longer at their path
-* [ ] Batch calibrate and calibrate dont work the same when there are no masters like in the case of the seestar data
 * [ ] Need a way to relink calibration masters to obs - obs command
 
 ### Bugs

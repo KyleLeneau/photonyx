@@ -39,7 +39,6 @@ pub(crate) async fn batch_calibrate_observations(
     ))?;
 
     let mut calibrated: usize = 0;
-    let mut skipped_no_masters: usize = 0;
     let mut skipped_exists: usize = 0;
     let mut failed: usize = 0;
 
@@ -70,9 +69,7 @@ pub(crate) async fn batch_calibrate_observations(
 
         let masters = index.get_linked_masters(&record.id).await?;
         if masters.is_empty() {
-            printer.warn(format!("  {label}  →  no masters linked, skipping"))?;
-            skipped_no_masters += 1;
-            continue;
+            printer.warn(format!("  {label}  →  no masters linked, proceeding without"))?;
         }
 
         let dark = masters
@@ -152,7 +149,6 @@ pub(crate) async fn batch_calibrate_observations(
 
     printer.success(format!(
         "Batch calibration complete: {calibrated} calibrated, \
-         {skipped_no_masters} skipped (no masters), \
          {skipped_exists} skipped (output exists), \
          {failed} failed"
     ))?;
