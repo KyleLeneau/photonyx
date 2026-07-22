@@ -86,3 +86,4 @@
 ### Housekeeping
 
 * [ ] Update iced.rs beyond 0.14.0 so it included wgpu 29+ which has migrated to block2 to remove future rust version warning
+* [ ] Consider replacing fitrs with fitsio-pure (do eval)
