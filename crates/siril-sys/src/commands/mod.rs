@@ -77,6 +77,8 @@ pub mod nozero;
 pub use nozero::Nozero;
 pub mod offline;
 pub use offline::Offline;
+pub mod offset;
+pub use offset::Offset;
 pub mod online;
 pub use online::Online;
 pub mod pcc;
