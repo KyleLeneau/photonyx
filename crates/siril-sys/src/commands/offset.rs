@@ -26,7 +26,6 @@ impl Command for Offset {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
