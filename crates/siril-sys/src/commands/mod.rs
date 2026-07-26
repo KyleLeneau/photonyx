@@ -31,6 +31,8 @@ pub mod crop;
 pub use crop::Crop;
 pub mod dumpheader;
 pub use dumpheader::Dumpheader;
+pub mod entropy;
+pub use entropy::Entropy;
 pub mod exit;
 pub use exit::Exit;
 pub mod extract_green;
