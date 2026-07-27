@@ -22,8 +22,8 @@ use crate::commands::{Argument, Command};
 /// g' = (m10 \* r + m11 \* g + m12 \* b)^(-1/gamma)
 /// b' = (m20 \* r + m21 \* g + m22 \* b)^(-1/gamma)
 ///
-#[allow(clippy::too_many_arguments)]
 #[derive(Builder)]
+#[allow(clippy::too_many_arguments)]
 pub struct Ccm {
     #[builder(start_fn)]
     m00: f32,
