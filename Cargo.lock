@@ -5961,6 +5961,7 @@ dependencies = [
  "bon",
  "libc",
  "px-fs",
+ "px-static",
  "regex",
  "strum 0.28.0",
  "strum_macros 0.28.0",

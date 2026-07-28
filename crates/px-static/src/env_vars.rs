@@ -39,4 +39,7 @@ impl EnvVars {
     /// `yes`, case-insensitive), pipeline pause points prompt interactively instead of
     /// being a no-op. Unset (or any other value) in normal use.
     pub const PX_PIPELINE_PAUSE: &'static str = "PX_PIPELINE_PAUSE";
+
+    /// Optional Temp directory location that must exist. Otherwise uses the default system location.
+    pub const PX_PIPELINE_TEMP_DIR: &'static str = "PX_PIPELINE_TEMP_DIR";
 }

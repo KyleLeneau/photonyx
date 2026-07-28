@@ -5,6 +5,7 @@
 ## 0.2.1
 
 * Fix windows cross disk rename falls back to move
+* Added `PX_PIPELINE_TEMP_DIR=<some-dir>` env so the temp directory could be specified (eases cross disk usage)
 
 ## 0.2.0
 

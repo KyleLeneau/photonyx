@@ -13,6 +13,7 @@ use crate::message::{SirilError, SirilMessage};
 use crate::output::{OutputLine, OutputSink, OutputStream};
 use crate::siril_ext::{CapabilitiesExt, ExitExt, SetExt};
 use crate::{FitsExt, SirilSetting};
+use px_static::EnvVars;
 
 /// Unix FIFOs use `pipe::Sender`; Windows named pipes use `NamedPipeClient`
 /// (Siril acts as the server, we connect as a client).
@@ -100,6 +101,27 @@ fn parse_siril_version(text: &str) -> Option<(u32, u32, u32)> {
         }
     }
     None
+}
+
+/// Create the working temp directory, honoring `PX_PIPELINE_TEMP_DIR` if set.
+///
+/// When the env var is set, its value must point to an existing directory (this allows
+/// placing the temp dir on a specific drive, e.g. on Windows). If it's set but the path
+/// doesn't exist, returns an error rather than silently falling back.
+fn create_temp_dir() -> Result<TempDir, SirilError> {
+    match std::env::var(EnvVars::PX_PIPELINE_TEMP_DIR) {
+        Ok(dir) => {
+            if !Path::new(&dir).is_dir() {
+                return Err(SirilError::InvalidConfig(format!(
+                    "Temp directory couldn't be created: {} points to a directory \
+                     that does not exist: {dir}",
+                    EnvVars::PX_PIPELINE_TEMP_DIR
+                )));
+            }
+            Ok(TempDir::with_prefix_in("photonyx-", &dir)?)
+        }
+        Err(_) => Ok(TempDir::with_prefix("photonyx-")?),
+    }
 }
 
 /// Retry `open` until it succeeds, sleeping 50 ms between attempts on any
@@ -271,7 +293,7 @@ impl Siril {
         tracing::debug!("siril-cli found {:?}", &siril_exe);
 
         // Always create temp directory to work in but start in builder supplied
-        let temp_dir = TempDir::with_prefix("photonyx-")?;
+        let temp_dir = create_temp_dir()?;
         let dir = if let Some(ref startup_dir) = builder.directory {
             startup_dir.clone()
         } else {
