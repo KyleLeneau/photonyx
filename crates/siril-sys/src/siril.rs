@@ -23,7 +23,7 @@ type PipeWriter = tokio::net::unix::pipe::Sender;
 type PipeWriter = tokio::net::windows::named_pipe::NamedPipeClient;
 
 /// Minimum supported Siril version: (major, minor, patch)
-pub const SIRIL_MIN_VERSION: (u32, u32, u32) = (1, 4, 0);
+pub const SIRIL_MIN_VERSION: (u32, u32, u32) = (1, 4, 3);
 
 /// Find the right siril-cli across the system
 ///
@@ -231,8 +231,7 @@ impl Builder {
     }
 
     fn pipe_paths(&self) -> (PathBuf, PathBuf) {
-        // Linux/Unix of siril support custom named pipes, windows does not
-        #[cfg(unix)]
+        // Unique per-instance id so concurrent Siril processes don't collide on pipe names.
         let id = format!(
             "{}_{}",
             std::process::id(),
@@ -250,8 +249,8 @@ impl Builder {
         );
         #[cfg(windows)]
         let (in_pipe_path, out_pipe_path): (PathBuf, PathBuf) = (
-            PathBuf::from(r"\\.\pipe\siril_command.in"),
-            PathBuf::from(r"\\.\pipe\siril_command.out"),
+            PathBuf::from(format!(r"\\.\pipe\siril_rs_{}.in", id)),
+            PathBuf::from(format!(r"\\.\pipe\siril_rs_{}.out", id)),
         );
 
         (in_pipe_path, out_pipe_path)
