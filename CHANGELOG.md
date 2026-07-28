@@ -4,8 +4,10 @@
 
 ## 0.2.1
 
-* Fix windows cross disk rename falls back to move
 * Added `PX_PIPELINE_TEMP_DIR=<some-dir>` env so the temp directory could be specified (eases cross disk usage)
+* Fix windows cross disk rename falls back to move
+* Fix windows now uses unique named pipe for siril >= 1.4.3
+* Fix siril 1.4.3 is the minimum supported version
 
 ## 0.2.0
 

@@ -53,6 +53,7 @@
 * [x] need an internal way to pause a pipeline to check output
 * [x] Need a way to delete / audit obs no longer at their path
 * [x] need a better way to bump versions for a release
+* [x] need to support and test multi pipes on windows now that MR is merged for support
 * [ ] implement obs find best to manage calibration links
 * [ ] Add the ability to review all frames for a project stacking and human reject the bad ones (should be part of lock change detection)
 * [ ] Need a way to relink calibration masters to obs - obs command
@@ -69,7 +70,6 @@
 
 ### Future
 
-* [ ] need to support and test multi pipes on windows now that MR is merged for support
 * [ ] What about a way to to organize a profile based on a bunch of data dropped, organize it into the convention and make sure there is a dry run approach for it (solves the seestar capture & organize issue)
 
 ### Parking Lot
