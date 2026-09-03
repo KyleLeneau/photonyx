@@ -57,6 +57,29 @@ theoretical minimum**. This is the concrete evidence behind ADR 006's D4 (single
 reads): the current path allocates the raw byte buffer and the typed pixel buffer separately
 rather than streaming one into the other.
 
+### Phase 2 progress: header-only scan (honest interim number)
+
+As of the Phase 2 cutover, `FitsFile`/`header_rows()` run entirely on the native reader —
+`fitsrs` is a dev-dependency only. Re-running the header-scan benchmark against the native
+implementation gives **5.60 ms for the same 500-file corpus (≈11.2 µs/file)**, essentially
+parity with the 5.79 ms `fitsrs` baseline above, **not yet the ADR's ≥2× target**.
+
+One real fix landed alongside this measurement: `Card::parse` was allocating a fresh `String`
+for every card by remapping each byte through `b as char`, even though the near-universal case
+is plain ASCII, where the 80 bytes are already valid UTF-8 and can be borrowed with zero
+allocation (`Cow::Borrowed` via `str::from_utf8`, falling back to the byte-remap only for
+non-ASCII/malformed cards). That was good for a measured ~5% improvement and is a legitimate
+win, but not the dominant cost.
+
+The bulk of the remaining gap is very likely per-card `String` allocation elsewhere in the parse
+path (`keyword.to_string()`, comment/value string construction) and `header_rows()` building a
+fresh `Vec<(String, String, String)>` on every call — real allocation pressure for headers this
+small (single 2880-byte block, ~10 cards), where syscall and parse overhead are comparable in
+magnitude rather than I/O-dominated. This is left as an explicit, scoped follow-up rather than
+claimed as done: the structural laziness guarantee (exact byte counts via `CountingSource`,
+proven in `tests/reader_conformance.rs`) is real and gates cleanly; the *speed* gate does not yet,
+and this section will be updated once that follow-up lands rather than silently dropped.
+
 ### Positioned-read vs. mmap
 
 Not yet measured — the `ByteSource`/`FileSource` positioned-read backend lands in Phase 1 and

@@ -1,8 +1,15 @@
-//! Phase 0 baseline (ADR 006): header-only scan across many files using the
-//! *current* `fitsrs`-backed `FitsFile`. This is the workload
-//! `all_fits_files` + `CalibrationMetadata::from` exercise across a session's
-//! raw frames — the benchmark this crate must beat by >= 2x once the native
-//! reader lands (Phase 1-2).
+//! Header-only scan across many files, via the public `FitsFile` API. This
+//! is the workload `all_fits_files` + `CalibrationMetadata::from` exercise
+//! across a session's raw frames.
+//!
+//! The Phase 0 baseline (`fitsrs`-backed `FitsFile`, benchmark name
+//! `header_scan/500_files/fitsrs_baseline`) is frozen in
+//! `benches/baselines/header_scan.json` and the README's Baseline report —
+//! that number doesn't change. As of the Phase 2 cutover this benchmark
+//! itself measures the *native* `FitsFile`, so the function name below no
+//! longer says `fitsrs`; comparing a fresh run's numbers against the
+//! committed baseline JSON is exactly how the ADR 006 ">= 2x" gate is
+//! checked.
 
 use std::hint::black_box;
 use std::path::PathBuf;
@@ -35,7 +42,7 @@ fn corpus(n: usize) -> Vec<PathBuf> {
 fn bench_header_scan(c: &mut Criterion) {
     let files = corpus(500);
 
-    c.bench_function("header_scan/500_files/fitsrs_baseline", |b| {
+    c.bench_function("header_scan/500_files/fits_file_open_and_scan", |b| {
         b.iter(|| {
             for path in &files {
                 let file = FitsFile::new(path.clone()).expect("open fixture");

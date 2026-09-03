@@ -58,8 +58,17 @@ impl Card {
     pub fn parse(bytes: &[u8; CARD_LEN]) -> Card {
         // Cards are meant to be plain ASCII (FITS Standard 4.0 §4.1); treat
         // anything outside that range as opaque bytes rather than panicking
-        // on invalid UTF-8.
-        let line: String = bytes.iter().map(|&b| b as char).collect();
+        // on invalid UTF-8. The overwhelming common case is well-formed
+        // ASCII, so borrow directly from `bytes` with zero allocation
+        // there; only the rare non-ASCII/malformed case pays for an owned,
+        // byte-for-byte (not UTF-8-lossy) remap. This is a meaningful cost
+        // difference: header parsing runs once per card in every file
+        // opened, including header-only scans across large batches.
+        let line: std::borrow::Cow<'_, str> = if bytes.is_ascii() {
+            std::borrow::Cow::Borrowed(std::str::from_utf8(bytes).expect("checked ASCII above"))
+        } else {
+            std::borrow::Cow::Owned(bytes.iter().map(|&b| b as char).collect())
+        };
         let keyword_field = &line[0..KEYWORD_FIELD];
         let keyword_trimmed = keyword_field.trim_end();
 
