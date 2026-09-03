@@ -57,6 +57,7 @@
 * [ ] implement obs find best to manage calibration links
 * [ ] Add the ability to review all frames for a project stacking and human reject the bad ones (should be part of lock change detection)
 * [ ] Need a way to relink calibration masters to obs - obs command
+* [ ] would like to drop fitsrs for my own fits library with well known tests, lazy load and performance
 
 ### Bugs
 
