@@ -1,4 +1,6 @@
+pub mod block;
 pub mod display;
+pub mod source;
 
 use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeZone, Utc};
 use fitsrs::hdu::header::Header;
