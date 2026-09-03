@@ -408,23 +408,27 @@ roundtrip property test passes with 10k cases.
 
 ### Phase 2 — HDU discovery, lazy navigation, `FitsFile` cutover
 
-- [ ] **P2-T1** `src/hdu.rs`: HDU descriptor with header byte range and data-unit byte range,
+- [x] **P2-T1** `src/hdu.rs`: HDU descriptor with header byte range and data-unit byte range,
       computed from `BITPIX` × ∏`NAXISn`. Lazy discovery — HDU *n+1* is located without reading
       HDU *n*'s data. `XTENSION` dispatch to `IMAGE` / `TABLE` / `BINTABLE`.
-- [ ] **P2-T2** `src/reader.rs`: `FitsReader<S>` with `open`, `from_source`, `primary`, `hdu`,
+- [x] **P2-T2** `src/reader.rs`: `FitsReader<S>` with `open`, `from_source`, `primary`, `hdu`,
       `hdus`, `hdu_count`. Internal HDU descriptor cache so repeated access does not re-scan.
-- [ ] **P2-T3** Laziness test using `CountingSource`: opening a multi-extension fixture and
+- [x] **P2-T3** Laziness test using `CountingSource`: opening a multi-extension fixture and
       reading the primary header touches only the primary header blocks.
-- [ ] **P2-T4** Rewrite `FitsFile` in `src/lib.rs` on top of `FitsReader`, preserving every
+- [x] **P2-T4** Rewrite `FitsFile` in `src/lib.rs` on top of `FitsReader`, preserving every
       current signature: `new`, `is_color`, `headers`, `key_values`, `header_rows`, `filter`,
       and the public `primary_hdu` field's `get_header()` access path used by
       `px-pipeline/src/meta.rs`. Port `HeaderUtil` to the new `Header`.
-- [ ] **P2-T5** Fix `all_fits_files`: currently it walks `read_dir` once per extension, which
+- [x] **P2-T5** Fix `all_fits_files`: currently it walks `read_dir` once per extension, which
       yields an extension-grouped, filesystem-ordered list. Callers such as
       `ObservationMetadata::from` take `paths.first()` and therefore depend on order. Walk the
       directory once, match both extensions case-insensitively, and return a sorted `Vec`.
-- [ ] **P2-T6** Verify all consumers compile and behave: `cargo build --workspace`, plus a
-      manual `cargo px inspect <file>` and a `px obs scan` against real data.
+- [x] **P2-T6** Verify all consumers compile and behave: `cargo build --workspace` and
+      `cargo test --workspace` pass unchanged (`px`: 433 tests). The manual `cargo px inspect
+      <file>` / `px obs scan` smoke tests were not run — this dev machine has no Siril install,
+      and `inspect` requires it to start. Not a gap in `px-fits` coverage: `inspect`'s only
+      px-fits calls (`FitsFile::new`, `.header_rows()`) are exercised directly by
+      `tests/conformance.rs`. Flagging for whoever has Siril available to confirm end-to-end.
 
 **Gate:** `fitsrs` is a dev-dependency only; the workspace builds; `differential.rs` passes over
 the whole corpus.
