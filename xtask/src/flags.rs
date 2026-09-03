@@ -27,6 +27,15 @@ xflags::xflags! {
             /// New version string, e.g. "1.0.4"
             required version: String
         }
+
+        /// Generate the deterministic synthetic FITS fixture corpus for px-fits (ADR 006)
+        cmd fits-fixtures {}
+
+        /// Run external FITS standard-compliance validators over a directory (ADR 006)
+        cmd fits-verify {
+            /// Directory to scan for .fits/.fit files (default: crates/px-fits/tests/fixtures)
+            optional --dir dir: String
+        }
     }
 }
 
@@ -44,6 +53,8 @@ pub enum XtaskCmd {
     ExportSirilCommands(ExportSirilCommands),
     MergeSirilCommands(MergeSirilCommands),
     Bump(Bump),
+    FitsFixtures(FitsFixtures),
+    FitsVerify(FitsVerify),
 }
 
 #[derive(Debug)]
@@ -64,6 +75,14 @@ pub struct MergeSirilCommands {
 #[derive(Debug)]
 pub struct Bump {
     pub version: String,
+}
+
+#[derive(Debug)]
+pub struct FitsFixtures;
+
+#[derive(Debug)]
+pub struct FitsVerify {
+    pub dir: Option<String>,
 }
 
 impl Xtask {
