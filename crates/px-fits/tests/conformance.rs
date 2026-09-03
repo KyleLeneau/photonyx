@@ -1,9 +1,10 @@
-//! Phase 0 smoke test (ADR 006 O5): confirms every fixture in the committed
-//! corpus is well-formed FITS by opening it with the current (fitsrs-backed)
-//! `FitsFile`. This is not the Phase 1+ conformance suite for the native
-//! reader — it exists now purely so a bug in the hand-rolled fixture writer
-//! (`xtask fits-fixtures`) fails loudly instead of silently poisoning every
-//! later phase's test corpus.
+//! Smoke test (ADR 006 O5) for the public `FitsFile` facade: confirms every
+//! fixture in the committed corpus opens cleanly through the same API
+//! `px-pipeline`/`px` actually call. `tests/header_conformance.rs` and
+//! `tests/reader_conformance.rs` exercise the native `Header`/`FitsReader`
+//! layers directly and in more depth; this file exists so a bug in the
+//! hand-rolled fixture writer (`xtask fits-fixtures`) or in the `FitsFile`
+//! compatibility layer itself fails loudly here too.
 
 use std::path::PathBuf;
 
@@ -51,8 +52,7 @@ fn bitpix16_2d_header_reports_expected_axes() {
     let path = fixtures_dir().join("bitpix16_2d_64x48.fits");
     let file = FitsFile::new(path).expect("open fixture");
     let header = file.primary_hdu.get_header();
-    let naxis: Vec<u64> = header.get_xtension().get_naxis().to_vec();
-    assert_eq!(naxis, vec![64, 48]);
+    assert_eq!(header.naxis().unwrap(), vec![64, 48]);
 }
 
 #[test]
@@ -70,5 +70,20 @@ fn multi_extension_fixture_has_primary_naxis_zero() {
     let path = fixtures_dir().join("multi_extension.fits");
     let file = FitsFile::new(path).expect("open fixture");
     let header = file.primary_hdu.get_header();
-    assert!(header.get_xtension().get_naxis().is_empty());
+    assert!(header.naxis().unwrap().is_empty());
+}
+
+#[test]
+fn header_rows_includes_expected_keyword() {
+    let path = fixtures_dir().join("bitpix8_2d_20x16.fits");
+    let file = FitsFile::new(path).expect("open fixture");
+    let rows = file.header_rows();
+    assert!(rows.iter().any(|(k, v, _)| k == "OBJECT" && v == "M42"));
+}
+
+#[test]
+fn is_color_false_for_plain_2d_fixture() {
+    let path = fixtures_dir().join("bitpix16_2d_64x48.fits");
+    let file = FitsFile::new(path).expect("open fixture");
+    assert!(!file.is_color());
 }

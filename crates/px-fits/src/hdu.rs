@@ -112,7 +112,7 @@ pub fn discover_one<S: ByteSource + ?Sized>(
         HduKind::Primary
     } else {
         match header.get_string("XTENSION") {
-            Some(x) => HduKind::from_xtension(x),
+            Some(x) => HduKind::from_xtension(&x),
             None => HduKind::Unknown(String::new()),
         }
     };

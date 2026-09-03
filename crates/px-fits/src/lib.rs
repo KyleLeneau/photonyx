@@ -7,74 +7,65 @@ pub mod header;
 pub mod reader;
 pub mod source;
 
-use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeZone, Utc};
-use fitsrs::hdu::header::Header;
+pub use error::FitsError;
 
-use fitsrs::card::Value;
-use fitsrs::{
-    Fits, HDU, fits,
-    hdu::header::{ValueMapIter, extension::image::Image},
-};
+use std::fmt::Display;
 use std::io;
-use std::path::Path;
-use std::{
-    fmt::{Debug, Display},
-    fs::File,
-    io::BufReader,
-    path::PathBuf,
-};
+use std::path::{Path, PathBuf};
 
-#[derive(thiserror::Error, Debug)]
-pub enum FitsError {
-    #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
+use chrono::{DateTime, FixedOffset};
 
-    #[error("Fits error: {0}")]
-    Internal(#[from] fitsrs::error::Error),
+use crate::card::Value;
+use crate::hdu::DiscoveredHdu;
+use crate::header::Header;
+use crate::reader::FitsReader;
 
-    #[error("Missing primary hdu")]
-    MissingPrimaryHDU,
+/// The primary HDU of an opened [`FitsFile`]: its header plus data-unit
+/// byte-range metadata. A thin wrapper over [`DiscoveredHdu`] so
+/// `FitsFile::primary_hdu` has a stable, native type in place of the
+/// `fitsrs`-specific one it used to be (ADR 006 Phase 2 cutover).
+pub struct PrimaryHdu(DiscoveredHdu);
 
-    #[error("unknown fits error")]
-    UnKnown,
+impl PrimaryHdu {
+    pub fn get_header(&self) -> &Header {
+        &self.0.header
+    }
 
-    #[error("image processing error: {0}")]
-    Processing(String),
+    /// Byte offset of the data unit within the file.
+    pub fn get_data_unit_byte_offset(&self) -> u64 {
+        self.0.data_offset
+    }
+
+    /// On-disk size of the data unit, including block padding.
+    pub fn get_data_unit_byte_size(&self) -> u64 {
+        self.0.data_padded_len
+    }
 }
 
 pub struct FitsFile {
     #[allow(dead_code)]
     pub file_path: PathBuf,
-    pub primary_hdu: fits::HDU<Image>,
+    pub primary_hdu: PrimaryHdu,
 }
 
 impl FitsFile {
     pub fn new(path: PathBuf) -> Result<Self, FitsError> {
-        let file = File::open(&path)?;
-        let reader = BufReader::new(file);
-        let mut fits_reader = Fits::from_reader(reader);
-
-        // Get the Primary HDU header
-        let primary_hdu = match fits_reader.next().ok_or(FitsError::MissingPrimaryHDU)?? {
-            HDU::Primary(img) => img,
-            _ => return Err(FitsError::MissingPrimaryHDU),
-        };
-
+        let reader = FitsReader::open(&path)?;
+        let primary = reader.primary()?;
         Ok(Self {
             file_path: path,
-            primary_hdu,
+            primary_hdu: PrimaryHdu(primary),
         })
     }
 
     pub fn is_color(&self) -> bool {
         let header = self.primary_hdu.get_header();
 
-        let bayer = match header.get("BAYERPAT") {
-            Some(Value::String { value, .. }) => !value.is_empty(),
-            _ => false,
-        };
-
-        let three_dim = header.get_xtension().get_naxis().iter().count() > 2;
+        let bayer = header
+            .get_string("BAYERPAT")
+            .map(|s| !s.is_empty())
+            .unwrap_or(false);
+        let three_dim = header.naxis().map(|n| n.len() > 2).unwrap_or(false);
 
         bayer || three_dim
     }
@@ -82,38 +73,39 @@ impl FitsFile {
     pub fn headers(&self) -> Vec<String> {
         self.primary_hdu
             .get_header()
-            .keywords()
-            .map(|k| k.to_string())
+            .cards()
+            .iter()
+            .map(|c| c.keyword.clone())
             .collect()
     }
 
-    pub fn key_values(&self) -> ValueMapIter<'_> {
-        self.primary_hdu.get_header().iter()
+    /// All cards in file order. The `fitsrs`-specific `ValueMapIter` this
+    /// used to return no longer makes sense once `fitsrs` is gone from the
+    /// runtime dependency graph; nothing outside this crate depended on
+    /// that concrete type (only on iterating key/value pairs), so this
+    /// returns the native `Card` sequence instead.
+    pub fn key_values(&self) -> impl Iterator<Item = &card::Card> {
+        self.primary_hdu.get_header().cards().iter()
     }
 
     pub fn header_rows(&self) -> Vec<(String, String, String)> {
-        self.key_values()
-            .map(|(key, value)| {
-                let (val_str, comment) = match value {
-                    Value::Integer { value, comment } => (
-                        value.to_string(),
-                        comment.as_deref().unwrap_or("").to_string(),
-                    ),
-                    Value::Float { value, comment } => (
-                        format!("{value}"),
-                        comment.as_deref().unwrap_or("").to_string(),
-                    ),
-                    Value::Logical { value, comment } => (
-                        if *value { "T" } else { "F" }.to_string(),
-                        comment.as_deref().unwrap_or("").to_string(),
-                    ),
-                    Value::String { value, comment } => {
-                        (value.clone(), comment.as_deref().unwrap_or("").to_string())
-                    }
-                    Value::Undefined => ("undefined".to_string(), String::new()),
-                    Value::Invalid(raw) => (raw.clone(), String::new()),
+        self.primary_hdu
+            .get_header()
+            .cards()
+            .iter()
+            .map(|c| {
+                let val_str = match &c.value {
+                    Value::Integer(i) => i.to_string(),
+                    Value::Float(f) => format!("{f}"),
+                    Value::Logical(b) => (if *b { "T" } else { "F" }).to_string(),
+                    Value::String(s) => s.clone(),
+                    Value::Complex(re, im) => format!("({re}, {im})"),
+                    Value::Undefined => "undefined".to_string(),
+                    Value::Commentary(s) => s.clone(),
+                    Value::Invalid(raw) => raw.clone(),
                 };
-                (key.to_string(), val_str, comment)
+                let comment = c.comment.clone().unwrap_or_default();
+                (c.keyword.clone(), val_str, comment)
             })
             .collect()
     }
@@ -130,13 +122,13 @@ impl FitsFile {
 impl Display for FitsFile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let header = self.primary_hdu.get_header();
-        let img = header.get_xtension();
+        let naxis = header.naxis().unwrap_or_default();
         write!(
             f,
             "PRIMARY: HEAD naxis: {:?}; bitpix: {:?}; dimensions: {}; start byte: {}; byte size: {}.",
-            img.get_naxis(),
-            img.get_bitpix(),
-            img.get_naxis()
+            naxis,
+            header.bitpix(),
+            naxis
                 .iter()
                 .map(|d| d.to_string())
                 .reduce(|mut s, d| {
@@ -153,16 +145,25 @@ impl Display for FitsFile {
 
 /// Utility to check if all the files in a path are .fit or .fits
 ///
+/// Walks the directory once (case-insensitive extension match) and returns
+/// entries sorted by path. Earlier versions walked the directory once per
+/// extension, which produced an extension-grouped, filesystem-order result
+/// that callers relying on `paths.first()` for "the earliest frame" (e.g.
+/// `ObservationMetadata::from`) could not depend on.
 pub fn all_fits_files(raw_folder: &Path) -> io::Result<Vec<PathBuf>> {
     let mut files = Vec::new();
-    for ext in &["fit", "fits"] {
-        for entry in raw_folder.read_dir()? {
-            let path = entry?.path();
-            if path.extension().and_then(|e| e.to_str()) == Some(ext) {
-                files.push(path);
-            }
+    for entry in raw_folder.read_dir()? {
+        let path = entry?.path();
+        let is_fits = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("fit") || e.eq_ignore_ascii_case("fits"))
+            .unwrap_or(false);
+        if is_fits {
+            files.push(path);
         }
     }
+    files.sort();
     Ok(files)
 }
 
@@ -199,6 +200,11 @@ impl std::fmt::Display for Binning {
     }
 }
 
+/// Source-compatibility shim for the pre-Phase-2 `HeaderUtil` trait.
+/// `header::Header`'s own inherent methods (`get_i64`, `get_f64`,
+/// `get_date_utc`, ...) are the native API; this trait exists only so
+/// existing consumer call sites (`px-pipeline`) that spell out
+/// `get_float`/`get_int`/`get_binning` keep compiling unchanged.
 pub trait HeaderUtil {
     fn get_string(&self, key: &str) -> Option<String>;
     fn get_float(&self, key: &str) -> Option<f64>;
@@ -207,43 +213,27 @@ pub trait HeaderUtil {
     fn get_binning(&self) -> Binning;
 }
 
-impl HeaderUtil for Header<Image> {
+impl HeaderUtil for Header {
     fn get_string(&self, key: &str) -> Option<String> {
-        match self.get(key)? {
-            Value::String { value, .. } => Some(value.clone()),
-            _ => None,
-        }
+        Header::get_string(self, key)
     }
 
     fn get_float(&self, key: &str) -> Option<f64> {
-        match self.get(key)? {
-            Value::Float { value, .. } => Some(*value),
-            Value::Integer { value, .. } => Some(*value as f64),
-            _ => None,
-        }
+        self.get_f64(key)
     }
 
     fn get_int(&self, key: &str) -> Option<i64> {
-        match self.get(key)? {
-            Value::Integer { value, .. } => Some(*value),
-            _ => None,
-        }
+        self.get_i64(key)
     }
 
     fn get_date_utc(&self, key: &str) -> Option<DateTime<FixedOffset>> {
-        self.get_string(key).and_then(|s| {
-            DateTime::parse_from_rfc3339(&s).ok().or_else(|| {
-                NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.f")
-                    .ok()
-                    .map(|ndt| Utc.from_utc_datetime(&ndt).fixed_offset())
-            })
-        })
+        Header::get_date_utc(self, key)
     }
 
     fn get_binning(&self) -> Binning {
         Binning {
-            x: self.get_int("XBINNING").unwrap_or(1) as u8,
-            y: self.get_int("YBINNING").unwrap_or(1) as u8,
+            x: self.get_i64("XBINNING").unwrap_or(1) as u8,
+            y: self.get_i64("YBINNING").unwrap_or(1) as u8,
         }
     }
 }

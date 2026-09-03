@@ -148,9 +148,14 @@ impl Header {
             .map(|&i| &self.cards[i])
     }
 
-    pub fn get_string(&self, keyword: &str) -> Option<&str> {
+    /// Returns an owned `String` (rather than `&str`) so this matches the
+    /// `HeaderUtil` compatibility trait's signature exactly (`lib.rs`) —
+    /// `px-pipeline` assigns the result straight into `Option<String>`
+    /// struct fields, and inherent methods shadow trait methods of the same
+    /// name, so the two must agree.
+    pub fn get_string(&self, keyword: &str) -> Option<String> {
         match &self.get(keyword)?.value {
-            Value::String(s) => Some(s.as_str()),
+            Value::String(s) => Some(s.clone()),
             _ => None,
         }
     }
@@ -179,8 +184,8 @@ impl Header {
 
     pub fn get_date_utc(&self, keyword: &str) -> Option<DateTime<FixedOffset>> {
         let s = self.get_string(keyword)?;
-        DateTime::parse_from_rfc3339(s).ok().or_else(|| {
-            NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.f")
+        DateTime::parse_from_rfc3339(&s).ok().or_else(|| {
+            NaiveDateTime::parse_from_str(&s, "%Y-%m-%dT%H:%M:%S%.f")
                 .ok()
                 .map(|ndt| Utc.from_utc_datetime(&ndt).fixed_offset())
         })
@@ -423,7 +428,7 @@ mod tests {
 
         assert_eq!(
             header.get_string("LONGSTR"),
-            Some("part one part two part three")
+            Some("part one part two part three".to_string())
         );
         // CONTINUE cards are absorbed, not separately queryable.
         assert!(
