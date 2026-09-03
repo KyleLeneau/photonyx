@@ -3,7 +3,8 @@
 
 use std::path::PathBuf;
 
-use px_fits::{CalibrationMetadata, MasterDark, all_fits_files};
+use crate::meta::CalibrationMetadata;
+use px_fits::{MasterDark, all_fits_files};
 use siril_sys::{
     Builder, FitsExt,
     commands::{Convert, Stack},

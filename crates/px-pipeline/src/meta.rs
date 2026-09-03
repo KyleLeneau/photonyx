@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, FixedOffset, NaiveDateTime};
 use px_fs::DatePath;
 
-use crate::{Binning, FitsError, FitsFile, HeaderUtil};
+use px_fits::{Binning, FitsError, FitsFile, HeaderUtil};
 
 #[derive(Debug)]
 pub struct CalibrationMetadata {

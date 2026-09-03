@@ -4973,6 +4973,7 @@ dependencies = [
  "px-configuration",
  "px-conventions",
  "px-fits",
+ "px-pipeline",
  "serde",
  "sqlx",
  "thiserror 1.0.69",
@@ -4998,6 +4999,7 @@ name = "px-pipeline"
 version = "0.2.0"
 dependencies = [
  "bon",
+ "chrono",
  "inquire",
  "px-fits",
  "px-fs",

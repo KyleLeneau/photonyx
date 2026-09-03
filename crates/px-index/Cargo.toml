@@ -11,6 +11,7 @@ repository.workspace = true
 px-configuration = { workspace = true }
 px-conventions = { workspace = true }
 px-fits = { workspace = true }
+px-pipeline = { workspace = true }
 
 serde = { workspace = true }
 sqlx = { workspace = true }

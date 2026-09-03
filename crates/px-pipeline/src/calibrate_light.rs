@@ -4,9 +4,9 @@
 
 use std::path::PathBuf;
 
-use px_fits::{
-    CalibratedLight, CalibrationMetadata, ObservationMetadata, all_color_raw_frames, all_fits_files,
-};
+use crate::meta::{CalibrationMetadata, ObservationMetadata};
+use px_fits::CalibratedLight;
+use px_fits::{all_color_raw_frames, all_fits_files};
 use px_fs::{OptionPath, move_file};
 use siril_sys::{
     Builder, ConversionFile, FitsExt,

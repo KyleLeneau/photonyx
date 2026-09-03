@@ -1,10 +1,9 @@
 pub mod display;
-mod meta;
+
 mod model;
 
 use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeZone, Utc};
 use fitsrs::hdu::header::Header;
-pub use meta::*;
 pub use model::*;
 
 // Soon to be wrapper around https://github.com/cds-astro/fitsrs
@@ -47,8 +46,8 @@ pub enum FitsError {
 
 pub struct FitsFile {
     #[allow(dead_code)]
-    file_path: PathBuf,
-    primary_hdu: fits::HDU<Image>,
+    pub file_path: PathBuf,
+    pub primary_hdu: fits::HDU<Image>,
 }
 
 impl FitsFile {
@@ -202,7 +201,7 @@ impl std::fmt::Display for Binning {
     }
 }
 
-pub(crate) trait HeaderUtil {
+pub trait HeaderUtil {
     fn get_string(&self, key: &str) -> Option<String>;
     fn get_float(&self, key: &str) -> Option<f64>;
     fn get_int(&self, key: &str) -> Option<i64>;

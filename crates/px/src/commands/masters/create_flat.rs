@@ -1,9 +1,10 @@
 use crate::{ExitStatus, printer::Printer, reporters::DefaultPipelineReporter, utils::to_fits_ext};
 use anyhow::Result;
 use px_cli::CreateFlatMasterArgs;
-use px_fits::{CalibrationMetadata, all_fits_files};
+use px_fits::all_fits_files;
 use px_index::{MatchCriteria, ProfileIndex};
 use px_pipeline::master_flat::CreateMasterFlatPipeline;
+use px_pipeline::meta::CalibrationMetadata;
 use siril_sys::Builder;
 
 pub(crate) async fn create_master_flat(

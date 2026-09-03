@@ -14,6 +14,7 @@ px-static = { workspace = true }
 siril-sys = { workspace = true }
 
 bon = { workspace = true }
+chrono = { workspace = true }
 inquire = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }

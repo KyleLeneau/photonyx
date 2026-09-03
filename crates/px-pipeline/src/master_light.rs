@@ -4,7 +4,8 @@
 
 use std::path::{Path, PathBuf};
 
-use px_fits::{LinearStackMetadata, MasterLight};
+use crate::meta::LinearStackMetadata;
+use px_fits::MasterLight;
 use px_fs::Glob;
 use siril_sys::{
     BestRejection, Builder, FitsExt,

@@ -2,8 +2,9 @@ use anyhow::Result;
 use chrono::NaiveDate;
 use px_cli::ScanProfileArgs;
 use px_conventions::observation::ObservationPath;
-use px_fits::{ObservationMetadata, all_fits_files};
+use px_fits::all_fits_files;
 use px_index::{CalibrationRecord, MasterKind, MatchCriteria, ObservationRecord, ProfileIndex};
+use px_pipeline::meta::ObservationMetadata;
 
 use crate::{ExitStatus, printer::Printer};
 
