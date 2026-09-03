@@ -1,6 +1,8 @@
 pub mod block;
 pub mod card;
 pub mod display;
+pub mod error;
+pub mod header;
 pub mod source;
 
 use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeZone, Utc};
