@@ -1,13 +1,9 @@
-//! The native `px-fits` error type (ADR 006 P1-T6).
-//!
-//! This lives alongside, not yet in place of, the `fitsrs`-based `FitsError`
-//! still defined at the crate root — that cutover happens in Phase 2 when
-//! `FitsFile` is rewritten on top of the native reader. Until then this is
-//! addressed as `px_fits::error::FitsError` and used by the new modules
-//! (`header`, and later `hdu`/`image`/`table`) that don't depend on
-//! `fitsrs` at all.
+//! The `px-fits` error type (ADR 006). Re-exported at the crate root as
+//! `px_fits::FitsError` — the same path consumer crates have always used —
+//! so the Phase 2 cutover from `fitsrs` didn't require touching any
+//! consumer's `use` statements or error-handling code.
 
-/// Errors produced by the native FITS reader/writer.
+/// Errors produced by `px-fits`.
 #[derive(thiserror::Error, Debug)]
 pub enum FitsError {
     #[error("I/O error: {0}")]
@@ -15,6 +11,9 @@ pub enum FitsError {
 
     #[error("missing primary HDU")]
     MissingPrimaryHdu,
+
+    #[error("HDU index {0} does not exist in this file")]
+    HduIndexOutOfRange(usize),
 
     #[error("header has no END card within the scanned data")]
     MissingEnd,

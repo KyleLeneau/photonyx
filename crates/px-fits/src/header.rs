@@ -66,7 +66,7 @@ impl BitPix {
 /// lookup. `CONTINUE` long-string chains (the OGIP convention) are already
 /// merged into a single logical card by the time a `Header` is constructed —
 /// callers never see raw `CONTINUE` cards.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Header {
     cards: Vec<Card>,
     /// Keyword (uppercased) -> index into `cards`, first occurrence wins,

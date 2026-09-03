@@ -37,6 +37,7 @@ pub trait ByteSource: Send + Sync {
 /// The default backend: positioned reads against an open file handle.
 /// `read_at`/`seek_read` take `&self` (no seek-then-read races), so a single
 /// `FileSource` can be shared across threads without locking.
+#[derive(Debug)]
 pub struct FileSource {
     file: File,
     len: u64,
@@ -66,6 +67,7 @@ impl ByteSource for FileSource {
 }
 
 /// An in-memory source, e.g. for tests or bytes already loaded by a caller.
+#[derive(Debug)]
 pub struct SliceSource(Vec<u8>);
 
 impl SliceSource {
