@@ -9,6 +9,7 @@ pub mod master_dark;
 pub mod master_flat;
 pub mod master_light;
 pub mod meta;
+pub mod model;
 pub mod pause;
 pub mod project;
 

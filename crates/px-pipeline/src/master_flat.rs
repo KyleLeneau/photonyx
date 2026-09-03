@@ -4,7 +4,8 @@
 use std::path::PathBuf;
 
 use crate::meta::CalibrationMetadata;
-use px_fits::{MasterFlat, all_fits_files};
+use crate::model::MasterFlat;
+use px_fits::all_fits_files;
 use siril_sys::{
     Builder, FitsExt, UpdateKeyMethod,
     commands::{Calibrate, Convert, SequpdateKey, Stack},

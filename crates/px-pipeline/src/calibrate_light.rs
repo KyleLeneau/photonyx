@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use crate::meta::{CalibrationMetadata, ObservationMetadata};
-use px_fits::CalibratedLight;
+use crate::model::CalibratedLight;
 use px_fits::{all_color_raw_frames, all_fits_files};
 use px_fs::{OptionPath, move_file};
 use siril_sys::{

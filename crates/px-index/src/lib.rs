@@ -7,8 +7,8 @@ use uuid::Uuid;
 
 use px_configuration::{ProfileConfig, ProfileConfigError};
 use px_conventions::{observation::ObservationPath, profile::ProfilePath};
-use px_fits::{CalibratedLight, MasterBias, MasterDark, MasterFlat};
 use px_pipeline::meta::ObservationMetadata;
+use px_pipeline::model::{CalibratedLight, MasterBias, MasterDark, MasterFlat};
 
 #[derive(Debug, Error)]
 pub enum ProfileIndexError {

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use chrono::NaiveDateTime;
 
-use crate::Binning;
+use px_fits::Binning;
 
 #[derive(Debug)]
 pub struct MasterDark {

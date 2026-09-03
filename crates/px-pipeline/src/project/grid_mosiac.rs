@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 
 use crate::meta::LinearStackMetadata;
-use px_fits::MasterLight;
+use crate::model::MasterLight;
 use siril_sys::{
     Builder, FitsExt, SequenceFraming,
     commands::{Convert, Load, Platesolve, SeqApplyReg, SeqSubSky, Seqplatesolve, Stack},
