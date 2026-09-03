@@ -88,6 +88,13 @@ rayon = "1.10"
 
 # Testing
 insta = { version = "1.46.0", features = ["json", "filters", "redactions"] }
+criterion = "0.5"
+dhat = "0.3"
+proptest = "1"
+
+# FITS I/O
+flate2 = "1"
+memmap2 = "0.9"
 
 [workspace.lints.rust]
 #

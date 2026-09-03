@@ -19,5 +19,26 @@ strum_macros = { workspace = true }
 thiserror = { workspace = true }
 rustafits = { git = "https://github.com/KyleLeneau/rustafits", branch = "jpg-feature"}
 
+[dev-dependencies]
+criterion = { workspace = true }
+dhat = { workspace = true }
+proptest = { workspace = true }
+
+[[bench]]
+name = "header_scan"
+harness = false
+
+[[bench]]
+name = "full_frame"
+harness = false
+
+[[bench]]
+name = "region"
+harness = false
+
+[[bench]]
+name = "write"
+harness = false
+
 [lints]
 workspace = true
