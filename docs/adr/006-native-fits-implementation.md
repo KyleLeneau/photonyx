@@ -361,20 +361,20 @@ These apply to every task below and are non-negotiable for delegated work.
 *Goal: make progress measurable before any code changes behaviour. Nothing in this phase alters
 runtime behaviour.*
 
-- [ ] **P0-T1** Add workspace dependencies: `criterion = "0.5"`, `dhat = "0.3"`,
+- [x] **P0-T1** Add workspace dependencies: `criterion = "0.5"`, `dhat = "0.3"`,
       `proptest = "1"`, `flate2 = "1"`, `memmap2 = "0.9"` (the first three dev-only at the crate
       level). Wire `[[bench]]` entries with `harness = false` in `crates/px-fits/Cargo.toml`.
-- [ ] **P0-T2** Add `xtask fits-fixtures`: generates the deterministic synthetic corpus described
+- [x] **P0-T2** Add `xtask fits-fixtures`: generates the deterministic synthetic corpus described
       in O5 into `crates/px-fits/tests/fixtures/`. Uses a fixed PRNG seed. Must be idempotent —
       re-running produces byte-identical files. Commit the generated fixtures.
-- [ ] **P0-T3** Add `xtask fits-verify` (O4): runs `fitsverify` and/or astropy over a directory
+- [x] **P0-T3** Add `xtask fits-verify` (O4): runs `fitsverify` and/or astropy over a directory
       of FITS files; skips with a clear message when neither tool is installed.
-- [ ] **P0-T4** Add `CountingSource` (O1) and the `dhat` test scaffolding (O2) under
+- [x] **P0-T4** Add `CountingSource` (O1) and the `dhat` test scaffolding (O2) under
       `#[cfg(test)]` / a `bench-util` module.
-- [ ] **P0-T5** Write the four benchmark files with the *current* implementation as the subject:
+- [x] **P0-T5** Write the four benchmark files with the *current* implementation as the subject:
       `header_scan` (fitsrs), `full_frame` (`astroimage::read_raw`), `region` (full read + crop),
       `write` (no-op placeholder that will be filled in Phase 5).
-- [ ] **P0-T6** Run all benchmarks, commit criterion baselines under
+- [x] **P0-T6** Run all benchmarks, commit criterion baselines under
       `crates/px-fits/benches/baselines/`, and record the numbers plus machine/OS in a
       "Baseline" section of `crates/px-fits/README.md`.
 
@@ -382,24 +382,24 @@ runtime behaviour.*
 
 ### Phase 1 — Byte sources, blocks, cards, headers
 
-- [ ] **P1-T1** `src/source.rs`: the `ByteSource` trait, `FileSource` (cross-platform positioned
+- [x] **P1-T1** `src/source.rs`: the `ByteSource` trait, `FileSource` (cross-platform positioned
       reads), `SliceSource`. Unit tests for offset/short-read/EOF behaviour on both platforms.
-- [ ] **P1-T2** `src/block.rs`: 2880-byte block arithmetic — block count for a byte length,
+- [x] **P1-T2** `src/block.rs`: 2880-byte block arithmetic — block count for a byte length,
       padding sizes, offset-to-block conversions. Pure functions, exhaustively unit tested
       including the zero-length and exact-multiple edge cases.
-- [ ] **P1-T3** `src/card.rs`: 80-byte card parsing into `Card { keyword, value, comment }` and
+- [x] **P1-T3** `src/card.rs`: 80-byte card parsing into `Card { keyword, value, comment }` and
       the `Value` enum (`Integer`, `Float`, `Logical`, `String`, `Complex`, `Undefined`,
       `Invalid(raw)`). Handles fixed and free format, quote escaping (`''`), `COMMENT`/`HISTORY`/
       blank keywords, `HIERARCH`, and the OGIP long-string `CONTINUE` convention. Serialization
       back to 80 bytes is implemented in the same task so a roundtrip property test can be
       written immediately.
-- [ ] **P1-T4** `proptest` roundtrip: any `Card` we construct serializes to exactly 80 ASCII
+- [x] **P1-T4** `proptest` roundtrip: any `Card` we construct serializes to exactly 80 ASCII
       bytes and re-parses to an equal `Card`.
-- [ ] **P1-T5** `src/header.rs`: `Header` with an ordered `Vec<Card>` plus a keyword → index map
+- [x] **P1-T5** `src/header.rs`: `Header` with an ordered `Vec<Card>` plus a keyword → index map
       for O(1) lookup. Typed accessors (`get_string`, `get_f64`, `get_i64`, `get_bool`,
       `get_date_utc`), `naxis()`, `bitpix()`. Reads blocks until `END`; errors if `END` is
       absent before EOF.
-- [ ] **P1-T6** `src/error.rs`: the full `FitsError` enum. Every malformed fixture from O5 maps
+- [x] **P1-T6** `src/error.rs`: the full `FitsError` enum. Every malformed fixture from O5 maps
       to a specific variant. Keep the existing variants (`Io`, `MissingPrimaryHDU`, `Processing`)
       for source compatibility; replace `Internal(fitsrs::error::Error)` with native variants.
 
