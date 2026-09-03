@@ -143,11 +143,14 @@ impl HeaderBuf {
             let quoted = format!("'{escaped}'");
             if i == 0 {
                 self.push_line(&format!("{key:<8}= {quoted}"));
-                self.comment(comment);
             } else {
                 self.push_line(&format!("CONTINUE  {quoted}"));
             }
         }
+        // The comment card must come after the full CONTINUE chain: a
+        // CONTINUE card must immediately follow the card it continues (the
+        // OGIP long-string convention), so nothing may be interleaved.
+        self.comment(comment);
     }
 
     fn comment(&mut self, text: &str) {
