@@ -5120,6 +5120,8 @@ dependencies = [
  "chrono",
  "criterion",
  "dhat",
+ "flate2",
+ "memmap2",
  "proptest",
  "px-fs",
  "rayon",
