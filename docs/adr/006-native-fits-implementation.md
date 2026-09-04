@@ -520,23 +520,29 @@ throughput is at or above baseline.
 
 ### Phase 7 — Tile-compressed images
 
-- [ ] **P7-T1** `src/compress/mod.rs`: recognize the tiled-image convention (`ZIMAGE = T`),
+- [x] **P7-T1** `src/compress/mod.rs`: recognize the tiled-image convention (`ZIMAGE = T`),
       parse `ZBITPIX`, `ZNAXISn`, `ZTILEn`, `ZCMPTYPE`, `ZNAMEn`/`ZVALn`, and present a
       `CompressedImageHdu` with the *logical* image shape, so callers see it as an image.
       Depends on Phase 6 — the compressed data lives in a `BINTABLE`.
-- [ ] **P7-T2** `src/compress/rice.rs`: `RICE_1` decoder (`BLOCKSIZE`, `BYTEPIX` parameters).
-      Validate against reference files produced by cfitsio's `fpack`.
-- [ ] **P7-T3** `src/compress/gzip.rs`: `GZIP_1` and `GZIP_2` (the latter byte-shuffled) via
-      `flate2`.
-- [ ] **P7-T4** `src/compress/plio.rs`: `PLIO_1` run-length decoder for mask images.
-- [ ] **P7-T5** `HCOMPRESS_1` and any unknown `ZCMPTYPE` return
+- [x] **P7-T2** `src/compress/rice.rs`: `RICE_1` decoder (`BLOCKSIZE`, `BYTEPIX` parameters).
+      Validate against reference files produced by cfitsio's `fpack`. *`fpack` is not installed
+      on the dev machine; validated instead against astropy (which wraps the same cfitsio
+      compression code) — bit-exact both directions.*
+- [x] **P7-T3** `GZIP_1` and `GZIP_2` (the latter byte-shuffled) via `flate2` — implemented
+      inline in `src/compress/mod.rs` rather than a separate `gzip.rs`.
+- [~] **P7-T4** `src/compress/plio.rs`: `PLIO_1` run-length decoder for mask images.
+      *Deferred.* `PLIO_1` is mask-image-only and vanishingly rare in this project's domain;
+      `ZCMPTYPE = 'PLIO_1'` currently returns `FitsError::UnsupportedCompression` (never a
+      panic — covered by `tests/compress_conformance.rs`). `RICE_1` (what `fpack` produces by
+      default), `GZIP_1`, `GZIP_2`, and `NOCOMPRESS` are implemented and astropy-validated.
+- [x] **P7-T5** `HCOMPRESS_1` and any unknown `ZCMPTYPE` return
       `FitsError::UnsupportedCompression { .. }` — never a panic, never silent garbage.
-- [ ] **P7-T6** **Region reads on compressed images:** decompress only the tiles the region
+- [x] **P7-T6** **Region reads on compressed images:** decompress only the tiles the region
       intersects. This is the whole reason tiling exists and is the highest-value item in this
       phase. `CountingSource` asserts that untouched tiles are never read.
-- [ ] **P7-T7** Compressed-image writing (`RICE_1` and `GZIP_1` only), validated with `funpack`
+- [x] **P7-T7** Compressed-image writing (`RICE_1` and `GZIP_1` only), validated with `funpack`
       or astropy.
-- [ ] **P7-T8** Benchmark compressed full-frame and region reads; add to the README.
+- [x] **P7-T8** Benchmark compressed full-frame and region reads; add to the README.
 
 **Gate:** `fpack`-produced reference files decompress bit-exactly; tile-selective region reads
 verified.
