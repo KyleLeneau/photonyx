@@ -11,7 +11,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use px_fits::header::BitPix;
-use px_fits::{FitsWriter, HeaderBuilder};
+use px_fits::table::{AsciiTableBuilder, BinTableBuilder};
+use px_fits::{Cell, FitsWriter, HeaderBuilder};
 
 fn out_dir() -> PathBuf {
     let d = std::env::temp_dir().join("px-fits-external-validation");
@@ -141,6 +142,69 @@ fn write_sample_files(dir: &Path) -> Vec<PathBuf> {
             iw.write_row(&row).unwrap();
         }
         iw.finish().unwrap();
+        w.finish().unwrap();
+        files.push(path);
+    }
+
+    // BINTABLE with scalar/vector/string/scaled + a variable-length column.
+    {
+        let path = dir.join("bintable.fits");
+        let mut w = FitsWriter::create(&path).unwrap();
+        w.write_image::<u8>(&HeaderBuilder::primary_image(BitPix::U8, &[]).unwrap(), &[])
+            .unwrap();
+        let mut t = BinTableBuilder::new()
+            .column("ID", "J")
+            .unwrap()
+            .column_full("FLUX", "E", Some("Jy"), None, None, None)
+            .unwrap()
+            .column("NAME", "8A")
+            .unwrap()
+            .column("COORD", "2D")
+            .unwrap()
+            .column_full("CNT", "I", None, Some(1.0), Some(32768.0), None)
+            .unwrap()
+            .column("SAMPLES", "1PJ(4)")
+            .unwrap();
+        let vla: [&[i64]; 4] = [&[1, 2], &[3], &[], &[4, 5, 6]];
+        for r in 0..4i64 {
+            t = t
+                .push_row(vec![
+                    Cell::Int(r + 1),
+                    Cell::Float(1.5 * (r + 1) as f64),
+                    Cell::Str(format!("obj{r}")),
+                    Cell::Floats(vec![r as f64, -(r as f64)]),
+                    Cell::Int(30000 + r * 10000),
+                    Cell::Ints(vla[r as usize].to_vec()),
+                ])
+                .unwrap();
+        }
+        w.write_bintable(&t).unwrap();
+        w.finish().unwrap();
+        files.push(path);
+    }
+
+    // ASCII TABLE with a null cell.
+    {
+        let path = dir.join("ascii_table.fits");
+        let mut w = FitsWriter::create(&path).unwrap();
+        w.write_image::<u8>(&HeaderBuilder::primary_image(BitPix::U8, &[]).unwrap(), &[])
+            .unwrap();
+        let t = AsciiTableBuilder::new()
+            .column("SEQ", "I5")
+            .unwrap()
+            .column_with_unit("MAG", "F8.3", "mag")
+            .unwrap()
+            .column("LABEL", "A10")
+            .unwrap()
+            .push_row(vec![
+                Cell::Int(1),
+                Cell::Float(1.234),
+                Cell::Str("hydrogen".into()),
+            ])
+            .unwrap()
+            .push_row(vec![Cell::Int(2), Cell::Null, Cell::Str("helium".into())])
+            .unwrap();
+        w.write_ascii_table(&t).unwrap();
         w.finish().unwrap();
         files.push(path);
     }

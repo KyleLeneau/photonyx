@@ -366,3 +366,144 @@ fn update_header_on_extension_hdu() {
         vec![1, 2, 3, 4]
     );
 }
+
+// --- Tables (ADR 006 P6-T6) ------------------------------------------------
+
+use px_fits::Cell;
+use px_fits::table::{AsciiTableBuilder, BinTableBuilder};
+
+#[test]
+fn roundtrip_bintable_all_column_kinds_including_variable_length() {
+    let vla: [&[i64]; 3] = [&[10, 20, 30], &[], &[40]];
+    let mut t = BinTableBuilder::new()
+        .column("ID", "J")
+        .unwrap()
+        .column("OK", "L")
+        .unwrap()
+        .column("NAME", "6A")
+        .unwrap()
+        .column("XY", "2E")
+        .unwrap()
+        .column("BIG", "K")
+        .unwrap()
+        .column_full("UCNT", "I", None, Some(1.0), Some(32768.0), None)
+        .unwrap()
+        .column("VAR", "1PJ(3)")
+        .unwrap();
+    for r in 0..3i64 {
+        t = t
+            .push_row(vec![
+                Cell::Int(r),
+                Cell::Bool(r % 2 == 0),
+                Cell::Str(format!("n{r}")),
+                Cell::Floats(vec![r as f64 * 0.5, r as f64 * -0.5]),
+                Cell::Int(r * 1_000_000_000),
+                Cell::Int(20000 + r * 20000),
+                Cell::Ints(vla[r as usize].to_vec()),
+            ])
+            .unwrap();
+    }
+
+    let path = tmp("bintable_rt.fits");
+    let mut w = FitsWriter::create(&path).unwrap();
+    w.write_image::<u8>(&HeaderBuilder::primary_image(BitPix::U8, &[]).unwrap(), &[])
+        .unwrap();
+    w.write_bintable(&t).unwrap();
+    w.finish().unwrap();
+
+    let reader = FitsReader::open(&path).unwrap();
+    let table = reader.bintable(1).unwrap();
+    assert_eq!(table.nrows(), 3);
+    assert_eq!(
+        table.column("ID").unwrap(),
+        vec![Cell::Int(0), Cell::Int(1), Cell::Int(2)]
+    );
+    assert_eq!(
+        table.column("OK").unwrap(),
+        vec![Cell::Bool(true), Cell::Bool(false), Cell::Bool(true)]
+    );
+    assert_eq!(
+        table.column("NAME").unwrap(),
+        vec![
+            Cell::Str("n0".into()),
+            Cell::Str("n1".into()),
+            Cell::Str("n2".into())
+        ]
+    );
+    assert_eq!(
+        table.column("XY").unwrap(),
+        vec![
+            Cell::Floats(vec![0.0, 0.0]),
+            Cell::Floats(vec![0.5, -0.5]),
+            Cell::Floats(vec![1.0, -1.0]),
+        ]
+    );
+    assert_eq!(
+        table.column("BIG").unwrap(),
+        vec![
+            Cell::Int(0),
+            Cell::Int(1_000_000_000),
+            Cell::Int(2_000_000_000)
+        ]
+    );
+    assert_eq!(
+        table.column("UCNT").unwrap(),
+        vec![Cell::Int(20000), Cell::Int(40000), Cell::Int(60000)]
+    );
+    assert_eq!(
+        table.column("VAR").unwrap(),
+        vec![
+            Cell::Ints(vec![10, 20, 30]),
+            Cell::Ints(vec![]),
+            Cell::Ints(vec![40]),
+        ]
+    );
+}
+
+#[test]
+fn roundtrip_ascii_table_with_null() {
+    let t = AsciiTableBuilder::new()
+        .column("N", "I6")
+        .unwrap()
+        .column("V", "F10.4")
+        .unwrap()
+        .column("S", "A8")
+        .unwrap()
+        .push_row(vec![
+            Cell::Int(42),
+            Cell::Float(1.2345),
+            Cell::Str("pi".into()),
+        ])
+        .unwrap()
+        .push_row(vec![Cell::Int(-7), Cell::Null, Cell::Str("none".into())])
+        .unwrap();
+
+    let path = tmp("ascii_rt.fits");
+    let mut w = FitsWriter::create(&path).unwrap();
+    w.write_image::<u8>(&HeaderBuilder::primary_image(BitPix::U8, &[]).unwrap(), &[])
+        .unwrap();
+    w.write_ascii_table(&t).unwrap();
+    w.finish().unwrap();
+
+    let reader = FitsReader::open(&path).unwrap();
+    let table = reader.ascii_table(1).unwrap();
+    assert_eq!(
+        table.column("N").unwrap(),
+        vec![Cell::Int(42), Cell::Int(-7)]
+    );
+    assert_eq!(
+        table.column("V").unwrap(),
+        vec![Cell::Float(1.2345), Cell::Null]
+    );
+    assert_eq!(
+        table.column("S").unwrap(),
+        vec![Cell::Str("pi".into()), Cell::Str("none".into())]
+    );
+}
+
+#[test]
+fn table_extension_cannot_be_the_first_hdu() {
+    let t = BinTableBuilder::new().column("A", "J").unwrap();
+    let mut w = FitsWriter::new(std::io::Cursor::new(Vec::new()));
+    assert!(w.write_bintable(&t).is_err());
+}
