@@ -10,7 +10,7 @@ pub mod source;
 
 pub use error::FitsError;
 pub use header::BitPix;
-pub use image::{ImageHdu, Pixel, Scaling};
+pub use image::{ImageHdu, Pixel, Region, Scaling};
 
 use std::fmt::Display;
 use std::io;

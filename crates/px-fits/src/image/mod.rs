@@ -1,7 +1,8 @@
 //! `ImageHdu`: typed read access to an `IMAGE` (or primary) data unit
 //! (FITS Standard 4.0 §4.4.1, §7). ADR 006 Phase 3 delivers full-frame
 //! reads (`read_full`, `read_full_into`) and the streaming `rows()`
-//! iterator; region selection is Phase 4.
+//! iterator; Phase 4 adds cfitsio-style region selection (`read_region`,
+//! `read_region_into`).
 //!
 //! ADR 006 D4: `read_full` makes exactly one output allocation and streams
 //! the data unit into it through a small fixed scratch buffer, converting
@@ -9,11 +10,17 @@
 //! byte image and then converts. When the byte source can hand out the whole
 //! file (`ByteSource::as_slice`, e.g. `SliceSource`/`MmapSource`), even the
 //! scratch buffer is skipped and decoding reads straight from the mapping.
+//!
+//! ADR 006 D5: `read_region` plans the subset into contiguous element runs
+//! (one per subset row for a 2D rectangle) and issues one positioned read
+//! per run, so bytes touched scale with the region, not the image.
 
 pub mod pixel;
+pub mod region;
 pub mod scaling;
 
 pub use pixel::Pixel;
+pub use region::Region;
 pub use scaling::Scaling;
 
 use crate::error::FitsError;
@@ -195,6 +202,82 @@ impl<'a, S: ByteSource + ?Sized> ImageHdu<'a, S> {
             decode(&mut out[done..done + this], buf, self.bitpix, &self.scaling)?;
             offset += (this * bpp) as u64;
             done += this;
+        }
+        Ok(())
+    }
+
+    /// Reads a rectangular subset into a freshly allocated `Vec<T>`, in
+    /// row-major order with the region's fastest-varying axis first — i.e.
+    /// exactly the layout of the corresponding slice of [`read_full`].
+    ///
+    /// Bytes read scale with the region, not the image (ADR 006 D5): the
+    /// plan is one contiguous run per subset row, one positioned read each.
+    pub fn read_region<T: Pixel>(&self, region: &Region) -> Result<Vec<T>, FitsError> {
+        region.validate(&self.shape)?;
+        let mut out = vec![T::from_i64(0); region.len()];
+        self.fill_region(region, &mut out)?;
+        Ok(out)
+    }
+
+    /// Reads a rectangular subset into a caller-owned buffer. `out.len()`
+    /// must equal `region.len()`.
+    pub fn read_region_into<T: Pixel>(
+        &self,
+        region: &Region,
+        out: &mut [T],
+    ) -> Result<(), FitsError> {
+        region.validate(&self.shape)?;
+        if out.len() != region.len() {
+            return Err(FitsError::BufferLenMismatch {
+                expected: region.len(),
+                got: out.len(),
+            });
+        }
+        self.fill_region(region, out)
+    }
+
+    /// Shared body of `read_region` / `read_region_into`. `region` is already
+    /// validated against `self.shape`.
+    fn fill_region<T: Pixel>(&self, region: &Region, out: &mut [T]) -> Result<(), FitsError> {
+        if out.is_empty() {
+            return Ok(());
+        }
+        // The declared data unit must be fully present (same guard as a
+        // full read) before we index into it.
+        self.check_bounds()?;
+
+        let bpp = self.bitpix.bytes_per_pixel();
+        let runs = region.plan_runs(&self.shape);
+        let run_bytes = region.shape()[0] * bpp;
+
+        if let Some(all) = self.source.as_slice() {
+            for run in &runs {
+                let start = (self.data_offset + run.src_elem * bpp as u64) as usize;
+                let bytes = all
+                    .get(start..start + run_bytes)
+                    .ok_or(FitsError::DataSizeExceedsSource)?;
+                decode(
+                    &mut out[run.dst_elem..run.dst_elem + run.len],
+                    bytes,
+                    self.bitpix,
+                    &self.scaling,
+                )?;
+            }
+            return Ok(());
+        }
+
+        // One positioned read per run, reusing a single row-sized buffer:
+        // read calls == run count, bytes read == region size exactly.
+        let mut scratch = vec![0u8; run_bytes];
+        for run in &runs {
+            let offset = self.data_offset + run.src_elem * bpp as u64;
+            self.source.read_exact_at(&mut scratch, offset)?;
+            decode(
+                &mut out[run.dst_elem..run.dst_elem + run.len],
+                &scratch,
+                self.bitpix,
+                &self.scaling,
+            )?;
         }
         Ok(())
     }
@@ -431,6 +514,81 @@ mod tests {
             stitched.extend_from_slice(row.unwrap());
         }
         assert_eq!(stitched, full);
+    }
+
+    #[test]
+    fn read_region_equals_cropped_full_frame_slice_and_stream() {
+        // 8x6 i16 image, values 0..48 row-major.
+        let raw: Vec<u8> = (0..48i16).flat_map(|v| v.to_be_bytes()).collect();
+        let lines = [
+            "SIMPLE  =                    T",
+            "BITPIX  =                   16",
+            "NAXIS   =                    2",
+            "NAXIS1  =                    8",
+            "NAXIS2  =                    6",
+        ];
+        let bytes = file(&lines, &raw);
+        let region = Region::rect(2, 1, 4, 3); // cols 2..6, rows 1..4
+
+        // Independent crop of the full frame.
+        let slice_reader = FitsReader::from_source(SliceSource::new(bytes.clone())).unwrap();
+        let full = slice_reader
+            .primary_image()
+            .unwrap()
+            .read_full::<i16>()
+            .unwrap();
+        let mut want = Vec::new();
+        for row in 1..4 {
+            for col in 2..6 {
+                want.push(full[row * 8 + col]);
+            }
+        }
+
+        let via_slice = slice_reader
+            .primary_image()
+            .unwrap()
+            .read_region::<i16>(&region)
+            .unwrap();
+        assert_eq!(via_slice, want);
+
+        let stream_reader = FitsReader::from_source(NoSlice(bytes)).unwrap();
+        let via_stream = stream_reader
+            .primary_image()
+            .unwrap()
+            .read_region::<i16>(&region)
+            .unwrap();
+        assert_eq!(via_stream, want);
+    }
+
+    #[test]
+    fn read_region_rejects_oob_and_wrong_buffer_len() {
+        let raw: Vec<u8> = (0..16i16).flat_map(|v| v.to_be_bytes()).collect();
+        let bytes = file(
+            &[
+                "SIMPLE  =                    T",
+                "BITPIX  =                   16",
+                "NAXIS   =                    2",
+                "NAXIS1  =                    4",
+                "NAXIS2  =                    4",
+            ],
+            &raw,
+        );
+        let reader = FitsReader::from_source(SliceSource::new(bytes)).unwrap();
+        let img = reader.primary_image().unwrap();
+
+        assert!(matches!(
+            img.read_region::<i16>(&Region::rect(2, 0, 4, 1)),
+            Err(FitsError::RegionOutOfBounds(..))
+        ));
+
+        let mut small = [0i16; 3];
+        assert!(matches!(
+            img.read_region_into::<i16>(&Region::rect(0, 0, 2, 2), &mut small),
+            Err(FitsError::BufferLenMismatch {
+                expected: 4,
+                got: 3
+            })
+        ));
     }
 
     #[test]
