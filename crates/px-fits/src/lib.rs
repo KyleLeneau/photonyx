@@ -4,10 +4,13 @@ pub mod display;
 pub mod error;
 pub mod hdu;
 pub mod header;
+pub mod image;
 pub mod reader;
 pub mod source;
 
 pub use error::FitsError;
+pub use header::BitPix;
+pub use image::{ImageHdu, Pixel, Scaling};
 
 use std::fmt::Display;
 use std::io;

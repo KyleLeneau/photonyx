@@ -13,7 +13,8 @@ use std::cell::{Cell, RefCell};
 use std::path::Path;
 
 use crate::error::FitsError;
-use crate::hdu::{DiscoveredHdu, discover_one};
+use crate::hdu::{DiscoveredHdu, HduKind, discover_one};
+use crate::image::ImageHdu;
 use crate::source::{ByteSource, FileSource};
 
 #[derive(Debug)]
@@ -112,6 +113,26 @@ impl<S: ByteSource> FitsReader<S> {
 
     pub fn source(&self) -> &S {
         &self.source
+    }
+
+    /// Typed image access for the HDU at `index`. Accepts the primary HDU and
+    /// `IMAGE` extensions; a table or unknown extension type is
+    /// [`FitsError::NotAnImage`]. Typed table access is Phase 6, compressed
+    /// images Phase 7.
+    pub fn image(&self, index: usize) -> Result<ImageHdu<'_, S>, FitsError> {
+        let hdu = self.hdu(index)?;
+        match &hdu.kind {
+            HduKind::Primary | HduKind::Image => ImageHdu::from_discovered(self.source(), hdu),
+            other => Err(FitsError::NotAnImage {
+                index,
+                kind: format!("{other:?}"),
+            }),
+        }
+    }
+
+    /// Typed image access for the primary HDU (index 0).
+    pub fn primary_image(&self) -> Result<ImageHdu<'_, S>, FitsError> {
+        self.image(0)
     }
 }
 

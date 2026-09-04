@@ -30,6 +30,12 @@ pub enum FitsError {
     #[error("declared data size exceeds available source length")]
     DataSizeExceedsSource,
 
+    #[error("HDU {index} is not an image (kind: {kind})")]
+    NotAnImage { index: usize, kind: String },
+
+    #[error("buffer length {got} does not match expected {expected}")]
+    BufferLenMismatch { expected: usize, got: usize },
+
     #[error("region {0:?} is out of bounds for image shape {1:?}")]
     RegionOutOfBounds(String, Vec<u64>),
 
