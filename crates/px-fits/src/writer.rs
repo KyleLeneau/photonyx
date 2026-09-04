@@ -488,6 +488,15 @@ impl<W: Write> FitsWriter<W> {
         self.write_extension_bytes(&builder.serialize()?)
     }
 
+    /// Writes a tile-compressed image extension HDU from a
+    /// [`CompressedImageBuilder`](crate::compress::CompressedImageBuilder).
+    pub fn write_compressed_image(
+        &mut self,
+        builder: &crate::compress::CompressedImageBuilder,
+    ) -> Result<(), FitsError> {
+        self.write_extension_bytes(&builder.serialize()?)
+    }
+
     fn write_extension_bytes(&mut self, bytes: &[u8]) -> Result<(), FitsError> {
         if self.hdus_written == 0 {
             return Err(FitsError::Processing(

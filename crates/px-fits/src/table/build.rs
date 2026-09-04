@@ -277,6 +277,7 @@ fn ints_of(cell: &Cell) -> Vec<i64> {
         Cell::Bools(v) => v.iter().map(|&b| b as i64).collect(),
         Cell::Float(f) => vec![*f as i64],
         Cell::Floats(v) => v.iter().map(|&f| f as i64).collect(),
+        Cell::Bytes(b) => b.iter().map(|&x| x as i64).collect(),
         _ => Vec::new(),
     }
 }

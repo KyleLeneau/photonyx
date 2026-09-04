@@ -11,12 +11,13 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use px_fits::header::BitPix;
 use px_fits::reader::FitsReader;
 use px_fits::source::{ByteSource, FileSource};
-use px_fits::{FitsError, Region};
+use px_fits::{CompAlgo, CompressedImageBuilder, FitsError, FitsWriter, HeaderBuilder, Region};
 
-fn scratch() -> PathBuf {
-    let d = std::env::temp_dir().join("px-fits-compress");
+fn scratch(name: &str) -> PathBuf {
+    let d = std::env::temp_dir().join("px-fits-compress").join(name);
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     d
@@ -145,7 +146,7 @@ fn tile_decompression_matches_astropy_reference() {
         eprintln!("SKIP: no python3+astropy or uv available");
         return;
     };
-    let dir = scratch();
+    let dir = scratch("ref");
     let status = Command::new(&py[0])
         .args(&py[1..])
         .arg("-c")
@@ -210,6 +211,88 @@ fn tile_decompression_matches_astropy_reference() {
                 assert!(s.contains(needle), "{name}: error mentions {needle:?}: {s}")
             }
             other => panic!("{name}: expected UnsupportedCompression, got {other:?}"),
+        }
+    }
+}
+
+/// P7-T7: our RICE_1 / GZIP_1 compressed writes read back bit-exact — both
+/// through our own reader and through astropy.
+#[test]
+fn compressed_writes_roundtrip_here_and_in_astropy() {
+    let dir = scratch("write");
+
+    // Deterministic i16 image with a smooth gradient plus noise.
+    let (w, h) = (57usize, 41usize);
+    let mut img = vec![0i16; w * h];
+    let mut s: u64 = 0xC0FFEE;
+    for (i, p) in img.iter_mut().enumerate() {
+        s = s.wrapping_mul(6364136223846793005).wrapping_add(1);
+        *p = ((i as i64 * 3) % 400 - 200 + ((s >> 56) as i64 - 128) / 8) as i16;
+    }
+
+    for (algo, tag) in [(CompAlgo::Rice1, "rice"), (CompAlgo::Gzip1, "gzip")] {
+        let path = dir.join(format!("out_{tag}.fits"));
+        let builder = CompressedImageBuilder::new(BitPix::I16, &[w, h])
+            .unwrap()
+            .algorithm(algo)
+            .tile_shape(&[16, 12])
+            .unwrap()
+            .pixels(&img)
+            .unwrap();
+        let mut fw = FitsWriter::create(&path).unwrap();
+        fw.write_image::<u8>(&HeaderBuilder::primary_image(BitPix::U8, &[]).unwrap(), &[])
+            .unwrap();
+        fw.write_compressed_image(&builder).unwrap();
+        fw.finish().unwrap();
+
+        // Our reader.
+        let got = FitsReader::open(&path)
+            .unwrap()
+            .compressed_image(1)
+            .unwrap()
+            .read_full::<i16>()
+            .unwrap();
+        assert_eq!(got, img, "{tag}: our read of our write");
+
+        // astropy.
+        if let Some(py) = python() {
+            let script = format!(
+                "import sys, numpy as np\n\
+                 from astropy.io import fits\n\
+                 d = fits.open(r'{}')[1].data\n\
+                 ref = np.load(r'{}')\n\
+                 sys.exit(0 if np.array_equal(d, ref) else 1)\n",
+                path.display(),
+                dir.join(format!("out_{tag}.npy")).display()
+            );
+            // Dump reference array.
+            let dump = format!(
+                "import numpy as np\n\
+                 a = np.frombuffer(bytes({:?}), dtype='<i2').reshape({h}, {w})\n\
+                 np.save(r'{}', a)\n",
+                img.iter()
+                    .flat_map(|v| v.to_le_bytes())
+                    .collect::<Vec<u8>>(),
+                dir.join(format!("out_{tag}.npy")).display()
+            );
+            let ok = Command::new(&py[0])
+                .args(&py[1..])
+                .arg("-c")
+                .arg(&dump)
+                .status()
+                .unwrap()
+                .success();
+            assert!(ok, "{tag}: reference dump failed");
+            let status = Command::new(&py[0])
+                .args(&py[1..])
+                .arg("-c")
+                .arg(&script)
+                .status()
+                .unwrap();
+            assert!(
+                status.success(),
+                "{tag}: astropy did not read our write bit-exact"
+            );
         }
     }
 }

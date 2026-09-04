@@ -91,6 +91,170 @@ pub fn decode(
     Ok(out)
 }
 
+/// Rice parameters for a given `bytepix` (1, 2, 4).
+fn params(bytepix: usize) -> Result<(i32, i32), FitsError> {
+    match bytepix {
+        1 => Ok((3, 6)),
+        2 => Ok((4, 14)),
+        4 => Ok((5, 25)),
+        other => Err(FitsError::UnsupportedCompression(format!(
+            "RICE_1 BYTEPIX={other} (only 1, 2, 4 are supported)"
+        ))),
+    }
+}
+
+/// Encodes `pixels` (raw `ZBITPIX`-representation integers) as a `RICE_1`
+/// tile stream, the inverse of [`decode`]. Ported from cfitsio's
+/// `fits_rcomp`.
+pub fn encode(pixels: &[i64], bytepix: usize, blocksize: usize) -> Result<Vec<u8>, FitsError> {
+    let (fsbits, fsmax) = params(bytepix)?;
+    let bbits = 1i32 << fsbits;
+    if blocksize == 0 {
+        return Err(FitsError::UnsupportedCompression(
+            "RICE_1 BLOCKSIZE=0".to_string(),
+        ));
+    }
+    let mask = width_mask(bytepix);
+
+    let mut out = Vec::new();
+    if pixels.is_empty() {
+        return Ok(out);
+    }
+
+    // First pixel verbatim, big-endian.
+    let first = pixels[0] as u64 & mask;
+    for k in (0..bytepix).rev() {
+        out.push((first >> (8 * k)) as u8);
+    }
+
+    let mut w = BitWriter::new();
+    let mut lastpix = first;
+    let width = 8 * bytepix as u32;
+
+    let mut i = 0usize;
+    let mut diffs = vec![0u64; blocksize];
+    while i < pixels.len() {
+        let this = (pixels.len() - i).min(blocksize);
+        let mut psum = 0u64;
+        for (j, slot) in diffs[..this].iter_mut().enumerate() {
+            let cur = pixels[i + j] as u64 & mask;
+            let d = cur.wrapping_sub(lastpix) & mask;
+            let signed = to_signed(d, width);
+            let mapped = if signed < 0 {
+                !((signed as u64) << 1)
+            } else {
+                (signed as u64) << 1
+            } & mask;
+            *slot = mapped;
+            psum += mapped;
+            lastpix = cur;
+        }
+        let block = &diffs[..this];
+
+        let mut fs = if psum == 0 {
+            -1i32
+        } else {
+            let mean = (psum - (this as u64) / 2 - 1) / this as u64;
+            let mut p = mean >> 1;
+            let mut f = 0i32;
+            while p > 0 {
+                p >>= 1;
+                f += 1;
+            }
+            f
+        };
+        // Guard against a poor estimate producing pathological unary runs.
+        if fs >= 0 && fs < fsmax {
+            let unary: u64 = block.iter().map(|&d| d >> fs).sum();
+            if unary > (this as u64) * bbits as u64 {
+                fs = fsmax;
+            }
+        }
+
+        if fs < 0 {
+            w.put_bits(fsbits as u32, 0);
+        } else if fs >= fsmax {
+            w.put_bits(fsbits as u32, (fsmax + 1) as u32);
+            for &d in block {
+                w.put_bits(bbits as u32, d as u32);
+            }
+        } else {
+            w.put_bits(fsbits as u32, (fs + 1) as u32);
+            for &d in block {
+                w.put_unary(d >> fs);
+                if fs > 0 {
+                    w.put_bits(fs as u32, (d & ((1u64 << fs) - 1)) as u32);
+                }
+            }
+        }
+        i += this;
+    }
+
+    out.extend(w.finish());
+    Ok(out)
+}
+
+/// Two's-complement interpretation of `d` at bit width `width`.
+fn to_signed(d: u64, width: u32) -> i64 {
+    let half = 1u64 << (width - 1);
+    if d & half != 0 {
+        d as i64 - (1i64 << width)
+    } else {
+        d as i64
+    }
+}
+
+/// MSB-first bit writer flushing to a byte vec.
+struct BitWriter {
+    out: Vec<u8>,
+    acc: u64,
+    nbits: u32,
+}
+
+impl BitWriter {
+    fn new() -> Self {
+        Self {
+            out: Vec::new(),
+            acc: 0,
+            nbits: 0,
+        }
+    }
+
+    fn put_bits(&mut self, n: u32, v: u32) {
+        if n == 0 {
+            return;
+        }
+        let masked = if n >= 32 {
+            v as u64
+        } else {
+            (v as u64) & ((1u64 << n) - 1)
+        };
+        self.acc = (self.acc << n) | masked;
+        self.nbits += n;
+        while self.nbits >= 8 {
+            self.nbits -= 8;
+            self.out.push((self.acc >> self.nbits) as u8);
+        }
+    }
+
+    /// `k` zero bits followed by a single `1` bit.
+    fn put_unary(&mut self, k: u64) {
+        let mut left = k;
+        while left >= 24 {
+            self.put_bits(24, 0);
+            left -= 24;
+        }
+        self.put_bits(left as u32 + 1, 1);
+    }
+
+    fn finish(mut self) -> Vec<u8> {
+        if self.nbits > 0 {
+            self.out.push((self.acc << (8 - self.nbits)) as u8);
+        }
+        self.out
+    }
+}
+
 fn width_mask(bytepix: usize) -> u64 {
     match bytepix {
         1 => 0xFF,
@@ -212,5 +376,38 @@ mod tests {
     fn truncated_stream_errors_without_panicking() {
         let err = decode(&[0x00], 8, 2, 32).unwrap_err();
         assert!(matches!(err, FitsError::UnsupportedCompression(_)));
+    }
+
+    fn roundtrip(pixels: &[i64], bytepix: usize, blocksize: usize) {
+        let enc = encode(pixels, bytepix, blocksize).unwrap();
+        let dec = decode(&enc, pixels.len(), bytepix, blocksize).unwrap();
+        assert_eq!(dec, pixels, "bytepix={bytepix} blocksize={blocksize}");
+    }
+
+    #[test]
+    fn encode_decode_roundtrip_across_shapes_and_widths() {
+        // Smooth ramp (low entropy), constant run (all-zero blocks), and a
+        // noisy sequence (forces high-entropy blocks).
+        let ramp: Vec<i64> = (0..200).map(|i| (i * 3 - 100) as i64).collect();
+        let flat: Vec<i64> = vec![7; 150];
+        let mut noisy = Vec::new();
+        let mut s: u64 = 0x1234_5678;
+        for _ in 0..300 {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1);
+            noisy.push(((s >> 40) as i16) as i64);
+        }
+
+        for &bs in &[4usize, 16, 32] {
+            roundtrip(&ramp, 2, bs);
+            roundtrip(&flat, 2, bs);
+            roundtrip(&noisy, 2, bs);
+            roundtrip(&ramp, 4, bs);
+        }
+        roundtrip(&[42], 1, 32);
+        roundtrip(
+            &(0..64).map(|i| (i % 256) as i64).collect::<Vec<_>>(),
+            1,
+            32,
+        );
     }
 }

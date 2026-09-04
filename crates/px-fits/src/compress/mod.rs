@@ -17,6 +17,9 @@
 //! `ZBITPIX` (per-tile quantization) is likewise not yet supported.
 
 pub mod rice;
+pub mod write;
+
+pub use write::{CompAlgo, CompressedImageBuilder};
 
 use std::io::Read;
 

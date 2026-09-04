@@ -11,7 +11,7 @@ pub mod source;
 pub mod table;
 pub mod writer;
 
-pub use compress::CompressedImageHdu;
+pub use compress::{CompAlgo, CompressedImageBuilder, CompressedImageHdu};
 pub use error::FitsError;
 pub use header::BitPix;
 pub use image::{ImageHdu, Pixel, Region, Scaling};
