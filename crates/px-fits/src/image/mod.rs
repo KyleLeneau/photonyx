@@ -306,42 +306,26 @@ impl<'a, S: ByteSource + ?Sized> ImageHdu<'a, S> {
         let run_len = region.shape()[0];
         let run_bytes = run_len * bpp;
         let (data_offset, bitpix, scaling) = (self.data_offset, self.bitpix, self.scaling);
-        // Runs land contiguously in `out` (`dst_elem == run_index * run_len`),
-        // so `par_chunks_mut(run_len)` aligns one chunk per run.
-        let parallel = runs.len() >= 32 && rayon::current_num_threads() > 1;
 
+        // Region reads are syscall-bound, not decode-bound (many small
+        // one-row reads), so `rayon` here only adds coordination + per-task
+        // allocation overhead — the Phase 8 backend bench measured a ~2.7x
+        // regression. Kept serial: runs land contiguously in `out`
+        // (`dst_elem == run_index * run_len`), one reused buffer.
         if let Some(all) = self.source.as_slice() {
-            let one = |dst: &mut [T], run: &crate::image::region::Run| -> Result<(), FitsError> {
-                let start = (data_offset + run.src_elem * bpp as u64) as usize;
-                let bytes = all
-                    .get(start..start + run_bytes)
-                    .ok_or(FitsError::DataSizeExceedsSource)?;
-                decode(dst, bytes, bitpix, &scaling)
-            };
-            return if parallel {
-                out.par_chunks_mut(run_len)
-                    .zip(runs.par_iter())
-                    .try_for_each(|(dst, run)| one(dst, run))
-            } else {
-                out.chunks_mut(run_len)
-                    .zip(runs.iter())
-                    .try_for_each(|(dst, run)| one(dst, run))
-            };
+            return out.chunks_mut(run_len).zip(runs.iter()).try_for_each(
+                |(dst, run)| -> Result<(), FitsError> {
+                    let start = (data_offset + run.src_elem * bpp as u64) as usize;
+                    let bytes = all
+                        .get(start..start + run_bytes)
+                        .ok_or(FitsError::DataSizeExceedsSource)?;
+                    decode(dst, bytes, bitpix, &scaling)
+                },
+            );
         }
 
         // One positioned read per run — read calls == run count, bytes read
-        // == region size exactly (serial path keeps a single reused buffer).
-        let source = self.source;
-        if parallel {
-            return out
-                .par_chunks_mut(run_len)
-                .zip(runs.par_iter())
-                .try_for_each(|(dst, run)| -> Result<(), FitsError> {
-                    let mut buf = vec![0u8; run_bytes];
-                    source.read_exact_at(&mut buf, data_offset + run.src_elem * bpp as u64)?;
-                    decode(dst, &buf, bitpix, &scaling)
-                });
-        }
+        // == region size exactly.
         let mut scratch = vec![0u8; run_bytes];
         for (dst, run) in out.chunks_mut(run_len).zip(runs.iter()) {
             self.source
