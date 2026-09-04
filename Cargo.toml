@@ -94,7 +94,8 @@ proptest = "1"
 
 # FITS I/O
 flate2 = "1"
-memmap2 = "0.9"
+# `memmap2` was evaluated as a byte-source backend in ADR 006 Phase 8 and
+# dropped — rayon-parallelized positioned reads beat it. See crates/px-fits.
 
 [workspace.lints.rust]
 #

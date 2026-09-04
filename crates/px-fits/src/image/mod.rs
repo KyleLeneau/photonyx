@@ -8,8 +8,9 @@
 //! the data unit into it through a small fixed scratch buffer, converting
 //! endianness and applying scaling in place — it never materializes the raw
 //! byte image and then converts. When the byte source can hand out the whole
-//! file (`ByteSource::as_slice`, e.g. `SliceSource`/`MmapSource`), even the
-//! scratch buffer is skipped and decoding reads straight from the mapping.
+//! file (`ByteSource::as_slice`, e.g. `SliceSource`), even the scratch buffer
+//! is skipped and decoding reads straight from the slice. Large reads fan the
+//! decode across a `rayon` pool (ADR 006 D1 / P8-T4).
 //!
 //! ADR 006 D5: `read_region` plans the subset into contiguous element runs
 //! (one per subset row for a 2D rectangle) and issues one positioned read
@@ -190,9 +191,8 @@ impl<'a, S: ByteSource + ?Sized> ImageHdu<'a, S> {
         let total = out.len() * bpp;
         let parallel = total >= PARALLEL_MIN_BYTES && rayon::current_num_threads() > 1;
 
-        // Whole-file slice (`SliceSource`, and `MmapSource` behind the `mmap`
-        // feature): decode straight from the borrowed bytes — no scratch,
-        // and no allocation even on the parallel path.
+        // Whole-file slice (`SliceSource`): decode straight from the borrowed
+        // bytes — no scratch, and no allocation even on the parallel path.
         if let Some(all) = self.source.as_slice() {
             let start = self.data_offset as usize;
             let end = start.checked_add(total).ok_or(FitsError::NaxisOverflow)?;

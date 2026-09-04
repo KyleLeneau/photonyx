@@ -8,11 +8,12 @@ backends as the rewrite proceeds.
 
 ## Status
 
-Rewrite in progress. Phases 0–7 are complete: headers, HDU discovery/navigation, image reads
+Rewrite in progress. Phases 0–8 are complete: headers, HDU discovery/navigation, image reads
 (`ImageHdu::{read_full, read_full_into, rows, read_region, read_region_into}`), write support
 (`FitsWriter`, `HeaderBuilder`, `update_header`), tables (`BinTableHdu`/`AsciiTableHdu` +
 builders), and tile-compressed images (`RICE_1`/`GZIP_1`/`GZIP_2` read, `RICE_1`/`GZIP_1`
-write) all run on the native reader/writer, with `fitsrs` fully removed.
+write) all run on the native reader/writer, with `fitsrs` fully removed. Large reads
+parallelize across `rayon`; the mmap backend was measured and dropped (Phase 8).
 `display::decode_preview` is still backed by `astroimage`/`rustafits` (deferrable Phase 9). The
 "Baseline report" below is the pre-rewrite starting point; the "Phase N progress" subsections
 record where the native reader now stands against it.
@@ -205,12 +206,63 @@ bulk pipelines. Region reads recover most of that when only part of a frame is
 needed; square tiling (rather than the `fpack` row default used here) would help
 region reads further.
 
-### Positioned-read vs. mmap
+### Phase 8: positioned reads vs. mmap — the report, and the decision
 
-Not yet measured — the `ByteSource`/`FileSource` positioned-read backend lands in Phase 1 and
-`MmapSource` (behind the `mmap` feature) lands in Phase 8. This section will report both
-backends across all three prioritized workloads (full-frame throughput/RSS, header-only scan,
-region reads), cold and warm page cache, on macOS and Windows, once that phase lands.
+Phase 8 built a `rayon`-parallelized positioned-read path and a memory-mapped
+`ByteSource`, benchmarked them against serial positioned reads across the three
+prioritized workloads, **and then removed the mmap backend** (D1's expected
+outcome: "a tie goes to deleting the feature").
+
+**Machine:** Apple M4 Max, macOS 26 (arm64), warm page cache. Cold-cache and
+Windows numbers are still unmeasured — macOS has no portable way to drop the page
+cache, and this is a macOS-only dev box. The decision does not hinge on them (see
+below).
+
+**Full-frame read** (`ImageHdu::read_full::<i16>`):
+
+| Frame | positioned, serial | positioned, `rayon` | mmap, serial | mmap, `rayon` |
+|---|---|---|---|---|
+| 2048×2048 (8 MB) | 368 µs | **248 µs** (1.5×) | 395 µs | 344 µs |
+| 6144×6144 (72 MB) | 4.51 ms | **1.17 ms** (3.9×) | 5.36 ms | 1.97 ms |
+
+**Header-only scan**, 2000 tiny single-HDU files:
+
+| positioned, serial | `rayon` (files fanned across the pool) | mmap, serial |
+|---|---|---|
+| **23.5 ms** | 24.5 ms | 28.0 ms |
+
+**Region read**, 2048×2048 window from a 6144×6144 frame:
+
+| positioned, serial | positioned, `rayon` | mmap, serial |
+|---|---|---|
+| **924 µs** | 2.53 ms | 821 µs (−11%) |
+
+**Reading of the data:**
+
+- **mmap loses the two workloads that matter.** On full-frame reads it is slower
+  than serial positioned reads (395 µs vs 368 µs; 5.36 ms vs 4.51 ms) — a big
+  `pread` plus decode beats page-fault-driven access with no explicit readahead —
+  and `rayon`-parallelized positioned reads beat *mmap+rayon* by up to 1.7×. On
+  the header scan mmap is 19 % slower (per-file map setup on 8 KB files).
+- **mmap wins only the region read, by ~10 %** (821 µs vs 924 µs, warm cache) — it
+  skips one `pread` syscall per subset row. Not enough to carry a whole feature,
+  an `unsafe` mapping call, the `memmap2` dependency, and the file-truncation
+  footgun (undefined behaviour / `SIGBUS` if a frame on a removable or network
+  volume is shortened while mapped).
+- **`rayon` helps decode-bound work, hurts syscall-bound work.** Parallelizing
+  the full-frame *decode* is a 1.5–3.9× win; parallelizing a region read (many
+  4 KB one-row `pread`s) regressed it ~2.7×, so region reads ship serial.
+- **Peak heap** is unaffected either way: both backends keep the D4 bound
+  (`output + bounded scratch`); mmap's per-`read_full` heap is marginally lower
+  (decodes from the mapping, no scratch) but that's a couple of MB against a
+  multi-MB output.
+
+**Decision (P8-T7): positioned reads only.** `FileSource` is the single backend;
+`ImageHdu::read_full` / `read_region` fan large decodes across `rayon`
+automatically. `MmapSource`, the `mmap` cargo feature, and the `memmap2`
+dependency are removed. A Windows/cold-cache run could still be done for the
+record, but mmap would have to win *both* by a wide margin to overturn a loss on
+macOS/warm across two of three workloads — and the safety cost is platform-independent.
 
 ## Regenerating fixtures and baselines
 

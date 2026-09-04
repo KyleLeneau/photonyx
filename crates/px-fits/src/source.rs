@@ -1,11 +1,15 @@
 //! Byte sources: the read abstraction the native FITS reader is built on
-//! (ADR 006 D1). Positioned reads (`FileSource`) are the default backend —
+//! (ADR 006 D1). Positioned reads (`FileSource`) are the *only* backend —
 //! no `unsafe`, no shared cursor, safe to call concurrently from multiple
 //! `rayon` workers over one open handle. `SliceSource` supports in-memory
 //! use (tests, and any future embedding of already-loaded bytes).
-//! `MmapSource` (behind the non-default `mmap` feature) memory-maps a file
-//! and exposes it via `as_slice`; see its safety contract and the benchmark
-//! report in `README.md` for when — if ever — to prefer it.
+//!
+//! A memory-mapped backend was built and benchmarked in Phase 8 (P8-T1..T7)
+//! and then removed: `rayon`-parallelized positioned reads beat it on
+//! full-frame reads (up to ~3.9x) and header scans, and it won by only
+//! ~10% on a warm-cache region read — not enough to justify the `unsafe`,
+//! the `memmap2` dependency, and the file-truncation footgun. See the
+//! backend report in `README.md`.
 
 use std::fs::File;
 use std::io;
@@ -30,7 +34,7 @@ pub trait ByteSource: Send + Sync {
 
     /// A zero-copy borrow of the whole source, when the backend can provide
     /// one without an intermediate read. `FileSource` returns `None`;
-    /// `SliceSource` and (Phase 8) `MmapSource` return `Some`.
+    /// `SliceSource` returns `Some`.
     fn as_slice(&self) -> Option<&[u8]> {
         None
     }
@@ -98,74 +102,6 @@ impl ByteSource for SliceSource {
 
     fn as_slice(&self) -> Option<&[u8]> {
         Some(&self.0)
-    }
-}
-
-/// A read-only memory map of a file (ADR 006 D1 / P8-T1), behind the
-/// non-default `mmap` feature. [`as_slice`](ByteSource::as_slice) returns the
-/// mapping, so the hot read paths decode straight from the mapped bytes with
-/// no intermediate copy.
-///
-/// # Safety contract
-///
-/// A memory map is only sound while the underlying file stays put. **Do not
-/// truncate, shrink, or have another process rewrite the file while a
-/// `MmapSource` for it is alive** — a read from the mapping after the backing
-/// pages disappear is undefined behaviour (typically `SIGBUS`). This is why
-/// the feature is off by default: in astro workflows frames often live on
-/// removable or network volumes where that guarantee is hard to make.
-/// **`MmapSource` is not recommended on network filesystems** (NFS/SMB), both
-/// for the truncation risk and because page faults there can be arbitrarily
-/// slow. Use the default [`FileSource`] unless a benchmark on your workload
-/// shows `MmapSource` is meaningfully faster.
-#[cfg(feature = "mmap")]
-#[derive(Debug)]
-pub struct MmapSource {
-    // Keep the file handle alive for the lifetime of the mapping.
-    _file: File,
-    map: memmap2::Mmap,
-}
-
-#[cfg(feature = "mmap")]
-impl MmapSource {
-    /// Maps `path` read-only.
-    ///
-    /// # Safety
-    ///
-    /// The caller must uphold the [type-level safety contract](MmapSource):
-    /// the file must not be truncated or concurrently rewritten while the
-    /// returned `MmapSource` is alive.
-    pub unsafe fn open(path: impl AsRef<Path>) -> io::Result<Self> {
-        let file = File::open(path)?;
-        // SAFETY: forwarded to the caller via this fn's own `unsafe` and the
-        // documented contract on `MmapSource`.
-        let map = unsafe { memmap2::Mmap::map(&file)? };
-        Ok(Self { _file: file, map })
-    }
-}
-
-#[cfg(feature = "mmap")]
-impl ByteSource for MmapSource {
-    fn len(&self) -> u64 {
-        self.map.len() as u64
-    }
-
-    fn read_exact_at(&self, buf: &mut [u8], offset: u64) -> io::Result<()> {
-        let start = usize::try_from(offset)
-            .map_err(|_| io::Error::new(io::ErrorKind::UnexpectedEof, "offset overflows usize"))?;
-        let end = start
-            .checked_add(buf.len())
-            .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "read range overflows"))?;
-        let slice = self
-            .map
-            .get(start..end)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "read past end of map"))?;
-        buf.copy_from_slice(slice);
-        Ok(())
-    }
-
-    fn as_slice(&self) -> Option<&[u8]> {
-        Some(&self.map)
     }
 }
 
@@ -341,24 +277,5 @@ mod tests {
         let src = SliceSource::new(b"abc".to_vec());
         let mut buf: [u8; 0] = [];
         src.read_exact_at(&mut buf, 3).unwrap();
-    }
-
-    #[cfg(feature = "mmap")]
-    #[test]
-    fn mmap_source_reads_and_exposes_as_slice_like_file_source() {
-        let (_dir, path) = temp_file(&(0u8..=200).collect::<Vec<u8>>());
-        // SAFETY: the file is not modified for the duration of this test.
-        let m = unsafe { super::MmapSource::open(&path).unwrap() };
-        assert_eq!(m.len(), 201);
-        assert_eq!(m.as_slice().unwrap().len(), 201);
-
-        let mut buf = [0u8; 8];
-        m.read_exact_at(&mut buf, 50).unwrap();
-        assert_eq!(buf, [50, 51, 52, 53, 54, 55, 56, 57]);
-
-        assert_eq!(
-            m.read_exact_at(&mut [0u8; 4], 199).unwrap_err().kind(),
-            io::ErrorKind::UnexpectedEof
-        );
     }
 }
