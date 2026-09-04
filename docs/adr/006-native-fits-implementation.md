@@ -435,21 +435,21 @@ the whole corpus.
 
 ### Phase 3 — Image data: full-frame reads
 
-- [ ] **P3-T1** `src/image/pixel.rs`: sealed `Pixel` trait over `u8, i16, u16, i32, u32, i64,
+- [x] **P3-T1** `src/image/pixel.rs`: sealed `Pixel` trait over `u8, i16, u16, i32, u32, i64,
       f32, f64`; `BitPix` enum; big-endian decode via `from_be_bytes` over `chunks_exact`.
-- [ ] **P3-T2** `src/image/scaling.rs`: `BSCALE`/`BZERO` application with the `BZERO = 32768`,
+- [x] **P3-T2** `src/image/scaling.rs`: `BSCALE`/`BZERO` application with the `BZERO = 32768`,
       `BITPIX = 16` unsigned case handled as an integer fast path (D6). `BLANK` → `NaN` for
       float targets, passthrough for integer targets.
-- [ ] **P3-T3** `ImageHdu::read_full` / `read_full_into` — single output allocation, fixed
+- [x] **P3-T3** `ImageHdu::read_full` / `read_full_into` — single output allocation, fixed
       scratch buffer, streaming conversion (D4). Scratch size configurable, 256 KiB default.
-- [ ] **P3-T4** `ImageHdu::rows()` streaming iterator with one reusable row buffer.
-- [ ] **P3-T5** Memory tests (O2): assert the full-frame and streaming peak-heap invariants from
+- [x] **P3-T4** `ImageHdu::rows()` streaming iterator with one reusable row buffer.
+- [x] **P3-T5** Memory tests (O2): assert the full-frame and streaming peak-heap invariants from
       the targets table.
-- [ ] **P3-T6** Benchmark full-frame reads against the Phase 0 `astroimage::read_raw` baseline.
+- [x] **P3-T6** Benchmark full-frame reads against the Phase 0 `astroimage::read_raw` baseline.
       Include the safe-decode-vs-hypothetical-transmute measurement called for in D2 and record
       the result in the README. If safe decoding is within noise, say so explicitly and close the
       question.
-- [ ] **P3-T7** Delete `tests/differential.rs` and drop the `fitsrs` dev-dependency.
+- [x] **P3-T7** Delete `tests/differential.rs` and drop the `fitsrs` dev-dependency.
 
 **Gate:** every `BITPIX` fixture reads to correct values; peak-heap invariants hold; full-frame
 throughput is at or above baseline.
