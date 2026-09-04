@@ -7,10 +7,12 @@ pub mod header;
 pub mod image;
 pub mod reader;
 pub mod source;
+pub mod writer;
 
 pub use error::FitsError;
 pub use header::BitPix;
 pub use image::{ImageHdu, Pixel, Region, Scaling};
+pub use writer::{CardEdit, FitsWriter, HeaderBuilder, ImageWriter, update_header};
 
 use std::fmt::Display;
 use std::io;

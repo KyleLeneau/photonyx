@@ -42,13 +42,24 @@ pub trait Pixel: Copy + Send + Sync + 'static + sealed::Sealed {
             Self::from_i64(v as i64)
         }
     }
+
+    /// The `BITPIX` value for which this type is the *natural on-disk storage
+    /// type*, or `None` for `u16`/`u32` (which only exist on read as the
+    /// `BZERO`-encoded unsigned conventions, never as a storage type). The
+    /// writer uses this to reject a `BITPIX`/`T` mismatch (ADR 006 Phase 5).
+    const STORAGE_BITPIX: Option<i64>;
+
+    /// Writes `self` as `size_of::<Self>()` big-endian bytes into the start
+    /// of `out` (FITS Standard 4.0 §3.3.1).
+    fn encode_be(self, out: &mut [u8]);
 }
 
 macro_rules! int_pixel {
-    ($t:ty) => {
+    ($t:ty, $storage:expr) => {
         impl sealed::Sealed for $t {}
         impl Pixel for $t {
             const IS_FLOAT: bool = false;
+            const STORAGE_BITPIX: Option<i64> = $storage;
             #[inline]
             fn from_i64(v: i64) -> Self {
                 v as $t
@@ -56,16 +67,21 @@ macro_rules! int_pixel {
             #[inline]
             fn from_f64(v: f64) -> Self {
                 v as $t
+            }
+            #[inline]
+            fn encode_be(self, out: &mut [u8]) {
+                out[..std::mem::size_of::<$t>()].copy_from_slice(&self.to_be_bytes());
             }
         }
     };
 }
 
 macro_rules! float_pixel {
-    ($t:ty) => {
+    ($t:ty, $storage:expr) => {
         impl sealed::Sealed for $t {}
         impl Pixel for $t {
             const IS_FLOAT: bool = true;
+            const STORAGE_BITPIX: Option<i64> = Some($storage);
             #[inline]
             fn from_i64(v: i64) -> Self {
                 v as $t
@@ -74,18 +90,22 @@ macro_rules! float_pixel {
             fn from_f64(v: f64) -> Self {
                 v as $t
             }
+            #[inline]
+            fn encode_be(self, out: &mut [u8]) {
+                out[..std::mem::size_of::<$t>()].copy_from_slice(&self.to_be_bytes());
+            }
         }
     };
 }
 
-int_pixel!(u8);
-int_pixel!(i16);
-int_pixel!(u16);
-int_pixel!(i32);
-int_pixel!(u32);
-int_pixel!(i64);
-float_pixel!(f32);
-float_pixel!(f64);
+int_pixel!(u8, Some(8));
+int_pixel!(i16, Some(16));
+int_pixel!(u16, None);
+int_pixel!(i32, Some(32));
+int_pixel!(u32, None);
+int_pixel!(i64, Some(64));
+float_pixel!(f32, -32);
+float_pixel!(f64, -64);
 
 /// One raw on-disk sample type, i.e. the wire representation a given
 /// `BITPIX` value selects. Big-endian per FITS Standard 4.0 §3.3.1.
