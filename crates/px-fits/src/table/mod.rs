@@ -5,9 +5,11 @@
 
 pub mod ascii;
 pub mod binary;
+pub mod build;
 
 pub use ascii::AsciiTableHdu;
 pub use binary::BinTableHdu;
+pub use build::{AsciiTableBuilder, BinTableBuilder};
 
 use crate::error::FitsError;
 use crate::header::Header;
@@ -115,7 +117,7 @@ impl BinFormat {
         }
     }
 
-    fn parse(raw: &str) -> Result<BinFormat, FitsError> {
+    pub(crate) fn parse(raw: &str) -> Result<BinFormat, FitsError> {
         let s = raw.trim();
         let bytes = s.as_bytes();
         let mut i = 0;
@@ -172,7 +174,7 @@ impl AsciiFormat {
         }
     }
 
-    fn parse(raw: &str) -> Result<AsciiFormat, FitsError> {
+    pub(crate) fn parse(raw: &str) -> Result<AsciiFormat, FitsError> {
         let s = raw.trim();
         let bad = || FitsError::Processing(format!("unsupported ASCII TFORM {raw:?}"));
         let code = s.as_bytes().first().copied().ok_or_else(bad)?;

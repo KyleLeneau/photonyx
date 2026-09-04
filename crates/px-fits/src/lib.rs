@@ -13,7 +13,7 @@ pub mod writer;
 pub use error::FitsError;
 pub use header::BitPix;
 pub use image::{ImageHdu, Pixel, Region, Scaling};
-pub use table::{AsciiTableHdu, BinTableHdu, Cell, ColumnDef};
+pub use table::{AsciiTableBuilder, AsciiTableHdu, BinTableBuilder, BinTableHdu, Cell, ColumnDef};
 pub use writer::{CardEdit, FitsWriter, HeaderBuilder, ImageWriter, update_header};
 
 use std::fmt::Display;

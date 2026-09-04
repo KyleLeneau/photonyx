@@ -29,7 +29,7 @@ fn blank_card() -> [u8; CARD_SIZE] {
     [b' '; CARD_SIZE]
 }
 
-fn card_from_str(line: &str) -> [u8; CARD_SIZE] {
+pub(crate) fn card_from_str(line: &str) -> [u8; CARD_SIZE] {
     let mut out = blank_card();
     let bytes = line.as_bytes();
     let n = bytes.len().min(CARD_SIZE);
@@ -86,7 +86,7 @@ fn string_card(keyword: &str, value: &str, comment: Option<&str>) -> Option<[u8;
 
 /// Serializes one keyword/value/comment triple to a fixed-format 80-byte
 /// card. Errors (rather than truncating) on a string too long for one card.
-fn serialize_card(
+pub(crate) fn serialize_card(
     keyword: &str,
     value: &Value,
     comment: Option<&str>,
@@ -119,7 +119,7 @@ fn end_card() -> [u8; CARD_SIZE] {
 
 /// Flattens cards, appends `END`, and pads to a whole number of 2880-byte
 /// blocks with ASCII spaces.
-fn assemble_header(cards: &[[u8; CARD_SIZE]]) -> Vec<u8> {
+pub(crate) fn assemble_header(cards: &[[u8; CARD_SIZE]]) -> Vec<u8> {
     let mut bytes = Vec::with_capacity((cards.len() + 1) * CARD_SIZE);
     for c in cards {
         bytes.extend_from_slice(c);
@@ -467,6 +467,36 @@ impl<W: Write> FitsWriter<W> {
             scratch: vec![0u8; header.row_len() * px],
             _t: PhantomData,
         })
+    }
+
+    /// Writes a `BINTABLE` extension HDU from a
+    /// [`BinTableBuilder`](crate::table::BinTableBuilder). Must not be the
+    /// first HDU (a table is always an extension).
+    pub fn write_bintable(
+        &mut self,
+        builder: &crate::table::BinTableBuilder,
+    ) -> Result<(), FitsError> {
+        self.write_extension_bytes(&builder.serialize()?)
+    }
+
+    /// Writes an ASCII `TABLE` extension HDU from an
+    /// [`AsciiTableBuilder`](crate::table::AsciiTableBuilder).
+    pub fn write_ascii_table(
+        &mut self,
+        builder: &crate::table::AsciiTableBuilder,
+    ) -> Result<(), FitsError> {
+        self.write_extension_bytes(&builder.serialize()?)
+    }
+
+    fn write_extension_bytes(&mut self, bytes: &[u8]) -> Result<(), FitsError> {
+        if self.hdus_written == 0 {
+            return Err(FitsError::Processing(
+                "a table extension cannot be the first HDU; write a primary first".to_string(),
+            ));
+        }
+        self.inner.write_all(bytes)?;
+        self.hdus_written += 1;
+        Ok(())
     }
 
     /// Flushes and returns the underlying writer.
