@@ -8,10 +8,12 @@ backends as the rewrite proceeds.
 
 ## Status
 
-Rewrite in progress. Phase 0 (harness and baselines) is complete; the public API
-(`FitsFile`, `HeaderUtil`, `display::decode_preview`, …) is currently still backed by `fitsrs`
-and `astroimage`/`rustafits`. Nothing below reflects the native reader yet — these are the
-baselines the native implementation must beat.
+Rewrite in progress. Phases 0–2 are complete and Phase 3 (full-frame image reads) has landed:
+headers, HDU discovery/navigation, and `ImageHdu::{read_full, read_full_into, rows}` all run on
+the native reader, and `fitsrs` is a dev-dependency only. `display::decode_preview` is still
+backed by `astroimage`/`rustafits` (deferrable Phase 9). The "Baseline report" below is the
+pre-rewrite starting point; the "Phase 2/3 progress" subsections record where the native reader
+now stands against it.
 
 ## Benchmarks
 
@@ -80,6 +82,49 @@ claimed as done: the structural laziness guarantee (exact byte counts via `Count
 proven in `tests/reader_conformance.rs`) is real and gates cleanly; the *speed* gate does not yet,
 and this section will be updated once that follow-up lands rather than silently dropped.
 
+### Phase 3 progress: full-frame reads (native, beats baseline)
+
+`ImageHdu::read_full` / `read_full_into` / `rows()` now do native full-frame
+decoding — big-endian `from_be_bytes` over `chunks_exact`, `BSCALE`/`BZERO`/`BLANK`
+applied in the same pass, one output allocation, bounded 256 KiB streaming scratch
+(skipped entirely when the source can hand out a whole-file slice). Same machine and
+warm-cache conditions as the Phase 0 baseline.
+
+| Path | Median time | Throughput | vs. `astroimage::read_raw` (2.07 ms) |
+|---|---|---|---|
+| `astroimage::read_raw` (re-measured) | 2.07 ms | 15.1 GiB/s | 1.00× |
+| `read_full::<i16>()`, `FileSource` (streaming scratch) | 1.72 ms | 18.2 GiB/s | **1.20× faster** |
+| `read_full_into::<i16>()`, `FileSource` (caller buffer reused) | 1.56 ms | 20.1 GiB/s | **1.33× faster** |
+| `read_full::<i16>()`, `SliceSource` (whole-file, zero-copy decode) | 1.15 ms | 27.2 GiB/s | **1.80× faster** (also pays a 33 MB buffer clone per iter) |
+
+The relative gate for this workload (ADR 006 performance targets) is "≥ parity in
+wall time, materially lower peak RSS than `read_raw`" — met on both counts: faster
+*and* the peak-heap invariant below.
+
+**Peak heap (dhat, `tests/memory.rs`):** `read_full_into` over a slice source does
+not allocate proportionally to pixel count (asserted ≤ 16 KiB of harness noise for a
+512 KiB frame); `read_full` peaks at `output × 1.05 + 256 KiB scratch`; `rows()`
+peaks at one row regardless of image height. Contrast the Phase 0 baseline's 2.25×
+theoretical-minimum peak.
+
+#### D2: is the safe big-endian decode fast enough? (yes — question closed)
+
+ADR 006 D2 says `unsafe` transmute-based decoding is only "warranted" if the safe
+path is *materially* slower. Isolated in-memory decode of 16.7 M big-endian `i16`
+samples:
+
+| Decode | Median time | Throughput |
+|---|---|---|
+| `memcpy` ceiling (same byte volume) | 418 µs | 74.8 GiB/s |
+| safe: `i16::from_be_bytes` over `chunks_exact(2)` | 658 µs | 47.5 GiB/s |
+| hypothetical `unsafe`: `read_unaligned` + `i16::from_be` | 556 µs | 56.2 GiB/s |
+
+The safe path is ~18 % slower than the `unsafe` alternative *in this microbench*, and
+that decode is well under half the cost of a real full-frame read — where the safe
+native path already beats the pre-rewrite reader by 20–33 %. That does not clear the
+bar for introducing `unsafe` into `src/`. **Decision: keep the safe decode.** Revisit
+only if a real-world profile shows decode (not I/O) dominating.
+
 ### Positioned-read vs. mmap
 
 Not yet measured — the `ByteSource`/`FileSource` positioned-read backend lands in Phase 1 and
@@ -97,7 +142,11 @@ To refresh the committed criterion baselines after a benchmark-relevant change:
 
 ```
 cargo bench -p px-fits
-cp target/criterion/<group>/<function>/new/estimates.json crates/px-fits/benches/baselines/<name>.json
+# single-function groups: one file
+cp target/criterion/<group>/new/estimates.json crates/px-fits/benches/baselines/<name>.json
+# multi-function groups (e.g. full_frame, decode): one file per function
+cp target/criterion/<group>/<function>/new/estimates.json \
+   crates/px-fits/benches/baselines/<group>/<function>/estimates.json
 ```
 
 Update the table above with the new numbers and machine info in the same commit.
