@@ -8,13 +8,14 @@ backends as the rewrite proceeds.
 
 ## Status
 
-Rewrite in progress. Phases 0–5 are complete: headers, HDU discovery/navigation,
-`ImageHdu::{read_full, read_full_into, rows}` (full-frame reads),
-`ImageHdu::{read_region, read_region_into}` (subset reads), and write support
-(`FitsWriter`, `HeaderBuilder`, `update_header`) all run on the native reader/writer, with
-`fitsrs` fully removed. `display::decode_preview` is still backed by `astroimage`/`rustafits`
-(deferrable Phase 9). The "Baseline report" below is the pre-rewrite starting point; the
-"Phase N progress" subsections record where the native reader now stands against it.
+Rewrite in progress. Phases 0–7 are complete: headers, HDU discovery/navigation, image reads
+(`ImageHdu::{read_full, read_full_into, rows, read_region, read_region_into}`), write support
+(`FitsWriter`, `HeaderBuilder`, `update_header`), tables (`BinTableHdu`/`AsciiTableHdu` +
+builders), and tile-compressed images (`RICE_1`/`GZIP_1`/`GZIP_2` read, `RICE_1`/`GZIP_1`
+write) all run on the native reader/writer, with `fitsrs` fully removed.
+`display::decode_preview` is still backed by `astroimage`/`rustafits` (deferrable Phase 9). The
+"Baseline report" below is the pre-rewrite starting point; the "Phase N progress" subsections
+record where the native reader now stands against it.
 
 ## Benchmarks
 
@@ -176,6 +177,33 @@ Benchmark: writing a 4096×4096 `i16` image (33.6 MB). Same machine/warm-cache.
 one `write(2)` per image row (that alone was worth ~1.5× here). The file-vs-floor
 gap is the extra buffered copy of the data (row scratch → `BufWriter` → file); the
 in-memory number shows the endianness/framing work is essentially free.
+
+### Phase 7 progress: tile-compressed images
+
+`FitsReader::compressed_image` reads the FITS tiled-image convention (a `BINTABLE`
+with `ZIMAGE = T`): `RICE_1`, `GZIP_1`, `GZIP_2`, `NOCOMPRESS` for integer
+`ZBITPIX`. `read_region` decompresses only the tiles the region intersects.
+`CompressedImageBuilder` + `FitsWriter::write_compressed_image` write `RICE_1` and
+`GZIP_1`. `PLIO_1`, `HCOMPRESS_1`, and floating-point `ZBITPIX` return a typed
+`UnsupportedCompression` error. All read/write paths are checked bit-exact against
+astropy in `tests/compress_conformance.rs`.
+
+Benchmark: a 2048×2048 `i16` frame (gradient + noise, `RICE_1`, `fpack`-style
+2048×16 row tiles). Same machine/warm-cache as the other reports.
+
+| Operation | Median time | Note |
+|---|---|---|
+| `RICE_1` file size | — | **2.28× smaller** than uncompressed |
+| `compressed_image.read_full::<i16>()` (`RICE_1`) | 32.7 ms | 245 MiB/s |
+| `primary_image.read_full::<i16>()` (uncompressed, same frame) | 0.36 ms | reference — 21 GiB/s |
+| `compressed_image.read_region::<i16>()`, 512×512 | 8.0 ms | **4.1× faster** than decompressing the whole frame |
+
+The RICE_1 decoder is a straightforward bit-serial port of cfitsio's `fits_rdecomp`
+(no table-driven zero-run counting yet), so full-frame decode is ~90× slower than
+an uncompressed read — fine for reading archive `.fz` files occasionally, not for
+bulk pipelines. Region reads recover most of that when only part of a frame is
+needed; square tiling (rather than the `fpack` row default used here) would help
+region reads further.
 
 ### Positioned-read vs. mmap
 
