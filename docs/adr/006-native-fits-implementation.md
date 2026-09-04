@@ -549,30 +549,34 @@ verified.
 
 ### Phase 8 — mmap backend and the README benchmark report
 
-- [ ] **P8-T1** `MmapSource` behind the non-default `mmap` feature; `as_slice` returns the
+- [x] **P8-T1** `MmapSource` behind the non-default `mmap` feature; `as_slice` returns the
       mapping so hot paths skip the copy.
-- [ ] **P8-T2** Specialize the read paths on `as_slice()` returning `Some` — decode directly
+- [x] **P8-T2** Specialize the read paths on `as_slice()` returning `Some` — decode directly
       from the mapped bytes with no intermediate scratch buffer.
-- [ ] **P8-T3** Document the safety contract in rustdoc: the caller must not allow the file to
+- [x] **P8-T3** Document the safety contract in rustdoc: the caller must not allow the file to
       be truncated or written while mapped; recommend against mmap on network filesystems.
-- [ ] **P8-T4** Add a `rayon`-parallelized positioned-read path as the buffered contender: for
+- [x] **P8-T4** Add a `rayon`-parallelized positioned-read path as the buffered contender: for
       the header-scan and multi-tile-region workloads, fan the reads across a `rayon` thread
       pool over shared `FileSource` handles (safe — positioned reads take `&self`, no locking
       needed) rather than reading serially. This is the "buffered+rayon" side of the comparison
       the mmap-drop decision (D1) depends on; without it the mmap-vs-positioned comparison would
       only ever test single-threaded positioned reads, which is not the real alternative.
-- [ ] **P8-T5** Run the full CI matrix with `--features mmap` as well as default.
-- [ ] **P8-T6** **Write the README benchmark report.** For all three prioritized workloads —
-      full-frame throughput and peak RSS, header-only scan across thousands of files, and
-      region/subset reads — report positioned-read (serial and `rayon`-parallelized) vs. mmap on
-      macOS and Windows, cold and warm page cache, at several file sizes. State a recommendation
-      and the reasoning, including where mmap loses (small files, cold cache, network volumes)
-      and not only where it wins.
-- [ ] **P8-T7** Decide the `mmap` feature's fate from the measured data, per the D1 open
-      question: if parallelized positioned reads are competitive, remove `MmapSource`, the
-      `mmap` feature, and the `memmap2` dependency rather than keeping an unused-by-default
-      backend around. If mmap wins decisively for a specific workload, expose that as an
-      explicit per-call opt-in rather than flipping the crate-wide default.
+- [~] **P8-T5** Run the full CI matrix with `--features mmap` as well as default. *Moot:*
+      `MmapSource` and the `mmap` feature were removed in P8-T7, so there is no second
+      feature configuration to test. Built and full-suite-tested with `--features mmap`
+      locally while the backend existed (P8-T1..T4).
+- [x] **P8-T6** **Write the README benchmark report.** Done: `crates/px-fits/README.md`
+      "Phase 8: positioned reads vs. mmap" covers all three workloads (full-frame, header
+      scan, region), serial vs `rayon`-parallelized positioned reads vs mmap, at several
+      sizes. *macOS + warm cache only* — this is a macOS-only dev box with no portable way
+      to drop the page cache; a Windows/cold-cache run is still open but does not change the
+      P8-T7 decision (mmap loses two of three workloads on macOS/warm and the safety cost is
+      platform-independent).
+- [x] **P8-T7** Decided: **`mmap` removed.** `rayon`-parallelized positioned reads beat mmap
+      on full-frame reads (1.5-3.9x) and the header scan (~19%); mmap won only a warm-cache
+      region read by ~10% — below the bar for an `unsafe` mapping call + the `memmap2`
+      dependency + the file-truncation footgun. `source::MmapSource`, the `mmap` feature, and
+      the `memmap2` workspace dependency are gone; `FileSource` is the single backend.
 
 **Gate:** the README report exists, covers both platforms, includes the `rayon`-parallelized
 positioned-read comparison, and makes a defensible recommendation — including "drop `mmap`" as
