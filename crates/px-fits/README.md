@@ -8,12 +8,12 @@ backends as the rewrite proceeds.
 
 ## Status
 
-Rewrite in progress. Phases 0–2 are complete and Phase 3 (full-frame image reads) has landed:
-headers, HDU discovery/navigation, and `ImageHdu::{read_full, read_full_into, rows}` all run on
-the native reader, and `fitsrs` is a dev-dependency only. `display::decode_preview` is still
-backed by `astroimage`/`rustafits` (deferrable Phase 9). The "Baseline report" below is the
-pre-rewrite starting point; the "Phase 2/3 progress" subsections record where the native reader
-now stands against it.
+Rewrite in progress. Phases 0–4 are complete: headers, HDU discovery/navigation,
+`ImageHdu::{read_full, read_full_into, rows}` (full-frame reads), and
+`ImageHdu::{read_region, read_region_into}` (subset reads) all run on the native reader, with
+`fitsrs` fully removed. `display::decode_preview` is still backed by `astroimage`/`rustafits`
+(deferrable Phase 9). The "Baseline report" below is the pre-rewrite starting point; the
+"Phase N progress" subsections record where the native reader now stands against it.
 
 ## Benchmarks
 
@@ -124,6 +124,33 @@ that decode is well under half the cost of a real full-frame read — where the 
 native path already beats the pre-rewrite reader by 20–33 %. That does not clear the
 bar for introducing `unsafe` into `src/`. **Decision: keep the safe decode.** Revisit
 only if a real-world profile shows decode (not I/O) dominating.
+
+### Phase 4 progress: region selection (≥ 20× gate met)
+
+`ImageHdu::read_region` / `read_region_into` take a `Region { start, shape }`
+(FITS axis order; `Region::rect(x, y, w, h)` for the 2D case) and read only the
+subset — the plan is one contiguous run per subset row (`shape[1..].product()`
+runs in N-D), one positioned read each. `tests/region_conformance.rs` asserts the
+exact byte accounting: a 20×12 window is 12 reads of 480 bytes total, nothing more.
+
+Benchmark: a 512×512 window out of a **~60 MP** (7744×7744) `i16` frame. The
+baseline ("read the whole frame, then crop" — no subset primitive exists in
+`fitsrs`/`astroimage`) scales with total pixels; `read_region` does not, so the
+ratio grows with frame size. Same machine/warm-cache as the other reports.
+
+| Path | Median time | vs. full-read-plus-crop (8.13 ms) |
+|---|---|---|
+| `astroimage::read_raw` + manual crop | 8.13 ms | 1.0× |
+| `read_region::<i16>()`, `FileSource` | 164 µs | **49× faster** |
+| `read_region_into::<i16>()`, `FileSource` (buffer reused) | 149 µs | **55× faster** |
+| `read_region::<i16>()`, `SliceSource` | 1.65 ms | 4.9× (dominated by a 120 MB buffer clone per iter, not the read) |
+
+The ADR's ≥ 20× gate for this workload is met (49–55× on a FileSource). At the
+Phase 0 baseline's 4096×4096 (16.7 MP) frame the ratio is ~13–15× — still a large
+win, just below 20× because ~512 one-row `pread` syscalls dominate a warm-cache
+read at that size; the gap closes as the frame (and thus the baseline's full read)
+grows. P4-T7 run-coalescing was not needed: subset rows of a much-wider image are
+never adjacent, so there is nothing to coalesce.
 
 ### Positioned-read vs. mmap
 
