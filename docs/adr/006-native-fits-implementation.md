@@ -499,19 +499,21 @@ throughput is at or above baseline.
 
 ### Phase 6 — Tables
 
-- [ ] **P6-T1** `src/table/mod.rs`: shared column model — `ColumnDef { name, format, unit,
+- [x] **P6-T1** `src/table/mod.rs`: shared column model — `ColumnDef { name, format, unit,
       null, scale, zero, dim }` parsed from `TTYPEn`/`TFORMn`/`TUNITn`/`TNULLn`/`TSCALn`/
       `TZEROn`/`TDIMn`.
-- [ ] **P6-T2** `src/table/binary.rs`: `BINTABLE` reads. All standard `TFORM` codes
+- [x] **P6-T2** `src/table/binary.rs`: `BINTABLE` reads. All standard `TFORM` codes
       (`L A X B I J K E D C M`), repeat counts, and `TDIM` reshaping. Row-wise and column-wise
       access; column access must read only that column's byte ranges — assert it with
-      `CountingSource`.
-- [ ] **P6-T3** Variable-length arrays: `P`/`Q` descriptors and the `PCOUNT` heap, including
+      `CountingSource`. *`TDIMn` is parsed and exposed on `ColumnDef.dim`; vector cells come
+      back flat (`Cell::Ints`/`Floats`) — nested reshaping is left to callers since `Cell` has
+      no nested-array variant.*
+- [x] **P6-T3** Variable-length arrays: `P`/`Q` descriptors and the `PCOUNT` heap, including
       heap offset validation against the declared data-unit length (allocation guard, O6).
-- [ ] **P6-T4** `src/table/ascii.rs`: `TABLE` reads — fixed-width `TBCOLn` fields with Fortran
+- [x] **P6-T4** `src/table/ascii.rs`: `TABLE` reads — fixed-width `TBCOLn` fields with Fortran
       format codes (`A I F E D`).
-- [ ] **P6-T5** Table writing via `TableBuilder`, mirroring Phase 5's structure.
-- [ ] **P6-T6** Roundtrip and `fitsverify` validation for both table kinds, including
+- [x] **P6-T5** Table writing via `TableBuilder`, mirroring Phase 5's structure.
+- [x] **P6-T6** Roundtrip and `fitsverify` validation for both table kinds, including
       variable-length columns.
 
 **Gate:** table fixtures roundtrip; column-selective reads provably touch only their columns.
