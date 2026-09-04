@@ -477,7 +477,149 @@ fn valid_fixtures() -> Vec<(&'static str, Vec<u8>)> {
         ));
     }
 
+    out.push(("bintable.fits", bintable_fixture()));
+    out.push(("ascii_table.fits", ascii_table_fixture()));
+
     out
+}
+
+/// An empty (`NAXIS = 0`) primary HDU, for files whose payload is an
+/// extension.
+fn empty_primary() -> RawHdu {
+    RawHdu {
+        header: primary_header(8, &[], |h| {
+            h.logical("EXTEND", true, "file contains extensions");
+        })
+        .end(),
+        data: Vec::new(),
+    }
+}
+
+/// A `BINTABLE` exercising scalar/vector/string/scaled columns and a
+/// variable-length (`1PJ`) column with a real `PCOUNT` heap.
+fn bintable_fixture() -> Vec<u8> {
+    // Column layout (bytes per row): J(4) E(4) 6A(6) 2D(16) I(2) 1PJ(8) = 40.
+    const ROW: i64 = 40;
+    const NROWS: i64 = 4;
+
+    let ids: [i32; 4] = [1, 2, 3, 4];
+    let flux: [f32; 4] = [1.5, 2.5, 3.5, 4.5];
+    let names: [&str; 4] = ["alpha", "beta", "gamma", "delta"];
+    let coord: [[f64; 2]; 4] = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]];
+    // Physical [0, 30000, 60000, 65535] via TZERO = 32768 on a signed I column.
+    let cnt_phys: [i64; 4] = [0, 30000, 60000, 65535];
+    // Variable-length rows.
+    let vla: [&[i32]; 4] = [&[10, 20], &[30], &[], &[40, 50, 60]];
+
+    let mut rows = Vec::new();
+    let mut heap = Vec::new();
+    for r in 0..4usize {
+        rows.extend_from_slice(&ids[r].to_be_bytes());
+        rows.extend_from_slice(&flux[r].to_be_bytes());
+        let mut name = [b' '; 6];
+        let bytes = names[r].as_bytes();
+        name[..bytes.len()].copy_from_slice(bytes);
+        rows.extend_from_slice(&name);
+        rows.extend_from_slice(&coord[r][0].to_be_bytes());
+        rows.extend_from_slice(&coord[r][1].to_be_bytes());
+        rows.extend_from_slice(&((cnt_phys[r] - 32768) as i16).to_be_bytes());
+        // 1PJ descriptor: [nelem, byte offset into heap].
+        let nelem = vla[r].len() as i32;
+        let offset = heap.len() as i32;
+        rows.extend_from_slice(&nelem.to_be_bytes());
+        rows.extend_from_slice(&offset.to_be_bytes());
+        for &v in vla[r] {
+            heap.extend_from_slice(&v.to_be_bytes());
+        }
+    }
+    let pcount = heap.len() as i64;
+
+    let mut h = HeaderBuf::new();
+    h.string("XTENSION", "BINTABLE", "binary table extension");
+    h.integer("BITPIX", 8, "bits per data value");
+    h.integer("NAXIS", 2, "2-dimensional table");
+    h.integer("NAXIS1", ROW, "width of table row in bytes");
+    h.integer("NAXIS2", NROWS, "number of rows");
+    h.integer("PCOUNT", pcount, "size of heap in bytes");
+    h.integer("GCOUNT", 1, "one data group");
+    h.integer("TFIELDS", 6, "number of columns");
+    h.string("TTYPE1", "ID", "row id");
+    h.string("TFORM1", "J", "32-bit integer");
+    h.string("TTYPE2", "FLUX", "measured flux");
+    h.string("TFORM2", "E", "single precision float");
+    h.string("TUNIT2", "Jy", "janskys");
+    h.string("TTYPE3", "NAME", "object name");
+    h.string("TFORM3", "6A", "6-char string");
+    h.string("TTYPE4", "COORD", "x/y position");
+    h.string("TFORM4", "2D", "two doubles");
+    h.string("TTYPE5", "CNT", "unsigned count via TZERO");
+    h.string("TFORM5", "I", "16-bit integer");
+    h.integer("TSCAL5", 1, "no scaling");
+    h.integer("TZERO5", 32768, "unsigned 16-bit offset");
+    h.string("TTYPE6", "SAMPLES", "variable-length samples");
+    h.string("TFORM6", "1PJ(3)", "var-length 32-bit ints, max 3");
+    h.comment("synthetic fixture: bintable with a variable-length column");
+    let header = h.end();
+
+    let mut data = rows;
+    data.extend_from_slice(&heap);
+    assemble(vec![
+        empty_primary(),
+        RawHdu {
+            header,
+            data: pad_data(data),
+        },
+    ])
+}
+
+/// An ASCII `TABLE` with an integer, a float, and a string column, plus one
+/// all-blank (null) cell.
+fn ascii_table_fixture() -> Vec<u8> {
+    // Row layout: SEQ I5 @1, MAG F8.3 @7, LABEL A10 @16 -> row width 25.
+    const ROW: usize = 25;
+    let rows: [(&str, &str, &str); 3] = [
+        ("    1", "  1.234", "hydrogen  "),
+        ("    2", "       ", "helium    "), // blank MAG -> null
+        ("    3", " 12.500", "lithium   "),
+    ];
+
+    let mut data = Vec::new();
+    for (seq, mag, label) in rows {
+        let mut line = vec![b' '; ROW];
+        line[0..5].copy_from_slice(seq.as_bytes());
+        line[6..13].copy_from_slice(mag.as_bytes());
+        line[15..25].copy_from_slice(label.as_bytes());
+        data.extend_from_slice(&line);
+    }
+
+    let mut h = HeaderBuf::new();
+    h.string("XTENSION", "TABLE", "ASCII table extension");
+    h.integer("BITPIX", 8, "bits per data value");
+    h.integer("NAXIS", 2, "2-dimensional table");
+    h.integer("NAXIS1", ROW as i64, "width of table row in bytes");
+    h.integer("NAXIS2", 3, "number of rows");
+    h.integer("PCOUNT", 0, "no heap");
+    h.integer("GCOUNT", 1, "one data group");
+    h.integer("TFIELDS", 3, "number of columns");
+    h.string("TTYPE1", "SEQ", "sequence number");
+    h.integer("TBCOL1", 1, "start column");
+    h.string("TFORM1", "I5", "integer, 5 chars");
+    h.string("TTYPE2", "MAG", "magnitude");
+    h.integer("TBCOL2", 7, "start column");
+    h.string("TFORM2", "F8.3", "fixed float");
+    h.string("TTYPE3", "LABEL", "element name");
+    h.integer("TBCOL3", 16, "start column");
+    h.string("TFORM3", "A10", "10-char string");
+    h.comment("synthetic fixture: ASCII table with a null MAG cell");
+    let header = h.end();
+
+    assemble(vec![
+        empty_primary(),
+        RawHdu {
+            header,
+            data: pad_data(data),
+        },
+    ])
 }
 
 fn invalid_fixtures() -> Vec<(&'static str, Vec<u8>)> {
