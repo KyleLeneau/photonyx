@@ -108,7 +108,8 @@ fn native_read_full_into_over_slice_source_does_not_allocate_per_pixel() {
 fn native_read_full_peak_heap_is_output_plus_scratch() {
     let _guard = DHAT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = support::scratch_dir().join("memory-native");
-    let path = support::write_synthetic_i16_image(&dir, 1024, 1024);
+    // 8 MiB of input -> comfortably above the parallel-read threshold.
+    let path = support::write_synthetic_i16_image(&dir, 2048, 2048);
 
     let reader = FitsReader::from_source(FileSource::open(&path).unwrap()).unwrap();
     let img = reader.primary_image().unwrap();
@@ -121,10 +122,14 @@ fn native_read_full_peak_heap_is_output_plus_scratch() {
 
     assert_eq!(pixels.len(), count);
     let output_bytes = count * std::mem::size_of::<i32>();
-    let bound = (output_bytes as f64 * 1.05) as usize + DEFAULT_SCRATCH_BYTES + NOISE;
+    // The positioned-read path fans across `rayon` for a read this size:
+    // one bounded scratch buffer per worker (still independent of image
+    // size), so the bound scales with the thread count, not the pixels.
+    let workers = rayon::current_num_threads().max(1);
+    let bound = (output_bytes as f64 * 1.05) as usize + workers * DEFAULT_SCRATCH_BYTES + NOISE;
     assert!(
         stats.max_bytes <= bound,
-        "peak heap {} exceeds output ({output_bytes}) * 1.05 + scratch \
+        "peak heap {} exceeds output ({output_bytes}) * 1.05 + {workers} * scratch \
          ({DEFAULT_SCRATCH_BYTES}) = {bound}",
         stats.max_bytes,
     );

@@ -23,11 +23,17 @@ pub use pixel::Pixel;
 pub use region::Region;
 pub use scaling::Scaling;
 
+use rayon::prelude::*;
+
 use crate::error::FitsError;
 use crate::hdu::DiscoveredHdu;
 use crate::header::{BitPix, Header};
 use crate::image::pixel::decode;
 use crate::source::ByteSource;
+
+/// Full-frame reads below this many bytes stay single-threaded — `rayon`
+/// task coordination is not worth it for small images (ADR 006 P8-T4).
+const PARALLEL_MIN_BYTES: usize = 2 * 1024 * 1024;
 
 /// Default streaming scratch-buffer size (ADR 006 D4). Overridable per HDU
 /// with [`ImageHdu::with_scratch`].
@@ -174,21 +180,41 @@ impl<'a, S: ByteSource + ?Sized> ImageHdu<'a, S> {
     }
 
     /// Shared body of `read_full` / `read_full_into`: whole-slice fast path
-    /// or bounded streaming.
+    /// or bounded streaming, each fanned across a `rayon` pool once the read
+    /// is large enough to pay for the coordination (ADR 006 D1 / P8-T4).
     fn fill<T: Pixel>(&self, out: &mut [T]) -> Result<(), FitsError> {
         if out.is_empty() {
             return Ok(());
         }
         let bpp = self.bitpix.bytes_per_pixel();
         let total = out.len() * bpp;
+        let parallel = total >= PARALLEL_MIN_BYTES && rayon::current_num_threads() > 1;
 
+        // Whole-file slice (`SliceSource`, and `MmapSource` behind the `mmap`
+        // feature): decode straight from the borrowed bytes — no scratch,
+        // and no allocation even on the parallel path.
         if let Some(all) = self.source.as_slice() {
             let start = self.data_offset as usize;
             let end = start.checked_add(total).ok_or(FitsError::NaxisOverflow)?;
             let bytes = all
                 .get(start..end)
                 .ok_or(FitsError::DataSizeExceedsSource)?;
+            if parallel {
+                let task_px = out.len().div_ceil(rayon::current_num_threads()).max(1);
+                let (bitpix, scaling) = (self.bitpix, self.scaling);
+                return out
+                    .par_chunks_mut(task_px)
+                    .enumerate()
+                    .try_for_each(|(t, task)| {
+                        let off = t * task_px * bpp;
+                        decode(task, &bytes[off..off + task.len() * bpp], bitpix, &scaling)
+                    });
+            }
             return decode(out, bytes, self.bitpix, &self.scaling);
+        }
+
+        if parallel {
+            return self.fill_parallel(out, bpp);
         }
 
         let scratch_pixels = (self.scratch_bytes / bpp).max(1);
@@ -204,6 +230,35 @@ impl<'a, S: ByteSource + ?Sized> ImageHdu<'a, S> {
             done += this;
         }
         Ok(())
+    }
+
+    /// Positioned-read fill fanned across `rayon`: one task per worker, each
+    /// `pread`ing its own disjoint byte range (safe — `read_exact_at` takes
+    /// `&self`, no shared cursor) into a bounded per-task scratch buffer.
+    /// Live scratch is `num_threads * scratch_bytes`, still independent of
+    /// image size.
+    fn fill_parallel<T: Pixel>(&self, out: &mut [T], bpp: usize) -> Result<(), FitsError> {
+        let nthreads = rayon::current_num_threads().max(1);
+        let task_px = out.len().div_ceil(nthreads).max(1);
+        let scratch_px = (self.scratch_bytes / bpp).max(1);
+        let (data_offset, bitpix, scaling) = (self.data_offset, self.bitpix, self.scaling);
+        let source = self.source;
+
+        out.par_chunks_mut(task_px)
+            .enumerate()
+            .try_for_each(|(t, task)| -> Result<(), FitsError> {
+                let mut buf = vec![0u8; scratch_px.min(task.len()) * bpp];
+                let base_px = t * task_px;
+                let mut done = 0;
+                while done < task.len() {
+                    let n = (task.len() - done).min(scratch_px);
+                    let b = &mut buf[..n * bpp];
+                    source.read_exact_at(b, data_offset + ((base_px + done) * bpp) as u64)?;
+                    decode(&mut task[done..done + n], b, bitpix, &scaling)?;
+                    done += n;
+                }
+                Ok(())
+            })
     }
 
     /// Reads a rectangular subset into a freshly allocated `Vec<T>`, in
@@ -248,36 +303,50 @@ impl<'a, S: ByteSource + ?Sized> ImageHdu<'a, S> {
 
         let bpp = self.bitpix.bytes_per_pixel();
         let runs = region.plan_runs(&self.shape);
-        let run_bytes = region.shape()[0] * bpp;
+        let run_len = region.shape()[0];
+        let run_bytes = run_len * bpp;
+        let (data_offset, bitpix, scaling) = (self.data_offset, self.bitpix, self.scaling);
+        // Runs land contiguously in `out` (`dst_elem == run_index * run_len`),
+        // so `par_chunks_mut(run_len)` aligns one chunk per run.
+        let parallel = runs.len() >= 32 && rayon::current_num_threads() > 1;
 
         if let Some(all) = self.source.as_slice() {
-            for run in &runs {
-                let start = (self.data_offset + run.src_elem * bpp as u64) as usize;
+            let one = |dst: &mut [T], run: &crate::image::region::Run| -> Result<(), FitsError> {
+                let start = (data_offset + run.src_elem * bpp as u64) as usize;
                 let bytes = all
                     .get(start..start + run_bytes)
                     .ok_or(FitsError::DataSizeExceedsSource)?;
-                decode(
-                    &mut out[run.dst_elem..run.dst_elem + run.len],
-                    bytes,
-                    self.bitpix,
-                    &self.scaling,
-                )?;
-            }
-            return Ok(());
+                decode(dst, bytes, bitpix, &scaling)
+            };
+            return if parallel {
+                out.par_chunks_mut(run_len)
+                    .zip(runs.par_iter())
+                    .try_for_each(|(dst, run)| one(dst, run))
+            } else {
+                out.chunks_mut(run_len)
+                    .zip(runs.iter())
+                    .try_for_each(|(dst, run)| one(dst, run))
+            };
         }
 
-        // One positioned read per run, reusing a single row-sized buffer:
-        // read calls == run count, bytes read == region size exactly.
+        // One positioned read per run — read calls == run count, bytes read
+        // == region size exactly (serial path keeps a single reused buffer).
+        let source = self.source;
+        if parallel {
+            return out
+                .par_chunks_mut(run_len)
+                .zip(runs.par_iter())
+                .try_for_each(|(dst, run)| -> Result<(), FitsError> {
+                    let mut buf = vec![0u8; run_bytes];
+                    source.read_exact_at(&mut buf, data_offset + run.src_elem * bpp as u64)?;
+                    decode(dst, &buf, bitpix, &scaling)
+                });
+        }
         let mut scratch = vec![0u8; run_bytes];
-        for run in &runs {
-            let offset = self.data_offset + run.src_elem * bpp as u64;
-            self.source.read_exact_at(&mut scratch, offset)?;
-            decode(
-                &mut out[run.dst_elem..run.dst_elem + run.len],
-                &scratch,
-                self.bitpix,
-                &self.scaling,
-            )?;
+        for (dst, run) in out.chunks_mut(run_len).zip(runs.iter()) {
+            self.source
+                .read_exact_at(&mut scratch, data_offset + run.src_elem * bpp as u64)?;
+            decode(dst, &scratch, bitpix, &scaling)?;
         }
         Ok(())
     }

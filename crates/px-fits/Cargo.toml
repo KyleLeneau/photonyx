@@ -23,6 +23,7 @@ rustafits = { git = "https://github.com/KyleLeneau/rustafits", branch = "jpg-fea
 criterion = { workspace = true }
 dhat = { workspace = true }
 proptest = { workspace = true }
+rayon = { workspace = true }
 tempfile = { workspace = true }
 
 [[bench]]
