@@ -16,6 +16,7 @@ use crate::error::FitsError;
 use crate::hdu::{DiscoveredHdu, HduKind, discover_one};
 use crate::image::ImageHdu;
 use crate::source::{ByteSource, FileSource};
+use crate::table::{AsciiTableHdu, BinTableHdu};
 
 #[derive(Debug)]
 pub struct FitsReader<S: ByteSource> {
@@ -133,6 +134,30 @@ impl<S: ByteSource> FitsReader<S> {
     /// Typed image access for the primary HDU (index 0).
     pub fn primary_image(&self) -> Result<ImageHdu<'_, S>, FitsError> {
         self.image(0)
+    }
+
+    /// Typed `BINTABLE` access for the HDU at `index`.
+    pub fn bintable(&self, index: usize) -> Result<BinTableHdu<'_, S>, FitsError> {
+        let hdu = self.hdu(index)?;
+        match &hdu.kind {
+            HduKind::BinTable => BinTableHdu::from_discovered(self.source(), hdu),
+            other => Err(FitsError::NotATable {
+                index,
+                kind: format!("{other:?}"),
+            }),
+        }
+    }
+
+    /// Typed ASCII `TABLE` access for the HDU at `index`.
+    pub fn ascii_table(&self, index: usize) -> Result<AsciiTableHdu<'_, S>, FitsError> {
+        let hdu = self.hdu(index)?;
+        match &hdu.kind {
+            HduKind::AsciiTable => AsciiTableHdu::from_discovered(self.source(), hdu),
+            other => Err(FitsError::NotATable {
+                index,
+                kind: format!("{other:?}"),
+            }),
+        }
     }
 }
 

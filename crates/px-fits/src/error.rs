@@ -33,8 +33,14 @@ pub enum FitsError {
     #[error("HDU {index} is not an image (kind: {kind})")]
     NotAnImage { index: usize, kind: String },
 
+    #[error("HDU {index} is not a table of the requested kind (kind: {kind})")]
+    NotATable { index: usize, kind: String },
+
     #[error("buffer length {got} does not match expected {expected}")]
     BufferLenMismatch { expected: usize, got: usize },
+
+    #[error("variable-length array descriptor points outside the declared PCOUNT heap")]
+    HeapOutOfBounds,
 
     #[error("region {0:?} is out of bounds for image shape {1:?}")]
     RegionOutOfBounds(String, Vec<u64>),
