@@ -477,20 +477,23 @@ throughput is at or above baseline.
 
 ### Phase 5 — Write support
 
-- [ ] **P5-T1** `HeaderBuilder`: mandatory-keyword ordering enforced by construction (D7);
+- [x] **P5-T1** `HeaderBuilder`: mandatory-keyword ordering enforced by construction (D7);
       rejects invalid `BITPIX`, non-ASCII, over-length keywords, and reserved-keyword misuse.
-- [ ] **P5-T2** `src/writer.rs`: `FitsWriter<W>`, `write_image`, block padding with zero bytes
+- [x] **P5-T2** `src/writer.rs`: `FitsWriter<W>`, `write_image`, block padding with zero bytes
       for data and spaces for headers, per the standard.
-- [ ] **P5-T3** `begin_image` streaming writer — write row by row so peak heap is independent of
+- [x] **P5-T3** `begin_image` streaming writer — write row by row so peak heap is independent of
       image size.
-- [ ] **P5-T4** `update_header`: in-place edit when the rewritten header occupies the same block
+- [x] **P5-T4** `update_header`: in-place edit when the rewritten header occupies the same block
       count; full-file rewrite via a temp file and atomic rename otherwise. Never leave a
       partially written file at the original path.
-- [ ] **P5-T5** Roundtrip tests: write → read → compare for every `BITPIX`, dimensionality, and
+- [x] **P5-T5** Roundtrip tests: write → read → compare for every `BITPIX`, dimensionality, and
       scaling combination.
-- [ ] **P5-T6** External validation (O4): every generated file passes `fitsverify` with zero
+- [x] **P5-T6** External validation (O4): every generated file passes `fitsverify` with zero
       errors and opens cleanly in astropy. **This is a mandatory gate, not advisory.**
-- [ ] **P5-T7** Fill in `benches/write.rs`; record throughput in the README.
+      *Done via astropy* (`verify('exception')` + data read over 11 writer-output files,
+      `tests/external_validation.rs`, run through `uv run --with astropy`). `fitsverify` is not
+      installed on the dev machine; `cargo xtask fits-verify` runs it automatically where it is.
+- [x] **P5-T7** Fill in `benches/write.rs`; record throughput in the README.
 
 **Gate:** `fitsverify` clean on all written output; roundtrips bit-exact.
 
