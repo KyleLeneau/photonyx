@@ -8,9 +8,10 @@ backends as the rewrite proceeds.
 
 ## Status
 
-Rewrite in progress. Phases 0–4 are complete: headers, HDU discovery/navigation,
-`ImageHdu::{read_full, read_full_into, rows}` (full-frame reads), and
-`ImageHdu::{read_region, read_region_into}` (subset reads) all run on the native reader, with
+Rewrite in progress. Phases 0–5 are complete: headers, HDU discovery/navigation,
+`ImageHdu::{read_full, read_full_into, rows}` (full-frame reads),
+`ImageHdu::{read_region, read_region_into}` (subset reads), and write support
+(`FitsWriter`, `HeaderBuilder`, `update_header`) all run on the native reader/writer, with
 `fitsrs` fully removed. `display::decode_preview` is still backed by `astroimage`/`rustafits`
 (deferrable Phase 9). The "Baseline report" below is the pre-rewrite starting point; the
 "Phase N progress" subsections record where the native reader now stands against it.
@@ -151,6 +152,30 @@ win, just below 20× because ~512 one-row `pread` syscalls dominate a warm-cache
 read at that size; the gap closes as the frame (and thus the baseline's full read)
 grows. P4-T7 run-coalescing was not needed: subset rows of a much-wider image are
 never adjacent, so there is nothing to coalesce.
+
+### Phase 5 progress: write support
+
+`FitsWriter::{write_image, begin_image}` + `HeaderBuilder` + `update_header` are
+in. Headers are emitted in fixed format for every keyword the standard defines
+that way; data is big-endian, zero-padded to 2880 bytes; `begin_image` streams
+row-by-row so peak heap is one row regardless of image size. Every generated file
+passes `astropy`'s `verify('exception')` (`tests/external_validation.rs`;
+`fitsverify` was not installed on the bench machine — `cargo xtask fits-verify`
+will use it when present and otherwise falls back to `uv run --with astropy`).
+
+Benchmark: writing a 4096×4096 `i16` image (33.6 MB). Same machine/warm-cache.
+
+| Path | Median time | Throughput | Note |
+|---|---|---|---|
+| `std::fs::write` of an equal byte buffer (floor) | 5.7 ms | 5.4 GiB/s | high variance (5.1–6.4 ms) |
+| `FitsWriter::write_image`, to a file | 8.6 ms | 3.6 GiB/s | ~1.5× the bare-`write` floor |
+| `begin_image` + `write_row` ×4096, to a file | 8.7 ms | 3.6 GiB/s | no penalty vs. bulk — streaming is free |
+| `write_image` to an in-memory `Vec` | 5.4 ms | 5.8 GiB/s | at memory bandwidth; the encode path itself is not the bottleneck |
+
+`FitsWriter::create` uses a 1 MiB write buffer so row streaming doesn't become
+one `write(2)` per image row (that alone was worth ~1.5× here). The file-vs-floor
+gap is the extra buffered copy of the data (row scratch → `BufWriter` → file); the
+in-memory number shows the endianness/framing work is essentially free.
 
 ### Positioned-read vs. mmap
 

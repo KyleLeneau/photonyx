@@ -385,9 +385,14 @@ pub struct FitsWriter<W: Write> {
 }
 
 impl FitsWriter<BufWriter<File>> {
-    /// Creates (truncating) `path` for writing.
+    /// Creates (truncating) `path` for writing. Uses a 1 MiB write buffer so
+    /// row-at-a-time streaming (`begin_image`) doesn't turn into one `write`
+    /// syscall per image row.
     pub fn create(path: impl AsRef<Path>) -> Result<Self, FitsError> {
-        Ok(Self::new(BufWriter::new(File::create(path)?)))
+        Ok(Self::new(BufWriter::with_capacity(
+            1 << 20,
+            File::create(path)?,
+        )))
     }
 }
 
