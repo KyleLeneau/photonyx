@@ -456,20 +456,22 @@ throughput is at or above baseline.
 
 ### Phase 4 — Region selection
 
-- [ ] **P4-T1** `src/image/region.rs`: `Region { start, shape }` in FITS axis order, with
+- [x] **P4-T1** `src/image/region.rs`: `Region { start, shape }` in FITS axis order, with
       `Region::rect(x, y, w, h)` for the 2D convenience case. Bounds validation against
       `NAXISn` with a typed out-of-range error.
-- [ ] **P4-T2** Run planner: decompose an N-D region into contiguous runs; one positioned read
+- [x] **P4-T2** Run planner: decompose an N-D region into contiguous runs; one positioned read
       per run. Unit-test the plan itself (as data) for 1D through 4D cases before testing I/O.
-- [ ] **P4-T3** `read_region` / `read_region_into`, sharing the conversion path with Phase 3.
-- [ ] **P4-T4** `CountingSource` assertions: bytes read and read-call count match the Phase 4
+- [x] **P4-T3** `read_region` / `read_region_into`, sharing the conversion path with Phase 3.
+- [x] **P4-T4** `CountingSource` assertions: bytes read and read-call count match the Phase 4
       row in the invariants table exactly.
-- [ ] **P4-T5** Correctness: for every fixture, `read_region(r)` equals the corresponding slice
+- [x] **P4-T5** Correctness: for every fixture, `read_region(r)` equals the corresponding slice
       of `read_full()`. Cover corners, single-pixel, single-row, single-column, full-extent, and
       out-of-bounds.
-- [ ] **P4-T6** Benchmark region reads vs. full-read-plus-crop; record the speedup in the README.
-- [ ] **P4-T7** Optional, only if the benchmark justifies it: coalesce adjacent runs into one
-      read when the gap between them is smaller than the syscall cost. Measure before and after.
+- [x] **P4-T6** Benchmark region reads vs. full-read-plus-crop; record the speedup in the README.
+- [~] **P4-T7** Optional, only if the benchmark justifies it: coalesce adjacent runs into one
+      read when the gap between them is smaller than the syscall cost. *Evaluated and declined:*
+      subset rows of a wider image are never adjacent, so there is nothing to coalesce; the
+      ≥ 20× gate is met without it (see `crates/px-fits/README.md`).
 
 **Gate:** the ≥ 20× region-read gate is met and the byte-count assertions are exact.
 
