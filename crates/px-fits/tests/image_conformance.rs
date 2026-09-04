@@ -3,8 +3,8 @@
 //!
 //! The oracle is an independent in-test big-endian decoder (`hand_decode`
 //! below): it reads the raw data unit straight from the file bytes — using
-//! the reader only for the data *offset*, which Phase 2 already validated
-//! against `fitsrs` — and applies `BSCALE`/`BZERO`/`BLANK` itself. So this
+//! the reader only for the data *offset*, which the Phase 2 header work
+//! already validated — and applies `BSCALE`/`BZERO`/`BLANK` itself. So this
 //! checks the Phase 3 decode path, not the header path, against a
 //! second implementation.
 

@@ -19,11 +19,6 @@ thiserror = { workspace = true }
 rustafits = { git = "https://github.com/KyleLeneau/rustafits", branch = "jpg-feature"}
 
 [dev-dependencies]
-# Kept only for tests/differential.rs (ADR 006 O3); removed at the end of
-# Phase 3 once the native reader has its own image-reading tests to stand
-# on and this comparison is no longer needed.
-fitsrs = { version = "0.4.1" }
-
 criterion = { workspace = true }
 dhat = { workspace = true }
 proptest = { workspace = true }

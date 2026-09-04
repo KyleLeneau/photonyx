@@ -1878,18 +1878,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 
 [[package]]
-name = "enum_dispatch"
-version = "0.3.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa18ce2bc66555b3218614519ac839ddb759a7d6720732f979ef8d13be147ecd"
-dependencies = [
- "once_cell",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "enumflags2"
 version = "0.7.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2109,24 +2097,6 @@ name = "finl_unicode"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9844ddc3a6e533d62bba727eb6c28b5d360921d5175e9ff0f1e621a5c590a4d5"
-
-[[package]]
-name = "fitsrs"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f882ef4d0334f5fc1f1f23a0a8eb51c67207a58d69e0ed17039dfdc66e8a107a"
-dependencies = [
- "async-trait",
- "byteorder",
- "flate2",
- "futures",
- "indexmap",
- "log",
- "quick-error 2.0.1",
- "serde",
- "serde_repr",
- "wcs",
-]
 
 [[package]]
 name = "fixedbitset"
@@ -3712,12 +3682,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mapproj"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cef28b23f82a86b32a30cfbd8e45fb66645bd677b150636ae277ac9295054c44"
-
-[[package]]
 name = "matchers"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5156,7 +5120,6 @@ dependencies = [
  "chrono",
  "criterion",
  "dhat",
- "fitsrs",
  "proptest",
  "px-fs",
  "rayon",
@@ -7731,19 +7694,6 @@ dependencies = [
  "log",
  "once_cell",
  "pkg-config",
-]
-
-[[package]]
-name = "wcs"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "596ba3e58d9861b3323c3cc572c3c7453f48e9b357c89ec04b16c5f9babcfd91"
-dependencies = [
- "enum_dispatch",
- "mapproj",
- "paste",
- "quick-error 2.0.1",
- "serde",
 ]
 
 [[package]]
