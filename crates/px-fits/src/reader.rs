@@ -12,6 +12,7 @@
 use std::cell::{Cell, RefCell};
 use std::path::Path;
 
+use crate::compress::CompressedImageHdu;
 use crate::error::FitsError;
 use crate::hdu::{DiscoveredHdu, HduKind, discover_one};
 use crate::image::ImageHdu;
@@ -154,6 +155,19 @@ impl<S: ByteSource> FitsReader<S> {
         match &hdu.kind {
             HduKind::AsciiTable => AsciiTableHdu::from_discovered(self.source(), hdu),
             other => Err(FitsError::NotATable {
+                index,
+                kind: format!("{other:?}"),
+            }),
+        }
+    }
+
+    /// Typed tile-compressed-image access for the HDU at `index` (a
+    /// `BINTABLE` carrying `ZIMAGE = T`).
+    pub fn compressed_image(&self, index: usize) -> Result<CompressedImageHdu<'_, S>, FitsError> {
+        let hdu = self.hdu(index)?;
+        match &hdu.kind {
+            HduKind::BinTable => CompressedImageHdu::from_discovered(self.source(), hdu),
+            other => Err(FitsError::NotAnImage {
                 index,
                 kind: format!("{other:?}"),
             }),

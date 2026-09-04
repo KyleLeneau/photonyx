@@ -1,5 +1,6 @@
 pub mod block;
 pub mod card;
+pub mod compress;
 pub mod display;
 pub mod error;
 pub mod hdu;
@@ -10,6 +11,7 @@ pub mod source;
 pub mod table;
 pub mod writer;
 
+pub use compress::CompressedImageHdu;
 pub use error::FitsError;
 pub use header::BitPix;
 pub use image::{ImageHdu, Pixel, Region, Scaling};

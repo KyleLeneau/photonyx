@@ -147,6 +147,60 @@ impl<'a, S: ByteSource + ?Sized> BinTableHdu<'a, S> {
         Ok(out)
     }
 
+    /// True when column `col` is a variable-length (`P`/`Q`) column.
+    pub fn is_variable_length(&self, col: usize) -> bool {
+        matches!(
+            self.columns.get(col).map(|c| &c.format),
+            Some(ColumnFormat::Binary(BinFormat::Var { .. }))
+        )
+    }
+
+    /// Raw heap bytes of a variable-length column at `row`, without any
+    /// element decoding — used by the tile-compression layer, whose column
+    /// payloads are opaque compressed byte streams. Touches only the
+    /// descriptor field in `row` and the referenced heap span.
+    pub fn var_raw_bytes(&self, col: usize, row: usize) -> Result<Vec<u8>, FitsError> {
+        if row >= self.nrows {
+            return Err(FitsError::Processing(format!("row {row} out of range")));
+        }
+        let BinFormat::Var { kind, .. } = *self.bin_format(col) else {
+            return Err(FitsError::Processing(format!(
+                "column {col} is not variable-length"
+            )));
+        };
+        let desc_bytes = kind.descriptor_bytes();
+        let mut field = vec![0u8; desc_bytes];
+        let at = self.data_offset + (row * self.row_bytes + self.field_offsets[col]) as u64;
+        self.source.read_exact_at(&mut field, at)?;
+
+        let (nelem, offset) = match kind {
+            VarKind::P => (
+                i32::from_be_bytes(field[0..4].try_into().unwrap()) as i64,
+                i32::from_be_bytes(field[4..8].try_into().unwrap()) as i64,
+            ),
+            VarKind::Q => (
+                i64::from_be_bytes(field[0..8].try_into().unwrap()),
+                i64::from_be_bytes(field[8..16].try_into().unwrap()),
+            ),
+        };
+        if nelem < 0 || offset < 0 {
+            return Err(FitsError::HeapOutOfBounds);
+        }
+        let (nelem, offset) = (nelem as u64, offset as u64);
+        let end = offset
+            .checked_add(nelem)
+            .ok_or(FitsError::HeapOutOfBounds)?;
+        if end > self.heap_len {
+            return Err(FitsError::HeapOutOfBounds);
+        }
+        let mut bytes = vec![0u8; nelem as usize];
+        if nelem > 0 {
+            self.source
+                .read_exact_at(&mut bytes, self.heap_start + offset)?;
+        }
+        Ok(bytes)
+    }
+
     fn decode_field(&self, col: usize, field: &[u8]) -> Result<Cell, FitsError> {
         let def = &self.columns[col];
         match self.bin_format(col) {
