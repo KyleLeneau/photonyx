@@ -6,6 +6,7 @@ Using cargo-dist here is a PR from UV on how to test this: https://github.com/as
 
 * Update [CHANGELOG.md](../CHANGELOG.md)
 * Edit the versions in crates from `find . -name Cargo.toml`
+* Bump the version using `cargo xtask bump <version>`
 * set publish version in `./crates/px/Cargo.toml` (user facing)
 * run `dist plan` to see what will be made
 * commit changes `git commit -am "release: 0.2.0"`

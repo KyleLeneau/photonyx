@@ -11,18 +11,18 @@ repository = "https://github.com/KyleLeneau/photonyx"
 
 [workspace.dependencies]
 # local crates
-px-cli = { path = "./crates/px-cli", version = "0.2.0" }
-px-configuration = { path = "./crates/px-configuration", version = "0.2.0" }
-px-conventions = { path = "./crates/px-conventions", version = "0.2.0" }
-px-fits = { path = "./crates/px-fits", version = "0.2.0" }
-px-fs = { path = "./crates/px-fs", version = "0.2.0" }
-px-imageproc = { path = "./crates/px-imageproc", version = "0.2.0" }
-px-index = { path = "./crates/px-index", version = "0.2.0" }
-px-nativeui = { path = "./crates/px-nativeui", version = "0.2.0" }
-px-pipeline = { path = "./crates/px-pipeline", version = "0.2.0" }
-px-static = { path = "./crates/px-static", version = "0.2.0" }
-px-tui = { path = "./crates/px-tui", version = "0.2.0" }
-siril-sys = { path = "./crates/siril-sys", version = "0.2.0" }
+px-cli = { path = "./crates/px-cli", version = "0.3.0" }
+px-configuration = { path = "./crates/px-configuration", version = "0.3.0" }
+px-conventions = { path = "./crates/px-conventions", version = "0.3.0" }
+px-fits = { path = "./crates/px-fits", version = "0.3.0" }
+px-fs = { path = "./crates/px-fs", version = "0.3.0" }
+px-imageproc = { path = "./crates/px-imageproc", version = "0.3.0" }
+px-index = { path = "./crates/px-index", version = "0.3.0" }
+px-nativeui = { path = "./crates/px-nativeui", version = "0.3.0" }
+px-pipeline = { path = "./crates/px-pipeline", version = "0.3.0" }
+px-static = { path = "./crates/px-static", version = "0.3.0" }
+px-tui = { path = "./crates/px-tui", version = "0.3.0" }
+siril-sys = { path = "./crates/siril-sys", version = "0.3.0" }
 
 # external crates
 xshell = "0.2.7"

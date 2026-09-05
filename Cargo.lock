@@ -5046,7 +5046,7 @@ dependencies = [
 
 [[package]]
 name = "px"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anstream",
  "anyhow",
@@ -5079,7 +5079,7 @@ dependencies = [
 
 [[package]]
 name = "px-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "clap_complete",
@@ -5092,7 +5092,7 @@ dependencies = [
 
 [[package]]
 name = "px-configuration"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_yaml",
@@ -5102,7 +5102,7 @@ dependencies = [
 
 [[package]]
 name = "px-conventions"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "px-configuration",
@@ -5115,7 +5115,7 @@ dependencies = [
 
 [[package]]
 name = "px-fits"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "criterion",
@@ -5134,7 +5134,7 @@ dependencies = [
 
 [[package]]
 name = "px-fs"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "dunce",
@@ -5144,7 +5144,7 @@ dependencies = [
 
 [[package]]
 name = "px-imageproc"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "criterion",
  "px-fits",
@@ -5156,7 +5156,7 @@ dependencies = [
 
 [[package]]
 name = "px-index"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "px-configuration",
@@ -5173,7 +5173,7 @@ dependencies = [
 
 [[package]]
 name = "px-nativeui"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "eframe",
@@ -5185,7 +5185,7 @@ dependencies = [
 
 [[package]]
 name = "px-pipeline"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bon",
  "chrono",
@@ -5202,11 +5202,11 @@ dependencies = [
 
 [[package]]
 name = "px-static"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "px-tui"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "crossterm 0.29.0",
@@ -6180,7 +6180,7 @@ checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
 
 [[package]]
 name = "siril-sys"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bon",
  "libc",
