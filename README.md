@@ -7,7 +7,9 @@ Photonyx is command line application that uses conventions and configuration fil
 
 ## Features
 
-* TBD
+* Cross platform (Linux, Windows, Mac)
+* Native rust crate over siril `sys-siril`
+* Native rust crate for fits `px-fits`
 
 ## Requirements
 
