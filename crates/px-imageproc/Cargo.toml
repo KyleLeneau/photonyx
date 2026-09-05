@@ -1,0 +1,19 @@
+[package]
+name = "px-imageproc"
+version = "0.2.0"
+rust-version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+px-fits = { workspace = true }
+
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

@@ -62,7 +62,8 @@ crate keeps its name and its current public entry points so consumer crates
 - Random-groups records (a deprecated pre-extension convention).
 - World Coordinate System evaluation. WCS keywords are readable as ordinary cards; projecting
   them is not this crate's job.
-- Replacing `astroimage`'s debayer/autostretch. Tracked as a deferrable final phase.
+- Replacing `astroimage`'s debayer/autostretch. Tracked as a deferrable final phase, landing in a
+  new `px-imageproc` crate rather than in `px-fits` itself (see Phase 9).
 
 ### Architecture
 
@@ -587,20 +588,35 @@ a legitimate outcome, not just "keep it, tuned."
 *This phase leaves FITS parsing entirely and enters image processing. It is scoped here so the
 dependency-removal path is written down, not because it is committed work.*
 
-- [ ] **P9-T1** Bayer pattern detection from `BAYERPAT`/`XBAYROFF`/`YBAYROFF`.
-- [ ] **P9-T2** Debayer — bilinear first, correctness-checked against `astroimage` output; VNG
+`px-fits` stays a pure format crate: reading and writing bytes, with no opinion on what the
+pixels mean photographically. Debayer, autostretch, and downscale — plus the calibration,
+stacking, and composition work planned after this ADR — belong in a separate crate,
+**`px-imageproc`**, that depends on `px-fits` for I/O. Folding this into `px-fits` would recreate
+the same format/processing entanglement this ADR removes from the read path, and calibration/
+stacking will need the same debayer/stretch primitives, so they should not be re-homed twice.
+
+- [ ] **P9-T1** Scaffold `px-imageproc` (workspace member, `Cargo.toml`, empty `lib.rs`),
+      depending on `px-fits`.
+- [ ] **P9-T2** Bayer pattern detection from `BAYERPAT`/`XBAYROFF`/`YBAYROFF`, reading
+      `px-fits::Header`.
+- [ ] **P9-T3** Debayer — bilinear first, correctness-checked against `astroimage` output; VNG
       or better only if quality demands it.
-- [ ] **P9-T3** STF autostretch (midtone transfer function) matching current preview output.
-- [ ] **P9-T4** Integer downscale honouring `MAX_DISPLAY_DIM`, including the even-factor
+- [ ] **P9-T4** BITPIX→display normalization matching `astroimage`'s `ImageConverter::
+      process_data` behavior.
+- [ ] **P9-T5** STF autostretch (midtone transfer function) matching current preview output.
+- [ ] **P9-T6** Integer downscale honouring `MAX_DISPLAY_DIM`, including the even-factor
       constraint the current Bayer path requires.
-- [ ] **P9-T5** Rewire `decode_preview` onto the native pipeline; keep the signature and
-      `PreviewImage` shape identical so `px-nativeui` is untouched.
-- [ ] **P9-T6** Visual regression: preview output for a corpus of frames compared against
+- [ ] **P9-T7** Move `decode_preview`/`PreviewImage` from `px-fits::display` into
+      `px-imageproc`; keep the signature and `PreviewImage` shape identical. Delete
+      `px-fits/src/display.rs`.
+- [ ] **P9-T8** Update `px-nativeui` (`blink.rs`, `blink_iced.rs`) to depend on `px-imageproc`
+      instead of `px-fits::display`.
+- [ ] **P9-T9** Visual regression: preview output for a corpus of frames compared against
       astroimage's, within a stated per-pixel tolerance.
-- [ ] **P9-T7** Remove the `rustafits` git dependency; delete the dead commented-out
-      `ImageAnalyzer` block in `display.rs`.
-- [ ] **P9-T8** Decide separately whether star analysis (FWHM/eccentricity — currently commented
-      out) is reimplemented or dropped. Out of scope for this ADR either way.
+- [ ] **P9-T10** Remove the `rustafits` git dependency from `px-fits/Cargo.toml`; delete the dead
+      commented-out `ImageAnalyzer` block.
+- [ ] **P9-T11** Decide separately whether star analysis (FWHM/eccentricity — currently
+      commented out) is reimplemented or dropped. Out of scope for this ADR either way.
 
 ---
 

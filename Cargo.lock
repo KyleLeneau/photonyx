@@ -5143,6 +5143,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "px-imageproc"
+version = "0.2.0"
+dependencies = [
+ "px-fits",
+ "tempfile",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "px-index"
 version = "0.2.0"
 dependencies = [
