@@ -204,9 +204,9 @@ impl BlinkIcedApp {
                             let result = decode_preview(&path)
                                 .map(|img| {
                                     // iced needs RGBA; PreviewImage gives us packed RGB.
-                                    let rgba: Vec<u8> = img
-                                        .pixels
-                                        .chunks_exact(3)
+                                    let (chunks, _) = img.pixels.as_chunks::<3>();
+                                    let rgba: Vec<u8> = chunks
+                                        .iter()
                                         .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 255u8])
                                         .collect();
                                     (img.width as u32, img.height as u32, rgba)

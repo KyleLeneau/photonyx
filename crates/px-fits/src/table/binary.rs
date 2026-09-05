@@ -283,22 +283,25 @@ fn decode_fixed(
             }
         }
         BinType::F32 => {
-            let vals: Vec<f64> = field
-                .chunks_exact(4)
-                .map(|c| scale(def, f32::from_be_bytes(c.try_into().unwrap()) as f64))
+            let (chunks, _) = field.as_chunks::<4>();
+            let vals: Vec<f64> = chunks
+                .iter()
+                .map(|c| scale(def, f32::from_be_bytes(*c) as f64))
                 .collect();
             pack_floats(vals, scalar)
         }
         BinType::F64 => {
-            let vals: Vec<f64> = field
-                .chunks_exact(8)
-                .map(|c| scale(def, f64::from_be_bytes(c.try_into().unwrap())))
+            let (chunks, _) = field.as_chunks::<8>();
+            let vals: Vec<f64> = chunks
+                .iter()
+                .map(|c| scale(def, f64::from_be_bytes(*c)))
                 .collect();
             pack_floats(vals, scalar)
         }
         BinType::C64 => {
-            let vals: Vec<(f64, f64)> = field
-                .chunks_exact(8)
+            let (chunks, _) = field.as_chunks::<8>();
+            let vals: Vec<(f64, f64)> = chunks
+                .iter()
                 .map(|c| {
                     (
                         f32::from_be_bytes(c[0..4].try_into().unwrap()) as f64,
@@ -309,8 +312,9 @@ fn decode_fixed(
             pack_complex(vals, scalar)
         }
         BinType::C128 => {
-            let vals: Vec<(f64, f64)> = field
-                .chunks_exact(16)
+            let (chunks, _) = field.as_chunks::<16>();
+            let vals: Vec<(f64, f64)> = chunks
+                .iter()
                 .map(|c| {
                     (
                         f64::from_be_bytes(c[0..8].try_into().unwrap()),
@@ -321,27 +325,26 @@ fn decode_fixed(
             pack_complex(vals, scalar)
         }
         BinType::Byte => decode_ints(def, field.iter().map(|&b| b as i64), scalar),
-        BinType::I16 => decode_ints(
-            def,
-            field
-                .chunks_exact(2)
-                .map(|c| i16::from_be_bytes(c.try_into().unwrap()) as i64),
-            scalar,
-        ),
-        BinType::I32 => decode_ints(
-            def,
-            field
-                .chunks_exact(4)
-                .map(|c| i32::from_be_bytes(c.try_into().unwrap()) as i64),
-            scalar,
-        ),
-        BinType::I64 => decode_ints(
-            def,
-            field
-                .chunks_exact(8)
-                .map(|c| i64::from_be_bytes(c.try_into().unwrap())),
-            scalar,
-        ),
+        BinType::I16 => {
+            let (chunks, _) = field.as_chunks::<2>();
+            decode_ints(
+                def,
+                chunks.iter().map(|c| i16::from_be_bytes(*c) as i64),
+                scalar,
+            )
+        }
+        BinType::I32 => {
+            let (chunks, _) = field.as_chunks::<4>();
+            decode_ints(
+                def,
+                chunks.iter().map(|c| i32::from_be_bytes(*c) as i64),
+                scalar,
+            )
+        }
+        BinType::I64 => {
+            let (chunks, _) = field.as_chunks::<8>();
+            decode_ints(def, chunks.iter().map(|c| i64::from_be_bytes(*c)), scalar)
+        }
     }
 }
 
