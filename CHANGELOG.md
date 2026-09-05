@@ -2,6 +2,12 @@
 
 <!-- prettier-ignore-start -->
 
+## 0.3.0
+
+* Rewrote `px-fits` crate to be fully native (drops fitsrs)
+* Added `px-imageprox` crate for preview display and future image process (drops rustafits)
+* Removed siril from the `px inspect` command in favor of native header reads
+
 ## 0.2.1
 
 * Added `PX_PIPELINE_TEMP_DIR=<some-dir>` env so the temp directory could be specified (eases cross disk usage)
