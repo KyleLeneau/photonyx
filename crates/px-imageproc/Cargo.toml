@@ -1,0 +1,28 @@
+[package]
+name = "px-imageproc"
+version = "0.2.0"
+rust-version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+px-fits = { workspace = true }
+
+rayon = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+tempfile = { workspace = true }
+# Oracle for the ADR 006 P9-T9 visual-regression test only — never a runtime
+# dependency. Once that test is retired this can go too.
+rustafits = { git = "https://github.com/KyleLeneau/rustafits", branch = "jpg-feature" }
+
+[[bench]]
+name = "preview"
+harness = false
+
+[lints]
+workspace = true

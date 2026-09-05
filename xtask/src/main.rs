@@ -9,6 +9,8 @@
 mod bump;
 mod check;
 mod codegen;
+mod fits_fixtures;
+mod fits_verify;
 mod flags;
 
 use std::{env, path::PathBuf};
@@ -25,6 +27,8 @@ fn main() -> anyhow::Result<()> {
         flags::XtaskCmd::ExportSirilCommands(cmd) => cmd.run(sh),
         flags::XtaskCmd::MergeSirilCommands(cmd) => cmd.run(sh),
         flags::XtaskCmd::Bump(cmd) => cmd.run(sh),
+        flags::XtaskCmd::FitsFixtures(cmd) => cmd.run(sh),
+        flags::XtaskCmd::FitsVerify(cmd) => cmd.run(sh),
     }
 }
 

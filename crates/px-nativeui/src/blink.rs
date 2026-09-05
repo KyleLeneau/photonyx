@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 use egui_phosphor::regular as ph;
-use px_fits::display::{MAX_DISPLAY_DIM, PreviewImage, decode_preview};
+use px_imageproc::{MAX_DISPLAY_DIM, PreviewImage, decode_preview};
 
 // ---------------------------------------------------------------------------
 // Constants

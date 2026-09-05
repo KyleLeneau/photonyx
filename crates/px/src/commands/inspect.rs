@@ -11,11 +11,6 @@ use ratatui::{
     style::{Modifier, Style},
     widgets::{Block, Cell, Padding, Row, Table},
 };
-use siril_sys::{
-    Builder,
-    commands::{Dumpheader, Stat},
-    siril_ext::*,
-};
 
 use crate::{commands::ExitStatus, printer::Printer};
 
@@ -33,29 +28,6 @@ pub(crate) async fn inspect_file(args: InspectArgs, printer: Printer) -> Result<
         )?;
         return Ok(ExitStatus::Error);
     }
-
-    // Startup and wait till process is ready for additional commands
-    let mut siril = Builder::default()
-        .output_sink(siril_sys::OutputSink::Inherit)
-        .build()
-        .await?;
-
-    siril.load_path(args.file.clone()).await?;
-
-    let stat_output = siril.execute(&Stat::builder().build()).await;
-    for line in &stat_output.unwrap() {
-        writeln!(printer.stdout(), "stat: {:?}", line)?;
-    }
-
-    let header_output = siril.execute(&Dumpheader::builder().build()).await;
-    for line in &header_output.unwrap() {
-        writeln!(printer.stdout(), "header: {:?}", line)?;
-    }
-
-    // // This dumps header and image stats to a JSON file alongside the file passed in...
-    // siril
-    //     .command(&format!("jsonmetadata {:?}", args.file))
-    //     .await?;
 
     let file = px_fits::FitsFile::new(args.file.clone())?;
     let header_rows = file.header_rows();

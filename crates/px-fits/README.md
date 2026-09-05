@@ -1,0 +1,284 @@
+# px-fits
+
+FITS (Flexible Image Transport System) I/O for [Photonyx](../../README.md). This crate is being
+rewritten to a native implementation per [ADR 006](../../docs/adr/006-native-fits-implementation.md)
+— see that document for the full design and phased implementation plan. This README tracks the
+one artifact the ADR asks to live here: the benchmark report comparing implementations and I/O
+backends as the rewrite proceeds.
+
+## Status
+
+Rewrite in progress. Phases 0–8 are complete: headers, HDU discovery/navigation, image reads
+(`ImageHdu::{read_full, read_full_into, rows, read_region, read_region_into}`), write support
+(`FitsWriter`, `HeaderBuilder`, `update_header`), tables (`BinTableHdu`/`AsciiTableHdu` +
+builders), and tile-compressed images (`RICE_1`/`GZIP_1`/`GZIP_2` read, `RICE_1`/`GZIP_1`
+write) all run on the native reader/writer, with `fitsrs` fully removed. Large reads
+parallelize across `rayon`; the mmap backend was measured and dropped (Phase 8).
+`display::decode_preview` is still backed by `astroimage`/`rustafits` (deferrable Phase 9). The
+"Baseline report" below is the pre-rewrite starting point; the "Phase N progress" subsections
+record where the native reader now stands against it.
+
+## Benchmarks
+
+```
+cargo bench -p px-fits                 # all benchmarks
+cargo bench -p px-fits --bench region  # a single benchmark
+```
+
+Fixture generation and standard-compliance validation:
+
+```
+cargo xtask fits-fixtures              # (re)generate the committed synthetic corpus
+cargo xtask fits-verify                # run fitsverify/astropy over tests/fixtures, if installed
+cargo xtask fits-verify --dir <path>   # validate an arbitrary directory of .fits/.fit files
+```
+
+Real-world frames can be dropped into an arbitrary directory and pointed at via
+`PX_FITS_CORPUS=/path/to/frames` for benchmarks that opt into it (nothing does yet — this lands
+with the Phase 3+ benchmarks that need larger, non-synthetic images).
+
+## Baseline report (Phase 0)
+
+Measured against the pre-rewrite implementation: `fitsrs` 0.4.1 for headers, `astroimage`
+(`rustafits`, branch `jpg-feature`) for pixel data. Criterion's raw estimates for each run are
+committed under [`benches/baselines/`](benches/baselines/) (`estimates.json` per benchmark); the
+numbers below are the median-of-100-iterations point estimate from those files.
+
+**Machine:** Apple M4 Max, macOS 26.6.2 (Darwin 25.6.0, arm64), rustc 1.97.0. Warm page cache
+(fixtures reused across iterations; first-iteration cold-cache cost is not isolated by these
+runs). No Linux/Windows numbers yet — those are needed before Phase 8 draws its mmap-vs-
+positioned-read conclusion, since the two platforms are expected to behave differently there.
+
+| Workload | Baseline implementation | Median time | Notes |
+|---|---|---|---|
+| Header-only scan, 500 files | `FitsFile::new` + `header_rows()` (fitsrs) | 5.79 ms (≈11.6 µs/file) | Baseline has no laziness guarantee; this is the number the native reader's ≥2× gate (ADR 006) is measured against. |
+| Full-frame read, 4096×4096 `i16` (33.6 MB) | `astroimage::ImageConverter::read_raw` | 2.25 ms (≈14.9 GB/s) | Warm-cache; reflects batch-processing conditions more than cold single-file reads. |
+| Region read, 512×512 from a 4096×4096 `i16` frame | full read + manual crop (no subset-read primitive exists today) | 2.31 ms | Effectively identical to a full-frame read, as expected — cropping after the fact reads and allocates the whole frame regardless of the region size. This is the "before" half of the ADR's ≥20× region-read gate. |
+| Write, 4096×4096 `i16`-equivalent buffer | raw `std::fs::write` (no FITS writer exists yet) | 5.08–6.53 ms | Placeholder floor only — `px-fits` cannot write FITS files until Phase 5. |
+
+**Peak heap (dhat, `tests/memory.rs`):** for a 512×512 `i16` frame (524,288 bytes of pixel data
+at the theoretical minimum), `astroimage::read_raw` peaks at **1,180,200 bytes — 2.25× the
+theoretical minimum**. This is the concrete evidence behind ADR 006's D4 (single-allocation
+reads): the current path allocates the raw byte buffer and the typed pixel buffer separately
+rather than streaming one into the other.
+
+### Phase 2 progress: header-only scan (honest interim number)
+
+As of the Phase 2 cutover, `FitsFile`/`header_rows()` run entirely on the native reader —
+`fitsrs` is a dev-dependency only. Re-running the header-scan benchmark against the native
+implementation gives **5.60 ms for the same 500-file corpus (≈11.2 µs/file)**, essentially
+parity with the 5.79 ms `fitsrs` baseline above, **not yet the ADR's ≥2× target**.
+
+One real fix landed alongside this measurement: `Card::parse` was allocating a fresh `String`
+for every card by remapping each byte through `b as char`, even though the near-universal case
+is plain ASCII, where the 80 bytes are already valid UTF-8 and can be borrowed with zero
+allocation (`Cow::Borrowed` via `str::from_utf8`, falling back to the byte-remap only for
+non-ASCII/malformed cards). That was good for a measured ~5% improvement and is a legitimate
+win, but not the dominant cost.
+
+The bulk of the remaining gap is very likely per-card `String` allocation elsewhere in the parse
+path (`keyword.to_string()`, comment/value string construction) and `header_rows()` building a
+fresh `Vec<(String, String, String)>` on every call — real allocation pressure for headers this
+small (single 2880-byte block, ~10 cards), where syscall and parse overhead are comparable in
+magnitude rather than I/O-dominated. This is left as an explicit, scoped follow-up rather than
+claimed as done: the structural laziness guarantee (exact byte counts via `CountingSource`,
+proven in `tests/reader_conformance.rs`) is real and gates cleanly; the *speed* gate does not yet,
+and this section will be updated once that follow-up lands rather than silently dropped.
+
+### Phase 3 progress: full-frame reads (native, beats baseline)
+
+`ImageHdu::read_full` / `read_full_into` / `rows()` now do native full-frame
+decoding — big-endian `from_be_bytes` over `chunks_exact`, `BSCALE`/`BZERO`/`BLANK`
+applied in the same pass, one output allocation, bounded 256 KiB streaming scratch
+(skipped entirely when the source can hand out a whole-file slice). Same machine and
+warm-cache conditions as the Phase 0 baseline.
+
+| Path | Median time | Throughput | vs. `astroimage::read_raw` (2.07 ms) |
+|---|---|---|---|
+| `astroimage::read_raw` (re-measured) | 2.07 ms | 15.1 GiB/s | 1.00× |
+| `read_full::<i16>()`, `FileSource` (streaming scratch) | 1.72 ms | 18.2 GiB/s | **1.20× faster** |
+| `read_full_into::<i16>()`, `FileSource` (caller buffer reused) | 1.56 ms | 20.1 GiB/s | **1.33× faster** |
+| `read_full::<i16>()`, `SliceSource` (whole-file, zero-copy decode) | 1.15 ms | 27.2 GiB/s | **1.80× faster** (also pays a 33 MB buffer clone per iter) |
+
+The relative gate for this workload (ADR 006 performance targets) is "≥ parity in
+wall time, materially lower peak RSS than `read_raw`" — met on both counts: faster
+*and* the peak-heap invariant below.
+
+**Peak heap (dhat, `tests/memory.rs`):** `read_full_into` over a slice source does
+not allocate proportionally to pixel count (asserted ≤ 16 KiB of harness noise for a
+512 KiB frame); `read_full` peaks at `output × 1.05 + 256 KiB scratch`; `rows()`
+peaks at one row regardless of image height. Contrast the Phase 0 baseline's 2.25×
+theoretical-minimum peak.
+
+#### D2: is the safe big-endian decode fast enough? (yes — question closed)
+
+ADR 006 D2 says `unsafe` transmute-based decoding is only "warranted" if the safe
+path is *materially* slower. Isolated in-memory decode of 16.7 M big-endian `i16`
+samples:
+
+| Decode | Median time | Throughput |
+|---|---|---|
+| `memcpy` ceiling (same byte volume) | 418 µs | 74.8 GiB/s |
+| safe: `i16::from_be_bytes` over `chunks_exact(2)` | 658 µs | 47.5 GiB/s |
+| hypothetical `unsafe`: `read_unaligned` + `i16::from_be` | 556 µs | 56.2 GiB/s |
+
+The safe path is ~18 % slower than the `unsafe` alternative *in this microbench*, and
+that decode is well under half the cost of a real full-frame read — where the safe
+native path already beats the pre-rewrite reader by 20–33 %. That does not clear the
+bar for introducing `unsafe` into `src/`. **Decision: keep the safe decode.** Revisit
+only if a real-world profile shows decode (not I/O) dominating.
+
+### Phase 4 progress: region selection (≥ 20× gate met)
+
+`ImageHdu::read_region` / `read_region_into` take a `Region { start, shape }`
+(FITS axis order; `Region::rect(x, y, w, h)` for the 2D case) and read only the
+subset — the plan is one contiguous run per subset row (`shape[1..].product()`
+runs in N-D), one positioned read each. `tests/region_conformance.rs` asserts the
+exact byte accounting: a 20×12 window is 12 reads of 480 bytes total, nothing more.
+
+Benchmark: a 512×512 window out of a **~60 MP** (7744×7744) `i16` frame. The
+baseline ("read the whole frame, then crop" — no subset primitive exists in
+`fitsrs`/`astroimage`) scales with total pixels; `read_region` does not, so the
+ratio grows with frame size. Same machine/warm-cache as the other reports.
+
+| Path | Median time | vs. full-read-plus-crop (8.13 ms) |
+|---|---|---|
+| `astroimage::read_raw` + manual crop | 8.13 ms | 1.0× |
+| `read_region::<i16>()`, `FileSource` | 164 µs | **49× faster** |
+| `read_region_into::<i16>()`, `FileSource` (buffer reused) | 149 µs | **55× faster** |
+| `read_region::<i16>()`, `SliceSource` | 1.65 ms | 4.9× (dominated by a 120 MB buffer clone per iter, not the read) |
+
+The ADR's ≥ 20× gate for this workload is met (49–55× on a FileSource). At the
+Phase 0 baseline's 4096×4096 (16.7 MP) frame the ratio is ~13–15× — still a large
+win, just below 20× because ~512 one-row `pread` syscalls dominate a warm-cache
+read at that size; the gap closes as the frame (and thus the baseline's full read)
+grows. P4-T7 run-coalescing was not needed: subset rows of a much-wider image are
+never adjacent, so there is nothing to coalesce.
+
+### Phase 5 progress: write support
+
+`FitsWriter::{write_image, begin_image}` + `HeaderBuilder` + `update_header` are
+in. Headers are emitted in fixed format for every keyword the standard defines
+that way; data is big-endian, zero-padded to 2880 bytes; `begin_image` streams
+row-by-row so peak heap is one row regardless of image size. Every generated file
+passes `astropy`'s `verify('exception')` (`tests/external_validation.rs`;
+`fitsverify` was not installed on the bench machine — `cargo xtask fits-verify`
+will use it when present and otherwise falls back to `uv run --with astropy`).
+
+Benchmark: writing a 4096×4096 `i16` image (33.6 MB). Same machine/warm-cache.
+
+| Path | Median time | Throughput | Note |
+|---|---|---|---|
+| `std::fs::write` of an equal byte buffer (floor) | 5.7 ms | 5.4 GiB/s | high variance (5.1–6.4 ms) |
+| `FitsWriter::write_image`, to a file | 8.6 ms | 3.6 GiB/s | ~1.5× the bare-`write` floor |
+| `begin_image` + `write_row` ×4096, to a file | 8.7 ms | 3.6 GiB/s | no penalty vs. bulk — streaming is free |
+| `write_image` to an in-memory `Vec` | 5.4 ms | 5.8 GiB/s | at memory bandwidth; the encode path itself is not the bottleneck |
+
+`FitsWriter::create` uses a 1 MiB write buffer so row streaming doesn't become
+one `write(2)` per image row (that alone was worth ~1.5× here). The file-vs-floor
+gap is the extra buffered copy of the data (row scratch → `BufWriter` → file); the
+in-memory number shows the endianness/framing work is essentially free.
+
+### Phase 7 progress: tile-compressed images
+
+`FitsReader::compressed_image` reads the FITS tiled-image convention (a `BINTABLE`
+with `ZIMAGE = T`): `RICE_1`, `GZIP_1`, `GZIP_2`, `NOCOMPRESS` for integer
+`ZBITPIX`. `read_region` decompresses only the tiles the region intersects.
+`CompressedImageBuilder` + `FitsWriter::write_compressed_image` write `RICE_1` and
+`GZIP_1`. `PLIO_1`, `HCOMPRESS_1`, and floating-point `ZBITPIX` return a typed
+`UnsupportedCompression` error. All read/write paths are checked bit-exact against
+astropy in `tests/compress_conformance.rs`.
+
+Benchmark: a 2048×2048 `i16` frame (gradient + noise, `RICE_1`, `fpack`-style
+2048×16 row tiles). Same machine/warm-cache as the other reports.
+
+| Operation | Median time | Note |
+|---|---|---|
+| `RICE_1` file size | — | **2.28× smaller** than uncompressed |
+| `compressed_image.read_full::<i16>()` (`RICE_1`) | 32.7 ms | 245 MiB/s |
+| `primary_image.read_full::<i16>()` (uncompressed, same frame) | 0.36 ms | reference — 21 GiB/s |
+| `compressed_image.read_region::<i16>()`, 512×512 | 8.0 ms | **4.1× faster** than decompressing the whole frame |
+
+The RICE_1 decoder is a straightforward bit-serial port of cfitsio's `fits_rdecomp`
+(no table-driven zero-run counting yet), so full-frame decode is ~90× slower than
+an uncompressed read — fine for reading archive `.fz` files occasionally, not for
+bulk pipelines. Region reads recover most of that when only part of a frame is
+needed; square tiling (rather than the `fpack` row default used here) would help
+region reads further.
+
+### Phase 8: positioned reads vs. mmap — the report, and the decision
+
+Phase 8 built a `rayon`-parallelized positioned-read path and a memory-mapped
+`ByteSource`, benchmarked them against serial positioned reads across the three
+prioritized workloads, **and then removed the mmap backend** (D1's expected
+outcome: "a tie goes to deleting the feature").
+
+**Machine:** Apple M4 Max, macOS 26 (arm64), warm page cache. Cold-cache and
+Windows numbers are still unmeasured — macOS has no portable way to drop the page
+cache, and this is a macOS-only dev box. The decision does not hinge on them (see
+below).
+
+**Full-frame read** (`ImageHdu::read_full::<i16>`):
+
+| Frame | positioned, serial | positioned, `rayon` | mmap, serial | mmap, `rayon` |
+|---|---|---|---|---|
+| 2048×2048 (8 MB) | 368 µs | **248 µs** (1.5×) | 395 µs | 344 µs |
+| 6144×6144 (72 MB) | 4.51 ms | **1.17 ms** (3.9×) | 5.36 ms | 1.97 ms |
+
+**Header-only scan**, 2000 tiny single-HDU files:
+
+| positioned, serial | `rayon` (files fanned across the pool) | mmap, serial |
+|---|---|---|
+| **23.5 ms** | 24.5 ms | 28.0 ms |
+
+**Region read**, 2048×2048 window from a 6144×6144 frame:
+
+| positioned, serial | positioned, `rayon` | mmap, serial |
+|---|---|---|
+| **924 µs** | 2.53 ms | 821 µs (−11%) |
+
+**Reading of the data:**
+
+- **mmap loses the two workloads that matter.** On full-frame reads it is slower
+  than serial positioned reads (395 µs vs 368 µs; 5.36 ms vs 4.51 ms) — a big
+  `pread` plus decode beats page-fault-driven access with no explicit readahead —
+  and `rayon`-parallelized positioned reads beat *mmap+rayon* by up to 1.7×. On
+  the header scan mmap is 19 % slower (per-file map setup on 8 KB files).
+- **mmap wins only the region read, by ~10 %** (821 µs vs 924 µs, warm cache) — it
+  skips one `pread` syscall per subset row. Not enough to carry a whole feature,
+  an `unsafe` mapping call, the `memmap2` dependency, and the file-truncation
+  footgun (undefined behaviour / `SIGBUS` if a frame on a removable or network
+  volume is shortened while mapped).
+- **`rayon` helps decode-bound work, hurts syscall-bound work.** Parallelizing
+  the full-frame *decode* is a 1.5–3.9× win; parallelizing a region read (many
+  4 KB one-row `pread`s) regressed it ~2.7×, so region reads ship serial.
+- **Peak heap** is unaffected either way: both backends keep the D4 bound
+  (`output + bounded scratch`); mmap's per-`read_full` heap is marginally lower
+  (decodes from the mapping, no scratch) but that's a couple of MB against a
+  multi-MB output.
+
+**Decision (P8-T7): positioned reads only.** `FileSource` is the single backend;
+`ImageHdu::read_full` / `read_region` fan large decodes across `rayon`
+automatically. `MmapSource`, the `mmap` cargo feature, and the `memmap2`
+dependency are removed. A Windows/cold-cache run could still be done for the
+record, but mmap would have to win *both* by a wide margin to overturn a loss on
+macOS/warm across two of three workloads — and the safety cost is platform-independent.
+
+## Regenerating fixtures and baselines
+
+The committed fixture corpus (`tests/fixtures/`) is generated by `cargo xtask fits-fixtures` and
+must be byte-identical on regeneration — the generator is seeded, not randomized. Do not hand-edit
+files under `tests/fixtures/`.
+
+To refresh the committed criterion baselines after a benchmark-relevant change:
+
+```
+cargo bench -p px-fits
+# single-function groups: one file
+cp target/criterion/<group>/new/estimates.json crates/px-fits/benches/baselines/<name>.json
+# multi-function groups (e.g. full_frame, decode): one file per function
+cp target/criterion/<group>/<function>/new/estimates.json \
+   crates/px-fits/benches/baselines/<group>/<function>/estimates.json
+```
+
+Update the table above with the new numbers and machine info in the same commit.

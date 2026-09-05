@@ -16,6 +16,7 @@ px-configuration = { path = "./crates/px-configuration", version = "0.2.0" }
 px-conventions = { path = "./crates/px-conventions", version = "0.2.0" }
 px-fits = { path = "./crates/px-fits", version = "0.2.0" }
 px-fs = { path = "./crates/px-fs", version = "0.2.0" }
+px-imageproc = { path = "./crates/px-imageproc", version = "0.2.0" }
 px-index = { path = "./crates/px-index", version = "0.2.0" }
 px-nativeui = { path = "./crates/px-nativeui", version = "0.2.0" }
 px-pipeline = { path = "./crates/px-pipeline", version = "0.2.0" }
@@ -88,6 +89,14 @@ rayon = "1.10"
 
 # Testing
 insta = { version = "1.46.0", features = ["json", "filters", "redactions"] }
+criterion = "0.5"
+dhat = "0.3"
+proptest = "1"
+
+# FITS I/O
+flate2 = "1"
+# `memmap2` was evaluated as a byte-source backend in ADR 006 Phase 8 and
+# dropped — rayon-parallelized positioned reads beat it. See crates/px-fits.
 
 [workspace.lints.rust]
 #
