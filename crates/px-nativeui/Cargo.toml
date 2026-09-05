@@ -8,7 +8,7 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
-px-fits = { workspace = true }
+px-imageproc = { workspace = true }
 
 anyhow = { workspace = true }
 eframe = "0.30"

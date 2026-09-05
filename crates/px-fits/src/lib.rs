@@ -1,7 +1,6 @@
 pub mod block;
 pub mod card;
 pub mod compress;
-pub mod display;
 pub mod error;
 pub mod hdu;
 pub mod header;

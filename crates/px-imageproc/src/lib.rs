@@ -6,9 +6,19 @@
 //! display normalization, autostretch, and (eventually) calibration,
 //! stacking, and composition.
 //!
-//! Currently empty: scaffolding for ADR 006 Phase 9 (P9-T1). See
-//! `docs/adr/006-native-fits-implementation.md` for the phased plan.
+//! Currently: the preview pipeline behind [`decode_preview`], ported from
+//! `astroimage`. See `docs/adr/006-native-fits-implementation.md` for the
+//! phased plan.
 
+pub mod bayer;
+pub mod binning;
+pub mod color;
+pub mod debayer;
+pub mod downscale;
 pub mod error;
+pub mod preview;
+pub mod stretch;
 
+pub use bayer::BayerPattern;
 pub use error::ImageProcError;
+pub use preview::{MAX_DISPLAY_DIM, PreviewImage, decode_preview};

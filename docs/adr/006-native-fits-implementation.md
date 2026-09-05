@@ -595,28 +595,62 @@ stacking, and composition work planned after this ADR — belong in a separate c
 the same format/processing entanglement this ADR removes from the read path, and calibration/
 stacking will need the same debayer/stretch primitives, so they should not be re-homed twice.
 
-- [ ] **P9-T1** Scaffold `px-imageproc` (workspace member, `Cargo.toml`, empty `lib.rs`),
+- [x] **P9-T1** Scaffold `px-imageproc` (workspace member, `Cargo.toml`, empty `lib.rs`),
       depending on `px-fits`.
-- [ ] **P9-T2** Bayer pattern detection from `BAYERPAT`/`XBAYROFF`/`YBAYROFF`, reading
+- [x] **P9-T2** Bayer pattern detection from `BAYERPAT`/`XBAYROFF`/`YBAYROFF`, reading
       `px-fits::Header`.
-- [ ] **P9-T3** Debayer — bilinear first, correctness-checked against `astroimage` output; VNG
-      or better only if quality demands it.
-- [ ] **P9-T4** BITPIX→display normalization matching `astroimage`'s `ImageConverter::
-      process_data` behavior.
-- [ ] **P9-T5** STF autostretch (midtone transfer function) matching current preview output.
-- [ ] **P9-T6** Integer downscale honouring `MAX_DISPLAY_DIM`, including the even-factor
+- [x] **P9-T3** Debayer: super-pixel (2x2 box) averaging, matching `astroimage`'s
+      `super_pixel_debayer_*` bit-for-bit — that, not bilinear, is what `astroimage` actually
+      does, and strict parity was the chosen bar for this phase. A higher-quality (bilinear/VNG)
+      debayer stays open for whenever preview quality demands it; it is not this crate's only
+      algorithm going forward.
+- [x] **P9-T4** BITPIX→display normalization: reads go through `px_fits::ImageHdu::
+      read_full::<T>()`, which already applies `BSCALE`/`BZERO`; a `u16` fast path is used for
+      the common integer-Bayer case (skips a whole-frame `f32` conversion before debayering),
+      falling back to `f32` otherwise — both routes match `astroimage`'s `ImageConverter::
+      process_data` numerically.
+- [x] **P9-T5** STF autostretch (midtone transfer function) matching current preview output.
+- [x] **P9-T6** Integer downscale honouring `MAX_DISPLAY_DIM`, including the even-factor
       constraint the current Bayer path requires.
-- [ ] **P9-T7** Move `decode_preview`/`PreviewImage` from `px-fits::display` into
+- [x] **P9-T7** Move `decode_preview`/`PreviewImage` from `px-fits::display` into
       `px-imageproc`; keep the signature and `PreviewImage` shape identical. Delete
       `px-fits/src/display.rs`.
-- [ ] **P9-T8** Update `px-nativeui` (`blink.rs`, `blink_iced.rs`) to depend on `px-imageproc`
+- [x] **P9-T8** Update `px-nativeui` (`blink.rs`, `blink_iced.rs`) to depend on `px-imageproc`
       instead of `px-fits::display`.
-- [ ] **P9-T9** Visual regression: preview output for a corpus of frames compared against
-      astroimage's, within a stated per-pixel tolerance.
-- [ ] **P9-T10** Remove the `rustafits` git dependency from `px-fits/Cargo.toml`; delete the dead
-      commented-out `ImageAnalyzer` block.
+- [x] **P9-T9** Visual regression: preview output for a corpus of frames compared against
+      astroimage's, within a stated per-pixel tolerance (`px-imageproc/tests/parity.rs`;
+      `astroimage` is a dev-dependency there, never a runtime one).
+- [x] **P9-T10** Remove the `rustafits` git dependency from `px-fits/Cargo.toml`'s
+      `[dependencies]` (moved to `[dev-dependencies]`, where the Phase 0 baseline benches/tests
+      that compare against it still live); delete the dead commented-out `ImageAnalyzer` block.
 - [ ] **P9-T11** Decide separately whether star analysis (FWHM/eccentricity — currently
-      commented out) is reimplemented or dropped. Out of scope for this ADR either way.
+      commented out) is reimplemented or dropped. Out of scope for this ADR either way. Deferred:
+      not needed right now, and belongs with whatever future ADR expands `px-imageproc` into
+      calibration/stacking/composition rather than being bolted on here.
+
+**Performance note: SIMD, considered and deferred.** The initial `f32`-everywhere port of the
+Bayer preview path benchmarked ~3.7x slower than `astroimage`'s hand-tuned NEON/AVX2 intrinsics
+(52ms vs 14ms at 4096x4096). Adding a `u16` fast path that debayers straight from the on-disk
+integer type (skipping a whole-frame `f32` conversion first) closed most of that gap
+(19ms, ~1.4x). The remaining gap was not closed with explicit SIMD:
+
+- The debayer/read step is memory-bound (32MB read, 48MB written per 4096x4096 frame), where
+  wider vector registers stop helping once memory bandwidth is saturated — this is the same
+  reasoning behind D2's "branch-free scalar, let LLVM autovectorize" choice for `px-fits`'s own
+  decode path. The STF stretch step is more compute-bound and would show a bigger SIMD multiple,
+  but it only runs on the already-downscaled (≤2048x2048) output, a small fraction of total time.
+- `std::simd` (`core::simd`, the portable-SIMD API) is nightly-only with no committed
+  stabilization date, so "stable today, drop the dependency later" isn't a same-API swap either
+  way. The real options on stable are: raw `std::arch` intrinsics (what `astroimage` does —
+  permanent, stable, but ~4x code duplication per kernel across NEON/SSE2/AVX2/scalar, each
+  behind `unsafe`); or a portable-SIMD shim crate (`wide` is already in the dependency tree
+  transitively via `image`/`nalgebra`) modeled on the `std::simd` design, which avoids the
+  per-arch duplication at the cost of a manual (not automatic) rewrite whenever `std::simd`
+  eventually stabilizes.
+
+Decision: ship the `u16` fast path, stop there. Revisit with profiling data (not a guess) if a
+future need makes the remaining ~1.4x matter — `wide` is the first thing to reach for over raw
+`std::arch`, since it's already available and keeps kernels arch-generic.
 
 ---
 

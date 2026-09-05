@@ -17,7 +17,6 @@ regex = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
-rustafits = { git = "https://github.com/KyleLeneau/rustafits", branch = "jpg-feature"}
 
 [dev-dependencies]
 criterion = { workspace = true }
@@ -25,6 +24,9 @@ dhat = { workspace = true }
 proptest = { workspace = true }
 rayon = { workspace = true }
 tempfile = { workspace = true }
+# Phase 0 baseline comparisons only (benches/tests), never a runtime
+# dependency — ADR 006 P9-T10 removed it from [dependencies].
+rustafits = { git = "https://github.com/KyleLeneau/rustafits", branch = "jpg-feature" }
 
 [[bench]]
 name = "header_scan"

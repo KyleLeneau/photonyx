@@ -32,7 +32,7 @@ use iced::{
     widget::{column, container, image, pick_list, row, rule, space, stack, text},
 };
 
-use px_fits::display::{MAX_DISPLAY_DIM, decode_preview};
+use px_imageproc::{MAX_DISPLAY_DIM, decode_preview};
 
 use crate::blink::BlinkAppDelegate;
 

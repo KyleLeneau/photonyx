@@ -5146,7 +5146,10 @@ dependencies = [
 name = "px-imageproc"
 version = "0.2.0"
 dependencies = [
+ "criterion",
  "px-fits",
+ "rayon",
+ "rustafits",
  "tempfile",
  "thiserror 1.0.69",
 ]
@@ -5176,7 +5179,7 @@ dependencies = [
  "eframe",
  "egui-phosphor",
  "iced",
- "px-fits",
+ "px-imageproc",
  "rayon",
 ]
 
