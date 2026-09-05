@@ -185,6 +185,11 @@ pub(crate) fn decode<T: Pixel>(
 /// - `BLANK` present: per-element compare; a raw value equal to `BLANK`
 ///   becomes `NaN` for float targets and passes through unscaled for
 ///   integer targets (ADR 006 P3-T2).
+// `as_chunks::<R::NBYTES>()` (clippy's own suggestion) doesn't compile: N
+// depends on a generic type parameter, which needs the unstable
+// `generic_const_exprs` feature. `chunks_exact` stays the only option
+// short of a macro-generated concrete function per `RawSample` impl.
+#[allow(unknown_lints, clippy::chunks_exact_to_as_chunks)]
 fn decode_int<T: Pixel, R: RawSample>(dst: &mut [T], src: &[u8], s: &Scaling) {
     let chunks = src.chunks_exact(R::NBYTES);
     match (s.blank, s.int_offset()) {
@@ -219,6 +224,8 @@ fn decode_int<T: Pixel, R: RawSample>(dst: &mut [T], src: &[u8], s: &Scaling) {
 
 /// Floating `BITPIX` (`-32`, `-64`). `BLANK` does not apply — an undefined
 /// pixel is already an IEEE `NaN` in-band (FITS Standard 4.0 §4.4.2.6).
+// See the `#[allow]` on `decode_int` above: same generic-const limitation.
+#[allow(unknown_lints, clippy::chunks_exact_to_as_chunks)]
 fn decode_float<T: Pixel, R: RawSample>(dst: &mut [T], src: &[u8], s: &Scaling) {
     let chunks = src.chunks_exact(R::NBYTES);
     if s.is_identity() {
