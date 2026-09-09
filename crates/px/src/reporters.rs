@@ -26,6 +26,13 @@ impl From<Printer> for DefaultPipelineReporter {
     }
 }
 
+impl Printer {
+    /// Build a progress reporter that draws to this printer's target.
+    pub(crate) fn reporter(self) -> DefaultPipelineReporter {
+        self.into()
+    }
+}
+
 impl DefaultPipelineReporter {
     fn spinner(&self, msg: impl Into<String>) -> ProgressBar {
         let pb = self.bar.add(ProgressBar::new_spinner());

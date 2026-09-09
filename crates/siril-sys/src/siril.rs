@@ -179,7 +179,7 @@ impl Default for Builder {
             memory_limit: MemoryLimit::Ratio(0.9),
             fits_extension: FitsExt::FITS,
             use_32bit: true,
-            output_sink: OutputSink::Inherit,
+            output_sink: OutputSink::Discard,
         }
     }
 }

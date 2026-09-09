@@ -93,10 +93,7 @@ pub(crate) async fn calibrate_observation(
         .maybe_dark(args.dark)
         .maybe_flat(args.flat)
         .build()
-        .run(
-            DefaultPipelineReporter::from(printer),
-            Builder::default().output_sink(siril_sys::OutputSink::Discard),
-        )
+        .run(DefaultPipelineReporter::from(printer), Builder::default())
         .await?;
 
     printer.success(format!(

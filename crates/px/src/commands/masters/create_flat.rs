@@ -74,10 +74,7 @@ pub(crate) async fn create_master_flat(
         .bias(bias)
         .filter(args.filter)
         .build()
-        .run(
-            DefaultPipelineReporter::from(printer),
-            Builder::default().output_sink(siril_sys::OutputSink::Discard),
-        )
+        .run(DefaultPipelineReporter::from(printer), Builder::default())
         .await?;
 
     // Pretty print the result

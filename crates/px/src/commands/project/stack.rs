@@ -97,9 +97,7 @@ async fn stack_single_framing(
             cached
         } else {
             any_restacked = true;
-            let builder = Builder::default()
-                .output_sink(siril_sys::OutputSink::Discard)
-                .use_extension(ext.clone());
+            let builder = Builder::default().use_extension(ext.clone());
             printer.info(format!("stacking single framing layer: {:?}", stack.name))?;
             run_master_light(builder, stack, project_dir, printer).await?
         };
@@ -126,9 +124,7 @@ async fn stack_single_framing(
             || old_single.is_none_or(|s| s.master_lights.iter().any(|l| l.is_registration_dirty()));
 
         if reg_dirty {
-            let builder = Builder::default()
-                .output_sink(siril_sys::OutputSink::Discard)
-                .use_extension(ext.clone());
+            let builder = Builder::default().use_extension(ext.clone());
             register_layers(builder, master_light_paths, project_dir, printer).await?;
 
             for (entry, stack) in new_single
@@ -197,9 +193,7 @@ async fn stack_spiral_mosiac_framing(
         printer.info("spiral mosaic: up to date, skipping")?;
         cached
     } else {
-        let builder = Builder::default()
-            .output_sink(siril_sys::OutputSink::Discard)
-            .use_extension(ext.clone());
+        let builder = Builder::default().use_extension(ext.clone());
 
         let light_folders = framing
             .observations
@@ -247,9 +241,7 @@ async fn stack_grid_mosiac_framing(
     clean: bool,
 ) -> Result<()> {
     let ext = FitsExt::FIT;
-    let builder = Builder::default()
-        .output_sink(siril_sys::OutputSink::Discard)
-        .use_extension(ext.clone());
+    let builder = Builder::default().use_extension(ext.clone());
 
     let existing_lock = if clean {
         None

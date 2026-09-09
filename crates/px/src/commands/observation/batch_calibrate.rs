@@ -131,10 +131,7 @@ pub(crate) async fn batch_calibrate_observations(
             .maybe_dark(dark)
             .maybe_flat(flat)
             .build()
-            .run(
-                DefaultPipelineReporter::from(printer),
-                Builder::default().output_sink(siril_sys::OutputSink::Discard),
-            )
+            .run(DefaultPipelineReporter::from(printer), Builder::default())
             .await;
 
         match result {

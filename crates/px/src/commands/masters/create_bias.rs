@@ -1,4 +1,4 @@
-use crate::{ExitStatus, printer::Printer, reporters::DefaultPipelineReporter, utils::to_fits_ext};
+use crate::{ExitStatus, printer::Printer, utils::to_fits_ext};
 use anyhow::Result;
 use px_cli::CreateBiasMasterArgs;
 use px_index::ProfileIndex;
@@ -31,10 +31,7 @@ pub(crate) async fn create_master_bias(
         .raw_folder(args.raw_folder)
         .out_folder(out_folder)
         .build()
-        .run(
-            DefaultPipelineReporter::from(printer),
-            Builder::default().output_sink(siril_sys::OutputSink::Discard),
-        )
+        .run(printer.reporter(), Builder::default())
         .await?;
 
     // Pretty print the result

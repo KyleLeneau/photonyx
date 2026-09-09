@@ -31,10 +31,7 @@ pub(crate) async fn create_master_dark(
         .raw_folder(args.raw_folder)
         .out_folder(out_folder)
         .build()
-        .run(
-            DefaultPipelineReporter::from(printer),
-            Builder::default().output_sink(siril_sys::OutputSink::Discard),
-        )
+        .run(DefaultPipelineReporter::from(printer), Builder::default())
         .await?;
 
     // Pretty print the result

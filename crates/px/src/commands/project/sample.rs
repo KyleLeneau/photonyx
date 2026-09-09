@@ -16,7 +16,7 @@ use px_pipeline::{
         },
     },
 };
-use siril_sys::{Builder, FitsExt, OutputSink};
+use siril_sys::{Builder, FitsExt};
 
 use crate::{ExitStatus, printer::Printer, reporters::DefaultPipelineReporter};
 
@@ -94,9 +94,7 @@ pub(crate) async fn create_project_samples(
         let label = sample.dir_name();
         printer.info(format!("Producing {label} sample..."))?;
 
-        let builder = Builder::default()
-            .output_sink(OutputSink::Discard)
-            .use_extension(ext.clone());
+        let builder = Builder::default().use_extension(ext.clone());
 
         let result = CreateColorSamplePipeline::builder()
             .ext(ext.clone())
