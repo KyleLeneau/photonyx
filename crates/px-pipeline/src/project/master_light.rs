@@ -2,18 +2,16 @@
 //! Outputs new linear stack to output folder.
 //!
 
-use std::path::{Path, PathBuf};
-
-use crate::meta::LinearStackMetadata;
 use crate::model::MasterLight;
+use crate::{PipelineReporter, error::PipelineError};
+use crate::{RunIn, meta::LinearStackMetadata};
 use px_fs::Glob;
 use siril_sys::{
     BestRejection, FitsExt,
     commands::{Convert, Load, Register, SeqApplyReg, SeqSubSky, Stack},
     siril_ext::{CdExt, MirrorxExt, SaveExt},
 };
-
-use crate::{PipelineReporter, error::PipelineError};
+use std::path::{Path, PathBuf};
 
 #[derive(bon::Builder)]
 pub struct CreateMasterLightPipeline {
@@ -26,8 +24,10 @@ pub struct CreateMasterLightPipeline {
     pub out_folder: PathBuf,
 }
 
-impl CreateMasterLightPipeline {
-    pub async fn run_siril(
+impl RunIn<siril_sys::Builder> for CreateMasterLightPipeline {
+    type Output = MasterLight;
+
+    async fn run(
         &self,
         reporter: impl PipelineReporter,
         siril_builder: siril_sys::Builder,

@@ -3,11 +3,14 @@ use std::path::PathBuf;
 use crate::error::PipelineError;
 
 pub mod calibration;
+pub mod environment;
 pub mod error;
 pub mod meta;
 pub mod model;
 pub mod pause;
 pub mod project;
+
+pub use environment::RunIn;
 
 pub trait PipelineReporter {
     fn step_started(&self, message: &str) -> usize;

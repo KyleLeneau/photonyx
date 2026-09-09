@@ -2,10 +2,10 @@
 //! Outputs all calibrated frames to output folder.
 //!
 
-use std::path::PathBuf;
-
+use crate::RunIn;
 use crate::meta::{CalibrationMetadata, ObservationMetadata};
 use crate::model::CalibratedLight;
+use crate::{PipelineReporter, error::PipelineError};
 use px_fits::{all_color_raw_frames, all_fits_files};
 use px_fs::{OptionPath, move_file};
 use siril_sys::{
@@ -13,8 +13,7 @@ use siril_sys::{
     commands::{Calibrate, CalibrateSingle, Convert},
     siril_ext::CdExt,
 };
-
-use crate::{PipelineReporter, error::PipelineError};
+use std::path::PathBuf;
 
 #[derive(bon::Builder)]
 pub struct CalibrateLightSetPipeline {
@@ -28,8 +27,10 @@ pub struct CalibrateLightSetPipeline {
 
 // raw light frame calibration with siril
 //
-impl CalibrateLightSetPipeline {
-    pub async fn run_siril(
+impl RunIn<siril_sys::Builder> for CalibrateLightSetPipeline {
+    type Output = CalibratedLight;
+
+    async fn run(
         &self,
         reporter: impl PipelineReporter,
         siril_builder: siril_sys::Builder,

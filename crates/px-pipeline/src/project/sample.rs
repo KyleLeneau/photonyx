@@ -4,8 +4,7 @@
 //! when only one filter is available. Output goes to `{out_folder}/{mix_name}/sample_result.*`.
 //!
 
-use std::path::{Path, PathBuf};
-
+use crate::{PipelineReporter, RunIn, error::PipelineError};
 use siril_sys::{
     FitsExt, RGBImage, Siril, SirilError,
     commands::{
@@ -14,8 +13,7 @@ use siril_sys::{
     },
     siril_ext::LoadExt,
 };
-
-use crate::{PipelineReporter, error::PipelineError};
+use std::path::{Path, PathBuf};
 
 // Constants used for scaled stretches
 const DEFAULT_BOOST_LEVEL: usize = 1;
@@ -238,8 +236,10 @@ pub struct CreateColorSamplePipeline {
     pub out_folder: PathBuf,
 }
 
-impl CreateColorSamplePipeline {
-    pub async fn run_siril(
+impl RunIn<siril_sys::Builder> for CreateColorSamplePipeline {
+    type Output = PathBuf;
+
+    async fn run(
         &self,
         reporter: impl PipelineReporter,
         siril_builder: siril_sys::Builder,

@@ -1,18 +1,17 @@
 //! Pipeline for creating a master bias from an array of raw bias frames
 //!
 
-use std::path::PathBuf;
-
-use crate::meta::CalibrationMetadata;
+use crate::RunIn;
+use crate::error::PipelineError;
 use crate::model::MasterDark;
+use crate::{PipelineReporter, meta::CalibrationMetadata};
 use px_fits::all_fits_files;
 use siril_sys::{
     FitsExt,
     commands::{Convert, Stack},
     siril_ext::CdExt,
 };
-
-use crate::error::PipelineError;
+use std::path::PathBuf;
 
 #[derive(bon::Builder)]
 pub struct CreateMasterDarkPipeline {
@@ -23,9 +22,12 @@ pub struct CreateMasterDarkPipeline {
 
 // master dark pipeline with siril
 //
-impl CreateMasterDarkPipeline {
-    pub async fn run_siril(
+impl RunIn<siril_sys::Builder> for CreateMasterDarkPipeline {
+    type Output = MasterDark;
+
+    async fn run(
         &self,
+        _reporter: impl PipelineReporter,
         siril_builder: siril_sys::Builder,
     ) -> Result<MasterDark, PipelineError> {
         let raw_files = all_fits_files(&self.raw_folder)?;

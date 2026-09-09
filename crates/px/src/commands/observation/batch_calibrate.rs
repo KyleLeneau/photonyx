@@ -4,7 +4,7 @@ use anyhow::Result;
 use px_cli::BatchCalibrateObservationArgs;
 use px_conventions::observation::ObservationPath;
 use px_index::{MasterKind, ProfileIndex};
-use px_pipeline::calibration::calibrate_light::CalibrateLightSetPipeline;
+use px_pipeline::{RunIn, calibration::calibrate_light::CalibrateLightSetPipeline};
 use siril_sys::Builder;
 
 use crate::{ExitStatus, printer::Printer, reporters::DefaultPipelineReporter, utils::to_fits_ext};
@@ -131,7 +131,7 @@ pub(crate) async fn batch_calibrate_observations(
             .maybe_dark(dark)
             .maybe_flat(flat)
             .build()
-            .run_siril(
+            .run(
                 DefaultPipelineReporter::from(printer),
                 Builder::default().output_sink(siril_sys::OutputSink::Discard),
             )

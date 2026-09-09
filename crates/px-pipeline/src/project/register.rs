@@ -2,14 +2,12 @@
 //! Outputs new registered linear stacks to an output folder.
 //!
 
-use std::path::PathBuf;
-
+use crate::{PipelineReporter, RunIn, all_paths_exist, error::PipelineError};
 use siril_sys::{
     ConversionFile, FitsExt, SequenceFraming,
     commands::{Convert, Register, SeqApplyReg},
 };
-
-use crate::{PipelineReporter, all_paths_exist, error::PipelineError};
+use std::path::PathBuf;
 
 #[derive(bon::Builder)]
 pub struct RegisterMasterLightPipeline {
@@ -18,10 +16,12 @@ pub struct RegisterMasterLightPipeline {
     pub out_folder: PathBuf,
 }
 
-impl RegisterMasterLightPipeline {
+impl RunIn<siril_sys::Builder> for RegisterMasterLightPipeline {
+    type Output = ();
+
     /// Registers linear stacks to their minimum frame overlap.
     ///
-    pub async fn run_min_frame_siril(
+    async fn run(
         &self,
         reporter: impl PipelineReporter,
         siril_builder: siril_sys::Builder,

@@ -1,8 +1,8 @@
-use crate::{ExitStatus, printer::Printer, utils::to_fits_ext};
+use crate::{ExitStatus, printer::Printer, reporters::DefaultPipelineReporter, utils::to_fits_ext};
 use anyhow::Result;
 use px_cli::CreateDarkMasterArgs;
 use px_index::ProfileIndex;
-use px_pipeline::calibration::master_dark::CreateMasterDarkPipeline;
+use px_pipeline::{RunIn, calibration::master_dark::CreateMasterDarkPipeline};
 use siril_sys::Builder;
 
 pub(crate) async fn create_master_dark(
@@ -31,7 +31,10 @@ pub(crate) async fn create_master_dark(
         .raw_folder(args.raw_folder)
         .out_folder(out_folder)
         .build()
-        .run_siril(Builder::default().output_sink(siril_sys::OutputSink::Discard))
+        .run(
+            DefaultPipelineReporter::from(printer),
+            Builder::default().output_sink(siril_sys::OutputSink::Discard),
+        )
         .await?;
 
     // Pretty print the result

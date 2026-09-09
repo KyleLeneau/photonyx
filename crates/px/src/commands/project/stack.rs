@@ -10,9 +10,11 @@ use px_configuration::{
 };
 use px_conventions::{observation::ObservationPath, project::ProjectPath};
 use px_pipeline::{
-    project::master_light::{CreateMasterLightPipeline, registered_master_light_path},
+    RunIn,
     project::{
-        grid_mosiac::GridMosiacPipeline, register::RegisterMasterLightPipeline,
+        grid_mosiac::GridMosiacPipeline,
+        master_light::{CreateMasterLightPipeline, registered_master_light_path},
+        register::RegisterMasterLightPipeline,
         spiral_mosiac::SpiralMosiacPipeline,
     },
 };
@@ -213,7 +215,7 @@ async fn stack_spiral_mosiac_framing(
             .maybe_feather_pixels(Some(framing.feather_pixels))
             .out_folder(project_dir.to_path_buf())
             .build()
-            .run_siril(DefaultPipelineReporter::from(printer), builder)
+            .run(DefaultPipelineReporter::from(printer), builder)
             .await?;
 
         printer.success(format!(
@@ -319,7 +321,7 @@ async fn stack_grid_mosiac_framing(
                 .background_extract(true)
                 .out_folder(project_dir.to_path_buf())
                 .build()
-                .run_siril(DefaultPipelineReporter::from(printer), builder.clone())
+                .run(DefaultPipelineReporter::from(printer), builder.clone())
                 .await?;
 
             printer.success(format!(
@@ -410,7 +412,7 @@ async fn run_master_light(
         .background_extract(stack.extract_background)
         .out_folder(project_dir.to_path_buf())
         .build()
-        .run_siril(DefaultPipelineReporter::from(printer), siril_builder)
+        .run(DefaultPipelineReporter::from(printer), siril_builder)
         .await?;
 
     printer.success(format!(
@@ -434,7 +436,7 @@ async fn register_layers(
         .master_lights(master_lights)
         .out_folder(project_dir.to_path_buf())
         .build()
-        .run_min_frame_siril(DefaultPipelineReporter::from(printer), siril_builder)
+        .run(DefaultPipelineReporter::from(printer), siril_builder)
         .await?;
 
     printer.success("Master LIGHT registration completed")?;

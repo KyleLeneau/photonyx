@@ -8,9 +8,12 @@ use px_configuration::{
 };
 use px_conventions::project::ProjectPath;
 use px_pipeline::{
-    project::master_light::{master_light_path, registered_master_light_path},
-    project::sample::{
-        CreateColorSamplePipeline, FilteredStack, SampleOutputFormats, detect_color_mixes,
+    RunIn,
+    project::{
+        master_light::{master_light_path, registered_master_light_path},
+        sample::{
+            CreateColorSamplePipeline, FilteredStack, SampleOutputFormats, detect_color_mixes,
+        },
     },
 };
 use siril_sys::{Builder, FitsExt, OutputSink};
@@ -102,7 +105,7 @@ pub(crate) async fn create_project_samples(
             .output_formats(output_formats)
             .out_folder(samples_dir.clone())
             .build()
-            .run_siril(DefaultPipelineReporter::from(printer), builder)
+            .run(DefaultPipelineReporter::from(printer), builder)
             .await;
 
         match result {

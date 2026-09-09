@@ -3,6 +3,7 @@ use anyhow::Result;
 use px_cli::CreateFlatMasterArgs;
 use px_fits::all_fits_files;
 use px_index::{MatchCriteria, ProfileIndex};
+use px_pipeline::RunIn;
 use px_pipeline::calibration::master_flat::CreateMasterFlatPipeline;
 use px_pipeline::meta::CalibrationMetadata;
 use siril_sys::Builder;
@@ -73,7 +74,7 @@ pub(crate) async fn create_master_flat(
         .bias(bias)
         .filter(args.filter)
         .build()
-        .run_siril(
+        .run(
             DefaultPipelineReporter::from(printer),
             Builder::default().output_sink(siril_sys::OutputSink::Discard),
         )
