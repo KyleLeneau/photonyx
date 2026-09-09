@@ -8,7 +8,7 @@ use crate::meta::LinearStackMetadata;
 use crate::model::MasterLight;
 use px_fs::Glob;
 use siril_sys::{
-    BestRejection, Builder, FitsExt,
+    BestRejection, FitsExt,
     commands::{Convert, Load, Register, SeqApplyReg, SeqSubSky, Stack},
     siril_ext::{CdExt, MirrorxExt, SaveExt},
 };
@@ -17,7 +17,6 @@ use crate::{PipelineReporter, error::PipelineError};
 
 #[derive(bon::Builder)]
 pub struct CreateMasterLightPipeline {
-    pub siril_builder: Builder,
     pub ext: FitsExt,
     pub light_folders: Vec<PathBuf>,
     pub name: String,
@@ -28,7 +27,11 @@ pub struct CreateMasterLightPipeline {
 }
 
 impl CreateMasterLightPipeline {
-    pub async fn run(&self, reporter: impl PipelineReporter) -> Result<MasterLight, PipelineError> {
+    pub async fn run_siril(
+        &self,
+        reporter: impl PipelineReporter,
+        siril_builder: siril_sys::Builder,
+    ) -> Result<MasterLight, PipelineError> {
         if self.light_folders.is_empty() {
             return Err(PipelineError::FileNotFound(
                 "missing light_folders".to_string(),
@@ -36,8 +39,8 @@ impl CreateMasterLightPipeline {
         }
 
         // Setup siril
-        let ext = self.siril_builder.ext();
-        let mut siril = self.siril_builder.clone().build().await?;
+        let ext = siril_builder.ext();
+        let mut siril = siril_builder.build().await?;
 
         // manage the sequence
         let mut prefix = String::from("light_");

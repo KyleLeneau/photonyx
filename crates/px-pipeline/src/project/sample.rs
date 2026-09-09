@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use siril_sys::{
-    Builder, FitsExt, RGBImage, Siril, SirilError,
+    FitsExt, RGBImage, Siril, SirilError,
     commands::{
         Autostretch, Load, Pcc, Platesolve, Rgbcomp, Rmgreen, Satu, Save, Savejpg, Savepng,
         Savetif, Unpurple,
@@ -229,7 +229,6 @@ pub struct SampleOutputFormats {
 /// absolute path so no files are copied. Outputs are written to `{out_folder}/{mix_name}/`.
 #[derive(bon::Builder)]
 pub struct CreateColorSamplePipeline {
-    pub siril_builder: Builder,
     pub ext: FitsExt,
     pub sample: ColorSample,
     #[builder(default = false)]
@@ -240,9 +239,13 @@ pub struct CreateColorSamplePipeline {
 }
 
 impl CreateColorSamplePipeline {
-    pub async fn run(&self, reporter: impl PipelineReporter) -> Result<PathBuf, PipelineError> {
-        let ext = self.siril_builder.ext();
-        let mut siril = self.siril_builder.clone().build().await?;
+    pub async fn run_siril(
+        &self,
+        reporter: impl PipelineReporter,
+        siril_builder: siril_sys::Builder,
+    ) -> Result<PathBuf, PipelineError> {
+        let ext = siril_builder.ext();
+        let mut siril = siril_builder.build().await?;
 
         let label = self.sample.dir_name();
         let id = reporter.step_started(&format!("[{label}] Composing sample..."));

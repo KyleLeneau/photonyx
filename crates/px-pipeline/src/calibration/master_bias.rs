@@ -7,7 +7,7 @@ use crate::meta::CalibrationMetadata;
 use crate::model::MasterBias;
 use px_fits::all_fits_files;
 use siril_sys::{
-    Builder, FitsExt,
+    FitsExt,
     commands::{Convert, Stack},
     siril_ext::CdExt,
 };
@@ -16,14 +16,18 @@ use crate::error::PipelineError;
 
 #[derive(bon::Builder)]
 pub struct CreateMasterBiasPipeline {
-    pub siril_builder: Builder,
     pub ext: FitsExt,
     pub raw_folder: PathBuf,
     pub out_folder: PathBuf,
 }
 
+// master bias pipeline using siril
+//
 impl CreateMasterBiasPipeline {
-    pub async fn run(&self) -> Result<MasterBias, PipelineError> {
+    pub async fn run_siril(
+        &self,
+        siril_builder: siril_sys::Builder,
+    ) -> Result<MasterBias, PipelineError> {
         let raw_files = all_fits_files(&self.raw_folder)?;
         if raw_files.is_empty() {
             return Err(PipelineError::FileNotFound(
@@ -35,9 +39,7 @@ impl CreateMasterBiasPipeline {
         let name = CalibrationMetadata::from(raw_files.first().unwrap())?.master_bias_name();
         let output_file = self.out_folder.join(name).display().to_string();
 
-        let mut siril = self
-            .siril_builder
-            .clone()
+        let mut siril = siril_builder
             .use_extension(self.ext.clone())
             .build()
             .await?;

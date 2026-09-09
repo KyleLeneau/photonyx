@@ -7,7 +7,7 @@ use crate::meta::CalibrationMetadata;
 use crate::model::MasterDark;
 use px_fits::all_fits_files;
 use siril_sys::{
-    Builder, FitsExt,
+    FitsExt,
     commands::{Convert, Stack},
     siril_ext::CdExt,
 };
@@ -16,14 +16,18 @@ use crate::error::PipelineError;
 
 #[derive(bon::Builder)]
 pub struct CreateMasterDarkPipeline {
-    pub siril_builder: Builder,
     pub ext: FitsExt,
     pub raw_folder: PathBuf,
     pub out_folder: PathBuf,
 }
 
+// master dark pipeline with siril
+//
 impl CreateMasterDarkPipeline {
-    pub async fn run(&self) -> Result<MasterDark, PipelineError> {
+    pub async fn run_siril(
+        &self,
+        siril_builder: siril_sys::Builder,
+    ) -> Result<MasterDark, PipelineError> {
         let raw_files = all_fits_files(&self.raw_folder)?;
         if raw_files.is_empty() {
             return Err(PipelineError::FileNotFound(
@@ -35,9 +39,7 @@ impl CreateMasterDarkPipeline {
         let name = CalibrationMetadata::from(raw_files.first().unwrap())?.master_dark_name();
         let output_file = self.out_folder.join(name).display().to_string();
 
-        let mut siril = self
-            .siril_builder
-            .clone()
+        let mut siril = siril_builder
             .use_extension(self.ext.clone())
             .build()
             .await?;

@@ -5,7 +5,7 @@ use px_cli::CalibrateObservationArgs;
 use px_conventions::observation::ObservationPath;
 use px_fits::all_fits_files;
 use px_index::{MasterKind, ProfileIndex};
-use px_pipeline::calibrate_light::CalibrateLightSetPipeline;
+use px_pipeline::calibration::calibrate_light::CalibrateLightSetPipeline;
 use siril_sys::Builder;
 
 use crate::{ExitStatus, printer::Printer, reporters::DefaultPipelineReporter, utils::to_fits_ext};
@@ -87,14 +87,16 @@ pub(crate) async fn calibrate_observation(
 
     let light = CalibrateLightSetPipeline::builder()
         .ext(to_fits_ext(args.ext))
-        .siril_builder(Builder::default().output_sink(siril_sys::OutputSink::Discard))
         .raw_folder(args.raw_folder)
         .out_folder(resolved_out_folder.clone())
         .maybe_bias(args.bias)
         .maybe_dark(args.dark)
         .maybe_flat(args.flat)
         .build()
-        .run(DefaultPipelineReporter::from(printer))
+        .run_siril(
+            DefaultPipelineReporter::from(printer),
+            Builder::default().output_sink(siril_sys::OutputSink::Discard),
+        )
         .await?;
 
     printer.success(format!(

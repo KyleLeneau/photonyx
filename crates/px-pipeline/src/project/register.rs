@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use siril_sys::{
-    Builder, ConversionFile, FitsExt, SequenceFraming,
+    ConversionFile, FitsExt, SequenceFraming,
     commands::{Convert, Register, SeqApplyReg},
 };
 
@@ -13,7 +13,6 @@ use crate::{PipelineReporter, all_paths_exist, error::PipelineError};
 
 #[derive(bon::Builder)]
 pub struct RegisterMasterLightPipeline {
-    pub siril_builder: Builder,
     pub ext: FitsExt,
     pub master_lights: Vec<PathBuf>,
     pub out_folder: PathBuf,
@@ -22,17 +21,16 @@ pub struct RegisterMasterLightPipeline {
 impl RegisterMasterLightPipeline {
     /// Registers linear stacks to their minimum frame overlap.
     ///
-    pub async fn run_min_frame(
+    pub async fn run_min_frame_siril(
         &self,
         reporter: impl PipelineReporter,
+        siril_builder: siril_sys::Builder,
     ) -> Result<(), PipelineError> {
         // Validate all the input folders exist
         all_paths_exist(self.master_lights.clone())?;
 
         // Setup siril
-        let mut siril = self
-            .siril_builder
-            .clone()
+        let mut siril = siril_builder
             .use_extension(self.ext.clone())
             .build()
             .await?;

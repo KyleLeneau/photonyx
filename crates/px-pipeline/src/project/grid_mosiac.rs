@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use crate::meta::LinearStackMetadata;
 use crate::model::MasterLight;
 use siril_sys::{
-    Builder, FitsExt, SequenceFraming,
+    FitsExt, SequenceFraming,
     commands::{Convert, Load, Platesolve, SeqApplyReg, SeqSubSky, Seqplatesolve, Stack},
     siril_ext::SaveExt,
 };
@@ -17,7 +17,6 @@ use crate::{PipelineReporter, error::PipelineError, project::master_light::maste
 
 #[derive(bon::Builder)]
 pub struct GridMosiacPipeline {
-    pub siril_builder: Builder,
     pub ext: FitsExt,
     pub tile_master_lights: Vec<PathBuf>,
     pub name: String,
@@ -29,7 +28,11 @@ pub struct GridMosiacPipeline {
 }
 
 impl GridMosiacPipeline {
-    pub async fn run(&self, reporter: impl PipelineReporter) -> Result<MasterLight, PipelineError> {
+    pub async fn run_siril(
+        &self,
+        reporter: impl PipelineReporter,
+        siril_builder: siril_sys::Builder,
+    ) -> Result<MasterLight, PipelineError> {
         if self.tile_master_lights.is_empty() {
             return Err(PipelineError::FileNotFound(
                 "missing tile_master_lights".to_string(),
@@ -37,8 +40,8 @@ impl GridMosiacPipeline {
         }
 
         // Setup siril
-        let ext = self.siril_builder.ext();
-        let mut siril = self.siril_builder.clone().build().await?;
+        let ext = siril_builder.ext();
+        let mut siril = siril_builder.build().await?;
 
         for input in &self.tile_master_lights {
             std::fs::copy(

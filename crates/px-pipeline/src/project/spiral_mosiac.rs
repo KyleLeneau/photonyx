@@ -9,7 +9,7 @@ use crate::meta::LinearStackMetadata;
 use crate::model::MasterLight;
 use px_fs::Glob;
 use siril_sys::{
-    BestRejection, Builder, FitsExt, SequenceFraming,
+    BestRejection, FitsExt, SequenceFraming,
     commands::{Convert, Load, Platesolve, SeqApplyReg, Seqplatesolve, Stack},
     siril_ext::{CdExt, SaveExt},
 };
@@ -18,7 +18,6 @@ use crate::{PipelineReporter, error::PipelineError, project::master_light::maste
 
 #[derive(bon::Builder)]
 pub struct SpiralMosiacPipeline {
-    pub siril_builder: Builder,
     pub ext: FitsExt,
     pub light_folders: Vec<PathBuf>,
     pub name: String,
@@ -28,7 +27,11 @@ pub struct SpiralMosiacPipeline {
 }
 
 impl SpiralMosiacPipeline {
-    pub async fn run(&self, reporter: impl PipelineReporter) -> Result<MasterLight, PipelineError> {
+    pub async fn run_siril(
+        &self,
+        reporter: impl PipelineReporter,
+        siril_builder: siril_sys::Builder,
+    ) -> Result<MasterLight, PipelineError> {
         if self.light_folders.is_empty() {
             return Err(PipelineError::FileNotFound(
                 "missing light_folders".to_string(),
@@ -36,8 +39,8 @@ impl SpiralMosiacPipeline {
         }
 
         // Setup siril
-        let ext = self.siril_builder.ext();
-        let mut siril = self.siril_builder.clone().build().await?;
+        let ext = siril_builder.ext();
+        let mut siril = siril_builder.build().await?;
 
         // manage the sequence
         let mut prefix = String::from("light_");

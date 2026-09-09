@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use crate::error::PipelineError;
 
-pub mod calibrate_light;
 pub mod calibration;
 pub mod error;
 pub mod meta;

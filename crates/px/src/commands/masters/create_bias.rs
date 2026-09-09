@@ -28,11 +28,10 @@ pub(crate) async fn create_master_bias(
 
     let master = CreateMasterBiasPipeline::builder()
         .ext(to_fits_ext(args.ext))
-        .siril_builder(Builder::default().output_sink(siril_sys::OutputSink::Discard))
         .raw_folder(args.raw_folder)
         .out_folder(out_folder)
         .build()
-        .run()
+        .run_siril(Builder::default().output_sink(siril_sys::OutputSink::Discard))
         .await?;
 
     // Pretty print the result

@@ -68,13 +68,15 @@ pub(crate) async fn create_master_flat(
 
     let master = CreateMasterFlatPipeline::builder()
         .ext(to_fits_ext(args.ext))
-        .siril_builder(Builder::default().output_sink(siril_sys::OutputSink::Discard))
         .raw_folder(args.raw_folder)
         .out_folder(out_folder)
         .bias(bias)
         .filter(args.filter)
         .build()
-        .run(DefaultPipelineReporter::from(printer))
+        .run_siril(
+            DefaultPipelineReporter::from(printer),
+            Builder::default().output_sink(siril_sys::OutputSink::Discard),
+        )
         .await?;
 
     // Pretty print the result

@@ -206,7 +206,6 @@ async fn stack_spiral_mosiac_framing(
             .collect::<Result<Vec<_>, _>>()?;
 
         let master = SpiralMosiacPipeline::builder()
-            .siril_builder(builder)
             .ext(ext.clone())
             .light_folders(light_folders)
             .name(framing.name.clone())
@@ -214,7 +213,7 @@ async fn stack_spiral_mosiac_framing(
             .maybe_feather_pixels(Some(framing.feather_pixels))
             .out_folder(project_dir.to_path_buf())
             .build()
-            .run(DefaultPipelineReporter::from(printer))
+            .run_siril(DefaultPipelineReporter::from(printer), builder)
             .await?;
 
         printer.success(format!(
@@ -313,7 +312,6 @@ async fn stack_grid_mosiac_framing(
         } else {
             any_layer_restacked = true;
             let grid_master = GridMosiacPipeline::builder()
-                .siril_builder(builder.clone())
                 .ext(ext.clone())
                 .tile_master_lights(panel_paths)
                 .name(grid_layer.name.clone())
@@ -321,7 +319,7 @@ async fn stack_grid_mosiac_framing(
                 .background_extract(true)
                 .out_folder(project_dir.to_path_buf())
                 .build()
-                .run(DefaultPipelineReporter::from(printer))
+                .run_siril(DefaultPipelineReporter::from(printer), builder.clone())
                 .await?;
 
             printer.success(format!(
@@ -405,7 +403,6 @@ async fn run_master_light(
         .collect::<Result<Vec<_>, _>>()?;
 
     let master = CreateMasterLightPipeline::builder()
-        .siril_builder(siril_builder)
         .ext(ext)
         .light_folders(light_folders)
         .name(stack.name.clone())
@@ -413,7 +410,7 @@ async fn run_master_light(
         .background_extract(stack.extract_background)
         .out_folder(project_dir.to_path_buf())
         .build()
-        .run(DefaultPipelineReporter::from(printer))
+        .run_siril(DefaultPipelineReporter::from(printer), siril_builder)
         .await?;
 
     printer.success(format!(
@@ -433,12 +430,11 @@ async fn register_layers(
 ) -> Result<()> {
     let ext = siril_builder.clone().ext();
     RegisterMasterLightPipeline::builder()
-        .siril_builder(siril_builder)
         .ext(ext)
         .master_lights(master_lights)
         .out_folder(project_dir.to_path_buf())
         .build()
-        .run_min_frame(DefaultPipelineReporter::from(printer))
+        .run_min_frame_siril(DefaultPipelineReporter::from(printer), siril_builder)
         .await?;
 
     printer.success("Master LIGHT registration completed")?;

@@ -7,7 +7,7 @@ use crate::meta::CalibrationMetadata;
 use crate::model::MasterFlat;
 use px_fits::all_fits_files;
 use siril_sys::{
-    Builder, FitsExt, UpdateKeyMethod,
+    FitsExt, UpdateKeyMethod,
     commands::{Calibrate, Convert, SequpdateKey, Stack},
     siril_ext::CdExt,
 };
@@ -16,7 +16,6 @@ use crate::{PipelineReporter, error::PipelineError};
 
 #[derive(bon::Builder)]
 pub struct CreateMasterFlatPipeline {
-    pub siril_builder: Builder,
     pub ext: FitsExt,
     pub raw_folder: PathBuf,
     pub bias: PathBuf,
@@ -24,8 +23,14 @@ pub struct CreateMasterFlatPipeline {
     pub out_folder: PathBuf,
 }
 
+// master flat pipeline that uses siril
+//
 impl CreateMasterFlatPipeline {
-    pub async fn run(&self, reporter: impl PipelineReporter) -> Result<MasterFlat, PipelineError> {
+    pub async fn run_siril(
+        &self,
+        reporter: impl PipelineReporter,
+        siril_builder: siril_sys::Builder,
+    ) -> Result<MasterFlat, PipelineError> {
         let raw_files = all_fits_files(&self.raw_folder)?;
         if raw_files.is_empty() {
             return Err(PipelineError::FileNotFound(
@@ -38,9 +43,7 @@ impl CreateMasterFlatPipeline {
             .master_flat_name(self.filter.clone());
         let output_file = self.out_folder.join(name).display().to_string();
 
-        let mut siril = self
-            .siril_builder
-            .clone()
+        let mut siril = siril_builder
             .use_extension(self.ext.clone())
             .build()
             .await?;

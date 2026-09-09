@@ -96,14 +96,13 @@ pub(crate) async fn create_project_samples(
             .use_extension(ext.clone());
 
         let result = CreateColorSamplePipeline::builder()
-            .siril_builder(builder)
             .ext(ext.clone())
             .sample(sample)
             .enable_pcc(sample_config.enable_pcc)
             .output_formats(output_formats)
             .out_folder(samples_dir.clone())
             .build()
-            .run(DefaultPipelineReporter::from(printer))
+            .run_siril(DefaultPipelineReporter::from(printer), builder)
             .await;
 
         match result {
