@@ -10,7 +10,7 @@ use px_configuration::{
 };
 use px_conventions::{observation::ObservationPath, project::ProjectPath};
 use px_pipeline::{
-    master_light::{CreateMasterLightPipeline, registered_master_light_path},
+    project::master_light::{CreateMasterLightPipeline, registered_master_light_path},
     project::{
         grid_mosiac::GridMosiacPipeline, register::RegisterMasterLightPipeline,
         spiral_mosiac::SpiralMosiacPipeline,

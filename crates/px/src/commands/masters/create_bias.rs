@@ -2,7 +2,7 @@ use crate::{ExitStatus, printer::Printer, utils::to_fits_ext};
 use anyhow::Result;
 use px_cli::CreateBiasMasterArgs;
 use px_index::ProfileIndex;
-use px_pipeline::master_bias::CreateMasterBiasPipeline;
+use px_pipeline::calibration::master_bias::CreateMasterBiasPipeline;
 use siril_sys::Builder;
 
 pub(crate) async fn create_master_bias(

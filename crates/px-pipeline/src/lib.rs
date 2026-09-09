@@ -3,11 +3,8 @@ use std::path::PathBuf;
 use crate::error::PipelineError;
 
 pub mod calibrate_light;
+pub mod calibration;
 pub mod error;
-pub mod master_bias;
-pub mod master_dark;
-pub mod master_flat;
-pub mod master_light;
 pub mod meta;
 pub mod model;
 pub mod pause;

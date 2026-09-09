@@ -8,7 +8,7 @@ use px_configuration::{
 };
 use px_conventions::project::ProjectPath;
 use px_pipeline::{
-    master_light::{master_light_path, registered_master_light_path},
+    project::master_light::{master_light_path, registered_master_light_path},
     project::sample::{
         CreateColorSamplePipeline, FilteredStack, SampleOutputFormats, detect_color_mixes,
     },

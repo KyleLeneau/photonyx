@@ -14,7 +14,7 @@ use siril_sys::{
     siril_ext::{CdExt, SaveExt},
 };
 
-use crate::{PipelineReporter, error::PipelineError, master_light::master_light_path};
+use crate::{PipelineReporter, error::PipelineError, project::master_light::master_light_path};
 
 #[derive(bon::Builder)]
 pub struct SpiralMosiacPipeline {
