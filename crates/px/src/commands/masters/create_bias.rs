@@ -4,12 +4,15 @@ use px_cli::CreateBiasMasterArgs;
 use px_index::ProfileIndex;
 use px_pipeline::{RunIn, calibration::master_bias::CreateMasterBiasPipeline};
 use siril_sys::Builder;
+use std::time::Instant;
 
 pub(crate) async fn create_master_bias(
     args: CreateBiasMasterArgs,
     printer: Printer,
     index: ProfileIndex,
 ) -> Result<ExitStatus> {
+    let start = Instant::now();
+
     // Guard to make sure the input folder exists first
     if !args.raw_folder.exists() {
         printer.error("Raw bias folder does not exist")?;
@@ -38,6 +41,11 @@ pub(crate) async fn create_master_bias(
     printer.success(format!("Master BIAS stacking completed: {:?}", master))?;
 
     index.register_master(master).await?;
+
+    printer.success(format!(
+        "Elapsed time: {:.4}s",
+        start.elapsed().as_secs_f64()
+    ))?;
 
     Ok(ExitStatus::Success)
 }
