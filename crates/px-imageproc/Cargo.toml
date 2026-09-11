@@ -11,6 +11,7 @@ repository.workspace = true
 px-fits = { workspace = true }
 
 rayon = { workspace = true }
+sysinfo = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

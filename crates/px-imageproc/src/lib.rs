@@ -17,8 +17,10 @@ pub mod debayer;
 pub mod downscale;
 pub mod error;
 pub mod preview;
+pub mod runtime;
 pub mod stretch;
 
 pub use bayer::BayerPattern;
 pub use error::ImageProcError;
 pub use preview::{MAX_DISPLAY_DIM, PreviewImage, decode_preview};
+pub use runtime::{Block, BlockPlan, ImageDims, MemoryLimit, ResourceBudget, Runtime};

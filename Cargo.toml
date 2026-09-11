@@ -87,6 +87,9 @@ strum_macros = "0.28"
 # Parallelism
 rayon = "1.10"
 
+# System memory / CPU probing for the native processing budget (ADR 007)
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+
 # Testing
 insta = { version = "1.46.0", features = ["json", "filters", "redactions"] }
 criterion = "0.5"

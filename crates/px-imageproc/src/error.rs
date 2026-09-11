@@ -8,4 +8,9 @@ pub enum ImageProcError {
 
     #[error("image processing error: {0}")]
     Processing(String),
+
+    /// The configured memory budget cannot hold what the stage needs. Raised
+    /// rather than overrunning the budget (ADR 007 performance targets).
+    #[error("memory budget too small to hold {what}")]
+    InsufficientMemory { what: String },
 }
