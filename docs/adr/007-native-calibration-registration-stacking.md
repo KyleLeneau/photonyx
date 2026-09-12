@@ -617,21 +617,69 @@ with Phase 5's master flat.
 
 ### Phase 4 — Calibration operators
 
-- [ ] **P4-T1** `calibrate/ops.rs`: subtract, divide, scalar multiply/subtract in the [0, 1]
-      convention, with Siril's clamping behaviour at the bounds. Cite `arithm.c`.
-- [ ] **P4-T2** `calibrate/mod.rs`: `CalibrationMasters { bias, dark, flat, bias_level }` and
-      `calibrate_frame` applying bias → dark → flat in Siril's order, with the flat's
-      auto-normalization level computed from the master flat's mean (`preprocess.c` l. 330–372).
-- [ ] **P4-T3** `calibrate/dark_optimize.rs`: the golden-section search minimizing calibrated-frame
-      noise over the dark scaling factor `k` (`preprocess.c` l. 48–130), off by default, matching
-      Siril's convergence criteria.
-- [ ] **P4-T4** `calibrate/cosmetic.rs`: hot/cold pixel detection from a master dark by sigma
-      threshold, CFA-aware neighbour selection, and the correction pass. Cite
-      `filters/cosmetic_correction.c`.
-- [ ] **P4-T5** Parity tests against Siril's `calibrate` on single frames: bias-only, bias+dark,
-      bias+dark+flat, and with cosmetic correction.
+- [x] **P4-T1** `calibrate/ops.rs`: subtract, divide, scalar multiply/subtract in the unit range.
+      The clamping rule is shared: above `1.0` clamps, below `-1.0` becomes `0.0`, and **values
+      between `-1.0` and `0.0` stay negative**. That last case is load-bearing — a calibrated sky
+      background straddles zero, and clipping its negative half would bias every downstream
+      statistic upward. Scalar operations do not clamp at all, since they are interior steps.
+- [x] **P4-T2** `calibrate/mod.rs`: `Masters { bias, bias_level, dark, flat }` and `calibrate`,
+      applying bias → dark → flat, with the flat's level taken from the central third of the
+      master (the corners are vignetted and would drag it down).
+- [x] **P4-T3** `calibrate/dark_optimize.rs`: golden-section search over the dark's scaling
+      factor, minimizing the noise left in a 512² central sample, plus the cheaper
+      exposure-ratio path.
+- [x] **P4-T4** `calibrate/cosmetic.rs`: hot/cold detection from the master dark's own median and
+      sigma, and CFA-aware patching — hot pixels from a neighbour mean, cold from a neighbour
+      median over a wider window, both striding by two on a colour sensor so replacements come
+      from same-coloured pixels.
+- [x] **P4-T5** Unit tests (`tests/calibrate.rs`) and parity against Siril's `calibrate_single`
+      on a real 61 MP light (`tests/calibrate_parity.rs`).
 
-**Gate:** mono single-frame calibration within 0.05 σ_bg of Siril's.
+**Gate: met on both corpora, with a wide margin.**
+
+The masters are composed the way the project builds them and the way the workflow intends:
+master bias and master dark are each stacked from raw frames on their own; the master flat is
+built from flats calibrated with the master bias; and a light is then calibrated with the **dark
+and the flat only**. No separate bias subtraction — the raw-stacked dark already carries the
+bias pedestal, and subtracting a master bias as well would remove it twice.
+
+| Corpus | max abs delta | RMS delta | median (ours / Siril) | background noise |
+|---|---|---|---|---|
+| mono (ASI6200MM, Hα) | 0.0195 ADU = **0.0011 σ_bg** | 0.00004 ADU | +60.8723 / +60.8725 | 17.7558 / 17.7549 |
+| OSC (ASI6200MC, Dual) | 1.6054 ADU = **0.0079 σ_bg** | 0.01571 ADU | +633.1835 / +633.1990 | 203.5618 / 203.5668 |
+
+Bound is 0.05 σ_bg max, 0.01 σ_bg RMS. Both are met by 6–45×.
+
+### The negative clamp, measured
+
+`ops::clamp` keeps values between `-1.0` and `0.0` negative and destroys only what falls outside
+that: past `1.0` it saturates, past `-1.0` it zeroes. `OpReport` now counts both destructive
+cases separately from the merely-negative ones, so this is measured rather than argued.
+
+| Corpus | negative | deepest negative | **floored to zero** | saturated |
+|---|---|---|---|---|
+| mono | 0.068% | −50,961 ADU (−0.778 unit) | **0** | 193 (0.0003%) |
+| OSC | ~0.000% | −59,999 ADU (−0.916 unit) | **7** | 249 (0.0004%) |
+
+Out of 61,171,488 pixels. Siril's own output has the same negative fraction to three decimals
+and the same deepest value to within 1.5 ADU.
+
+Reading: **the clamp is a non-issue in this workflow.** The deepest negatives are hot pixels in
+the master dark subtracted from an ordinary light — they land at −0.78 to −0.92, just inside the
+floor — and the floor itself fires on 0 and 7 pixels respectively, both of which cosmetic
+correction would patch anyway. What the earlier draft of this test measured (99.82% negative, a
+−250 ADU median) was not the clamp misbehaving but the masters being composed wrongly: a bias
+subtracted on top of a dark that already contained it.
+
+`CalibrationReport` carries `negative_ratio`, `floored_pixels`, and `saturated_pixels` so Phase 5's
+pipelines can refuse or warn on mismatched masters rather than silently producing a frame whose
+sky is below zero.
+
+**Yardstick for the Phase 3 linear-fit divergence.** Two Siril master flats built from the same
+59 frames, differing only in rejection method (Winsorized 3/3 vs linear-fit 5/5), differ by
+**max 165.7 ADU, RMS 14.8 ADU**. That is the scale on which a rejection-method choice moves a
+master flat, and therefore the scale against which the native linear-fit divergence must be
+judged when Phase 5 produces a native master flat.
 
 ### Phase 5 — `NativeRuntime` and the three master-frame pipelines
 

@@ -47,6 +47,8 @@ xflags::xflags! {
             optional --frames frames: u32
             /// Also median-stack master bias and dark frames with Siril
             optional --masters
+            /// Also build a master flat and calibrate one light frame with Siril
+            optional --calibration
         }
     }
 }
@@ -104,6 +106,7 @@ pub struct SirilReference {
     pub out: Option<String>,
     pub frames: Option<u32>,
     pub masters: bool,
+    pub calibration: bool,
 }
 
 impl Xtask {

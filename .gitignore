@@ -21,5 +21,5 @@ data/corpus*
 # Siril reference outputs and native-engine outputs for ADR 007 parity work.
 # Regenerate with `cargo xtask siril-reference`; too large and too
 # Siril-version-specific to commit.
-data/reference/
+data/reference*/
 data/output/

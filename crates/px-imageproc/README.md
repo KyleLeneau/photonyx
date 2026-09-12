@@ -78,3 +78,34 @@ Reduction cost per method, 20 × 1024² frames:
 
 Outputs land in `data/output/masters/` for side-by-side inspection against the Siril masters in
 `data/reference/masters/`.
+
+### Calibration (ADR 007 Phase 4)
+
+Masters are composed the way the workflow intends: bias and dark each stacked from raw frames on
+their own, the flat built from bias-calibrated flats, and lights calibrated with the **dark and
+flat only** — the raw-stacked dark already carries the bias pedestal.
+
+| Corpus | max abs delta | RMS delta | median (ours / Siril) | background noise |
+|---|---|---|---|---|
+| mono (ASI6200MM, Hα) | 0.0195 ADU = **0.0011 σ_bg** | 0.00004 ADU | +60.8723 / +60.8725 | 17.7558 / 17.7549 |
+| OSC (ASI6200MC, Dual) | 1.6054 ADU = **0.0079 σ_bg** | 0.01571 ADU | +633.1835 / +633.1990 | 203.5618 / 203.5668 |
+
+Bound is 0.05 σ_bg max and 0.01 σ_bg RMS; both are met by 6–45×.
+
+#### What the clamp actually destroys
+
+Calibration keeps values between −1.0 and 0.0 negative — a calibrated sky straddles zero, and
+clipping its low half would bias every downstream statistic upward. Only values past ±1.0 are
+destroyed, and `OpReport` counts those:
+
+| Corpus | negative | deepest negative | floored to zero | saturated |
+|---|---|---|---|---|
+| mono | 0.068% | −50,961 ADU (−0.778 unit) | **0** | 193 |
+| OSC | ~0.000% | −59,999 ADU (−0.916 unit) | **7** | 249 |
+
+Out of 61,171,488 pixels, with Siril matching to three decimals on the negative fraction. The
+deepest negatives are hot pixels in the master dark, which land just inside the floor and which
+cosmetic correction patches anyway.
+
+Outputs land in `data/output/calibrated/` for comparison against `data/reference/calibrated/`
+and `data/reference-osc/calibrated/`.

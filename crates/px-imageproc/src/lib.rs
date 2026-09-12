@@ -12,6 +12,7 @@
 
 pub mod bayer;
 pub mod binning;
+pub mod calibrate;
 pub mod color;
 pub mod debayer;
 pub mod downscale;
@@ -25,6 +26,7 @@ pub mod stats;
 pub mod stretch;
 
 pub use bayer::BayerPattern;
+pub use calibrate::{CalibrationOptions, CalibrationReport, DarkScaling, Masters, calibrate};
 pub use error::ImageProcError;
 pub use frame::{Frame, ValueScale};
 pub use preview::{MAX_DISPLAY_DIM, PreviewImage, decode_preview};

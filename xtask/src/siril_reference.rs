@@ -43,6 +43,31 @@ fn which(name: &str) -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
+/// Quotes a path that appears as a bare word in a Siril script.
+///
+/// Astro filenames routinely contain spaces ("NGC 7000"). Siril's script
+/// parser honours a quote only at the *start* of a word, so this works for
+/// bare arguments (`cd X`, `load X`, `calibrate_single X`) and not for
+/// `-flag=value` forms — see [`flag_value`].
+fn quoted(path: &Path) -> String {
+    format!("\"{}\"", path.display())
+}
+
+/// A path used as a `-flag=value` argument, which Siril cannot parse quoted:
+/// the quote would sit after the `=`, where the parser does not look for it.
+/// Such a path must therefore contain no whitespace.
+fn flag_value(path: &Path) -> Result<String> {
+    let text = path.display().to_string();
+    if text.contains(char::is_whitespace) {
+        bail!(
+            "{text} is passed to siril as a -flag=value argument and contains whitespace, \
+             which siril's script parser cannot handle. Move the reference output somewhere \
+             without spaces in its path."
+        );
+    }
+    Ok(text)
+}
+
 /// The statistics Siril's `stat main` reports, in 16-bit ADU.
 #[derive(Debug, Clone)]
 struct SirilStats {
@@ -110,8 +135,11 @@ impl flags::SirilReference {
             .with_context(|| format!("writing {}", path.display()))?;
         println!("wrote {} records to {}", records.len(), path.display());
 
-        if self.masters {
+        if self.masters || self.calibration {
             stack_masters(sh, &siril, &corpus, &out)?;
+        }
+        if self.calibration {
+            build_calibration_reference(sh, &siril, &corpus, &out)?;
         }
         Ok(())
     }
@@ -146,10 +174,10 @@ fn stack_masters(sh: &Shell, siril: &Path, corpus: &Path, out: &Path) -> Result<
             &script,
             format!(
                 "requires 1.2.0\nsetext fits\ncd {}\nconvert {kind}_ -out={}\ncd {}\nstack {kind}_ med -out={}\n",
-                dir.display(),
-                work_path.display(),
-                work_path.display(),
-                target.display()
+                quoted(&dir),
+                flag_value(work_path)?,
+                quoted(work_path),
+                flag_value(&target)?
             ),
         )?;
 
@@ -295,4 +323,132 @@ fn render_json(version: &str, corpus: &Path, records: &[(String, String, SirilSt
     }
     s.push_str("  ]\n}\n");
     s
+}
+
+/// Builds a master flat and calibrates one light frame, issuing the same
+/// commands `px --engine siril` issues today.
+///
+/// Two master flats are produced: one Winsorized, which is what the pipeline
+/// defaults to, and one linear-fit, which is the method ADR 007 Phase 3
+/// diverges from deliberately and therefore needs measuring.
+fn build_calibration_reference(sh: &Shell, siril: &Path, corpus: &Path, out: &Path) -> Result<()> {
+    let masters = out.join("masters");
+    let bias = masters.join("master_bias.fits");
+    let dark = masters.join("master_dark.fits");
+    if !bias.exists() || !dark.exists() {
+        bail!("master bias and dark must exist first (run with --masters)");
+    }
+
+    let flat_dir = corpus.join("flat");
+    if !flat_dir.is_dir() {
+        bail!("no flat directory under {}", corpus.display());
+    }
+
+    for (name, rejection) in [("winsorized", "w 3 3"), ("linear", "l 5 5")] {
+        let target = masters.join(format!("master_flat_{name}"));
+        let produced = target.with_extension("fits");
+        if produced.exists() {
+            println!("  master flat ({name}): already present, skipping");
+            continue;
+        }
+
+        let work = sh.create_temp_dir()?;
+        let work_path = work.path();
+        let script = work_path.join("flat.ssf");
+        std::fs::write(
+            &script,
+            format!(
+                "requires 1.2.0\nsetext fits\ncd {}\nconvert flat_ -out={}\ncd {}\n\
+                 calibrate flat_ -bias={}\nstack pp_flat_ rej {rejection} -nonorm -out={}\n",
+                quoted(&flat_dir),
+                flag_value(work_path)?,
+                quoted(work_path),
+                flag_value(&bias)?,
+                flag_value(&target)?
+            ),
+        )?;
+
+        println!("  building master flat ({name}, rej {rejection})...");
+        let started = std::time::Instant::now();
+        let log = cmd!(sh, "{siril} -s {script}").ignore_status().read()?;
+        if !produced.exists() {
+            bail!(
+                "siril did not produce {}. Log tail:\n{}",
+                produced.display(),
+                log.lines().rev().take(20).collect::<Vec<_>>().join("\n")
+            );
+        }
+        println!(
+            "  master flat ({name}): {} in {:.1}s",
+            produced.display(),
+            started.elapsed().as_secs_f64()
+        );
+        std::fs::write(masters.join(format!("master_flat_{name}.log")), log)?;
+    }
+
+    // Calibrate a single light. The master dark is a median of *raw* darks and
+    // therefore already carries the bias pedestal, so the light is calibrated
+    // with the dark and the (bias-calibrated) flat only. Subtracting a master
+    // bias as well would remove that pedestal twice.
+    let flat = masters.join("master_flat_winsorized.fits");
+    let light = sample_frames(&corpus.join("light"), 1)?
+        .into_iter()
+        .next()
+        .context("no light frames in the corpus")?;
+
+    let calibrated_dir = out.join("calibrated");
+    std::fs::create_dir_all(&calibrated_dir)?;
+    // The script sets `setext fits`, so Siril writes `pp_<stem>.fits`
+    // regardless of whether the input was `.fit` or `.fits`. Built by
+    // concatenation rather than `with_extension`, because these filenames
+    // carry dots inside them ("300.00s", "14.4F") and `with_extension` would
+    // truncate at the last one.
+    let emitted_name = format!("pp_{}.fits", light.file_stem().unwrap().to_string_lossy());
+    let produced = calibrated_dir.join(&emitted_name);
+    if produced.exists() {
+        println!("  calibrated light: already present, skipping");
+        return Ok(());
+    }
+
+    let work = sh.create_temp_dir()?;
+    let work_path = work.path();
+    let script = work_path.join("cal.ssf");
+    std::fs::write(
+        &script,
+        format!(
+            "requires 1.2.0\nsetext fits\ncd {}\ncalibrate_single {} -dark={} -flat={}\n",
+            quoted(work_path),
+            quoted(&light),
+            flag_value(&dark)?,
+            flag_value(&flat)?
+        ),
+    )?;
+
+    println!("  calibrating one light frame...");
+    let log = cmd!(sh, "{siril} -s {script}").ignore_status().read()?;
+
+    // `calibrate_single` writes pp_<name> into the working directory.
+    let emitted = work_path.join(&emitted_name);
+    if !emitted.exists() {
+        bail!(
+            "siril did not produce {}. Log tail:\n{}",
+            emitted.display(),
+            log.lines().rev().take(20).collect::<Vec<_>>().join("\n")
+        );
+    }
+    std::fs::copy(&emitted, &produced)?;
+    std::fs::write(
+        calibrated_dir.join("source.txt"),
+        format!(
+            "light: {}\ndark: {}\nflat: {}\nbias: (none - the dark carries it)\n\
+             master_bias_used_for_flat: {}\n",
+            light.display(),
+            dark.display(),
+            flat.display(),
+            bias.display()
+        ),
+    )?;
+    std::fs::write(calibrated_dir.join("calibrate.log"), log)?;
+    println!("  calibrated light: {}", produced.display());
+    Ok(())
 }
