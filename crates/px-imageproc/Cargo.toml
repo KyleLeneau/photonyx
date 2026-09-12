@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 px-fits = { workspace = true }
 
+nalgebra = { workspace = true }
 rayon = { workspace = true }
 sysinfo = { workspace = true }
 thiserror = { workspace = true }
