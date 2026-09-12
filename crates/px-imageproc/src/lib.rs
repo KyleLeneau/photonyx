@@ -16,11 +16,17 @@ pub mod color;
 pub mod debayer;
 pub mod downscale;
 pub mod error;
+pub mod frame;
 pub mod preview;
 pub mod runtime;
+pub mod sequence;
+pub mod stats;
 pub mod stretch;
 
 pub use bayer::BayerPattern;
 pub use error::ImageProcError;
+pub use frame::{Frame, ValueScale};
 pub use preview::{MAX_DISPLAY_DIM, PreviewImage, decode_preview};
 pub use runtime::{Block, BlockPlan, ImageDims, MemoryLimit, ResourceBudget, Runtime};
+pub use sequence::{FrameInfo, FrameSet};
+pub use stats::ChannelStats;

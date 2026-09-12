@@ -13,4 +13,15 @@ pub enum ImageProcError {
     /// rather than overrunning the budget (ADR 007 performance targets).
     #[error("memory budget too small to hold {what}")]
     InsufficientMemory { what: String },
+
+    #[error("no frames to process")]
+    EmptySequence,
+
+    /// A frame whose geometry does not match the rest of the set. Pixel-wise
+    /// reduction has no meaning across mismatched frames.
+    #[error("{path} does not match the rest of the sequence: {detail}")]
+    NonUniformSequence {
+        path: std::path::PathBuf,
+        detail: String,
+    },
 }
