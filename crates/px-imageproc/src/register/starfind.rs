@@ -18,6 +18,7 @@
 
 use rayon::prelude::*;
 
+use super::psf::Profile;
 use crate::stats;
 
 /// Multiplier on `sigma · bgnoise` that sets the detection threshold above the
@@ -70,6 +71,11 @@ pub struct StarfindOptions {
     pub relax_checks: bool,
     /// Cap on the number of fitted stars returned.
     pub max_stars: usize,
+    /// Which analytic profile the fitter uses.
+    pub profile: Profile,
+    /// Smallest Moffat exponent a star may be fitted with. Ignored for a
+    /// Gaussian fit.
+    pub min_beta: f64,
 }
 
 impl Default for StarfindOptions {
@@ -84,9 +90,19 @@ impl Default for StarfindOptions {
             convergence: 1,
             relax_checks: false,
             max_stars: MAX_STARS_FITTED,
+            profile: Profile::Gaussian,
+            min_beta: MIN_BETA,
         }
     }
 }
+
+/// Default floor on the Moffat exponent.
+///
+/// Below roughly 1.5 the Moffat profile's wings carry so much of its flux that
+/// its integral is only weakly constrained by a finite box, and the fit trades
+/// amplitude against beta without improving the residual. Gaussian fits ignore
+/// it.
+pub const MIN_BETA: f64 = 1.5;
 
 /// Ceiling on fitted stars per frame.
 ///
@@ -103,6 +119,13 @@ impl StarfindOptions {
         if !self.sigma.is_finite() || self.sigma <= 0.0 {
             self.sigma = 1.0;
         }
+        self
+    }
+
+    /// Selects the Moffat profile, which is off by default.
+    pub fn with_moffat(mut self, min_beta: f64) -> Self {
+        self.profile = Profile::Moffat;
+        self.min_beta = min_beta;
         self
     }
 }

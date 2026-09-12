@@ -122,8 +122,6 @@ pub fn fit_candidate(
     height: usize,
     candidate: &Candidate,
     options: &StarfindOptions,
-    profile: Profile,
-    min_beta: f64,
 ) -> Option<PsfStar> {
     let radius = options.radius;
     if candidate.x < radius
@@ -141,7 +139,7 @@ pub fn fit_candidate(
     // which is why the option is documented as 1-3.
     let passes = options.convergence.clamp(1, 3);
 
-    let (params, rmse) = match profile {
+    let (params, rmse) = match options.profile {
         Profile::Gaussian => {
             let model = GaussianModel;
             let mut params = box_.initial_gaussian();
@@ -154,7 +152,9 @@ pub fn fit_candidate(
             (params, rmse)
         }
         Profile::Moffat => {
-            let model = MoffatModel { min_beta };
+            let model = MoffatModel {
+                min_beta: options.min_beta.clamp(0.0, MAX_BETA),
+            };
             let mut params = box_.initial_moffat();
             let mut rmse = f64::INFINITY;
             for _ in 0..passes {
@@ -166,7 +166,7 @@ pub fn fit_candidate(
         }
     };
 
-    Some(box_.into_star(&params, rmse, profile, candidate.peak as f64))
+    Some(box_.into_star(&params, rmse, options.profile, candidate.peak as f64))
 }
 
 /// The samples a fit sees: one square box of a channel, with its own local
@@ -562,11 +562,13 @@ mod tests {
     }
 
     fn fit_one(data: &[f32], width: usize, height: usize, profile: Profile) -> PsfStar {
-        let options = StarfindOptions::default();
+        let options = StarfindOptions {
+            profile,
+            ..Default::default()
+        };
         let candidates = detect_candidates(data, width, height, &options);
         assert_eq!(candidates.len(), 1, "{candidates:?}");
-        fit_candidate(data, width, height, &candidates[0], &options, profile, 1.5)
-            .expect("fit converges")
+        fit_candidate(data, width, height, &candidates[0], &options).expect("fit converges")
     }
 
     #[test]
