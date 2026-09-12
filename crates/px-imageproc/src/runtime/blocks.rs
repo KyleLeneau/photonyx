@@ -118,6 +118,13 @@ fn round_to_ceiling_multiple(x: usize, factor: usize) -> usize {
 /// Returns at most [`ImageDims::total_rows`], and may return 0 when the budget
 /// cannot even hold the result — callers must treat 0 as "cannot proceed"
 /// rather than dividing by it.
+///
+/// **The budget is tracked in whole mebibytes**, so anything under 1 MiB
+/// rounds to zero and no rows fit. That is a real floor on the API, not an
+/// accident: it is inherited from the reference implementation and pinned by
+/// the fidelity tests. It has no practical cost — the frames this schedules
+/// are tens to hundreds of megabytes each — but it does mean a toy budget
+/// cannot be used to force a fine-grained split.
 pub fn max_rows_for_budget(
     budget_bytes: u64,
     dims: &ImageDims,

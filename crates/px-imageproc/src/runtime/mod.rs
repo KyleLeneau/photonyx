@@ -90,11 +90,18 @@ impl Runtime {
         elem_size: usize,
         nb_rejmaps: usize,
     ) -> Result<BlockPlan, ImageProcError> {
-        let insufficient = || ImageProcError::InsufficientMemory {
-            what: format!(
-                "a {}x{}x{} result plus one row of {nb_frames} frames within {}",
-                dims.width, dims.height, dims.channels, self.budget
-            ),
+        let insufficient = || {
+            let hint = if self.budget.max_bytes < 1024 * 1024 {
+                " (budgets are tracked in whole MiB; anything under 1 MiB rounds to zero)"
+            } else {
+                ""
+            };
+            ImageProcError::InsufficientMemory {
+                what: format!(
+                    "a {}x{}x{} result plus one row of {nb_frames} frames within {}{hint}",
+                    dims.width, dims.height, dims.channels, self.budget
+                ),
+            }
         };
 
         // Live for the whole run, so charged before any block buffer.

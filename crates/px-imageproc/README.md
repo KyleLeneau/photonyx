@@ -45,3 +45,36 @@ Analytic bounds, from `tests/stats.rs` (no Siril needed): background noise recov
 sigma to within 5% and is unmoved by a smooth gradient or by 1% saturated pixels; robust
 location/scale lands within 5% of true sigma with 0.5% of the frame saturated, where classical
 sigma is off by 2.5×; every estimator is bit-identical across 1, 2, 3 and 8 cores.
+
+### Stacking (ADR 007 Phase 3)
+
+Median masters compared against Siril 1.4.4 over 40 frames of `data/corpus-mono`
+(9576×6388, 16-bit), stacked by the same commands `px --engine siril` issues today.
+
+| Master | Max delta | RMS delta | Median | Background noise |
+|---|---|---|---|---|
+| bias | **0.0000 ADU** | 0.00002 ADU | exact | 1.2581 vs 1.2594 |
+| dark | **0.0039 ADU** | 0.00002 ADU | exact | 1.4074 vs 1.4086 |
+
+Roughly 31% of pixels differ, every one by the last bit of an `f32`: with an even frame count
+the median is the mean of the two central values, which Siril forms in `f64` before narrowing.
+
+**Speed:** 2.55 s versus Siril's 2.35 s for a 40 × 61 MP median stack (warm cache, M4 Max,
+16 cores). Scaling across cores is 5.1× from 1 to 16; an 8× tighter memory budget (16 → 125
+blocks) costs 22%.
+
+Reduction cost per method, 20 × 1024² frames:
+
+| Method | Time | Throughput |
+|---|---|---|
+| sum | 21.9 ms | 959 Melem/s |
+| mean | 23.2 ms | 904 Melem/s |
+| median | 44.3 ms | 473 Melem/s |
+| mean + percentile | 48.1 ms | 436 Melem/s |
+| mean + sigma | 50.0 ms | 420 Melem/s |
+| mean + linear fit | 55.1 ms | 380 Melem/s |
+| mean + Winsorized | 62.1 ms | 338 Melem/s |
+| mean + MAD | 68.2 ms | 308 Melem/s |
+
+Outputs land in `data/output/masters/` for side-by-side inspection against the Siril masters in
+`data/reference/masters/`.

@@ -90,7 +90,7 @@ impl ValueScale {
 }
 
 /// A decoded image: unit-range `f32` samples plus the header they came from.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Frame {
     dims: ImageDims,
     data: Vec<f32>,
@@ -292,6 +292,19 @@ impl Frame {
         writer.write_image(&builder, &self.data)?;
         writer.finish()?;
         Ok(())
+    }
+}
+
+/// Summarizes rather than dumping the buffer: a frame is millions of samples,
+/// and a panic message that prints them all is unreadable and slow to produce.
+impl std::fmt::Debug for Frame {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Frame")
+            .field("width", &self.dims.width)
+            .field("height", &self.dims.height)
+            .field("channels", &self.dims.channels)
+            .field("scale", &self.scale)
+            .finish_non_exhaustive()
     }
 }
 

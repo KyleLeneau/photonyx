@@ -17,6 +17,9 @@ pub enum ImageProcError {
     #[error("no frames to process")]
     EmptySequence,
 
+    #[error("unsupported: {0}")]
+    Unsupported(String),
+
     /// A frame whose geometry does not match the rest of the set. Pixel-wise
     /// reduction has no meaning across mismatched frames.
     #[error("{path} does not match the rest of the sequence: {detail}")]

@@ -16,6 +16,7 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+dhat = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 # Oracle for the ADR 006 P9-T9 visual-regression test only — never a runtime
@@ -30,5 +31,13 @@ harness = false
 name = "budget"
 harness = false
 
+[[bench]]
+name = "stack"
+harness = false
+
 [lints]
 workspace = true
+
+[[test]]
+name = "memory"
+harness = true

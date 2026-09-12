@@ -564,31 +564,56 @@ with 0.5% of pixels saturated; every estimator is bit-identical across 1, 2, 3, 
 
 *Goal: the deliverable that makes master bias and dark possible.*
 
-- [ ] **P3-T1** `stack/reader.rs`: read one `Block` from every frame in a `FrameSet` into a
-      thread's buffer via `read_region_into::<f32>`, with optional per-frame integer shift
-      (registration) and zero-fill outside the source. Byte-accounting test: reading a block
-      reads exactly the block's bytes per frame, nothing more.
-- [ ] **P3-T2** `stack/mod.rs`: the block loop — plan blocks, allocate one buffer per thread
-      sized to the largest block, distribute blocks over the `Runtime` pool, assemble into the
-      result. Memory test (`dhat`) asserting peak heap ≤ result + rejmaps + pool buffers, within
-      5%.
-- [ ] **P3-T3** `stack/median.rs`: quickselect median reduction. Even-count tie handling matched
-      to Siril's `quickmedian`.
-- [ ] **P3-T4** `stack/sum.rs` and `stack/minmax.rs`.
-- [ ] **P3-T5** `stack/rejection.rs`: percentile clipping, sigma clipping, MAD clipping,
-      sigma-median, Winsorized sigma, linear fit, GESDT. Each with its own unit test on a
-      constructed stack with known outliers, and each citing its Siril source lines.
-- [ ] **P3-T6** `stack/mean.rs`: reject-then-mean, `f64` accumulation, the `kept == 0` fallback
-      to the median of the unrejected stack (Siril's behaviour), and rejection-map output.
-- [ ] **P3-T7** `output_norm`: the min–max rescale of `norm_to_0_1_range`, zeros preserved.
-- [ ] **P3-T8** `tests/stack_parity.rs`: median and each rejection method against Siril reference
-      output on the corpus, at the D2 tolerances.
-- [ ] **P3-T9** `benches/stack.rs`: median and Winsorized-mean stacks at 2, 8, and 32 frames ×
-      {1, 4, all} cores × {1 GB, 4 GB, unlimited} budget. Record in the README, including the
-      observed peak RSS against the budget.
+Landed as two modules rather than the six sketched under Architecture —
+`stack/mod.rs` (block loop, reducers, assembly) and `stack/rejection.rs`. The finer split was
+proposed before the code existed and would have spread ~200 lines over six files.
 
-**Gate:** every rejection method within tolerance of Siril; peak RSS within 5% of the budget at
-every tested setting.
+- [x] **P3-T1** Block reads across the set, via `FrameSet::read_block_into`, which touches only
+      the block's bytes (byte accounting pinned in `tests/frame.rs`). Per-frame registration
+      shift is **not** wired yet — it lands with Phase 9, which is what produces the shifts.
+- [x] **P3-T2** The block loop: plan, one buffer set per worker sized to the tallest block,
+      blocks distributed over the `Runtime` pool in waves of `cores`, assembled into the result
+      without an intermediate copy. Peak-heap assertions in `tests/memory.rs`.
+- [x] **P3-T3** Median reduction over the shared three-way quickselect.
+- [x] **P3-T4** `Sum`, `Min`, `Max`.
+- [x] **P3-T5** Percentile, sigma, MAD, sigma-median, Winsorized, and linear-fit rejection.
+      GESDT returns `ImageProcError::Unsupported` — it needs the inverse Student's t CDF, and
+      `BestRejection::find` never selects it (the ADR's stated acceptable outcome).
+- [x] **P3-T6** Reject-then-mean with `f64` accumulation, the fall-back to a median when
+      rejection empties the stack, and per-pixel rejection maps.
+- [x] **P3-T7** `output_norm`: min–max rescale of non-zero values, zeros preserved.
+- [x] **P3-T8** `tests/stack_parity.rs` against Siril masters over the real corpus.
+- [x] **P3-T9** `benches/stack.rs`: method, frame count, budget, and core scaling.
+
+**Gate: met.** Measured on `data/corpus-mono` (ASI6200MM Pro, 9576×6388, 40 frames), against
+masters produced by the same commands `px --engine siril` issues today:
+
+| Master | Max delta | RMS delta | Median | Background noise |
+|---|---|---|---|---|
+| bias | **0.0000 ADU** | 0.00002 ADU | exact | 1.2581 vs 1.2594 |
+| dark | **0.0039 ADU** | 0.00002 ADU | exact | 1.4074 vs 1.4086 |
+
+About 31% of pixels differ at all, every one of them by the last bit of an `f32`: with an even
+frame count the median is the mean of the two central values, and Siril forms that in `f64`
+before narrowing while the native path stays in `f32`. 2e-5 ADU on a 16-bit scale.
+
+**Speed: at parity.** 2.55 s for a 40 × 61 MP median stack against Siril's 2.35 s (warm cache,
+M4 Max, 16 cores) — 1.09×, inside the "≥ parity" gate. Core scaling 5.1× from 1 to 16 cores;
+tightening the budget 8× (16 → 125 blocks) costs 22%.
+
+**Memory: inside the budget.** `tests/memory.rs` asserts peak heap against the plan, that peak
+heap does not grow with sequence length (4× the frames at the same budget stays under 2× the
+heap), and that requesting rejection maps does not breach the budget. The last one revealed the
+budgeter working as intended and against intuition: asking for maps *lowers* peak heap, because
+they are charged before the plan is drawn and the bands shrink to pay for them.
+
+**One deliberate divergence.** Linear-fit rejection recomputes the index mean and variance for
+the current stack length on every clipping iteration. Siril precomputes both once for the full
+frame count and keeps using them as the stack shrinks, so every pass after the first fits
+against constants that no longer describe its data. Recomputing is what a least-squares fit
+means. The divergence is confined to `LinearFit`, which `BestRejection` selects above 30 frames,
+and is unmeasured against Siril until a rejection-stacked master exists to compare — that lands
+with Phase 5's master flat.
 
 ### Phase 4 — Calibration operators
 

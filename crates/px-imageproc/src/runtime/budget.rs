@@ -74,12 +74,20 @@ impl ResourceBudget {
 
 impl fmt::Display for ResourceBudget {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{:.2} GiB across {} core(s)",
-            self.max_bytes as f64 / (1024.0 * 1024.0 * 1024.0),
-            self.cores
-        )
+        const KIB: f64 = 1024.0;
+        const MIB: f64 = 1024.0 * KIB;
+        const GIB: f64 = 1024.0 * MIB;
+        let bytes = self.max_bytes as f64;
+        // A budget reported as "0.00 GiB" tells the reader nothing about why
+        // their run failed.
+        if bytes >= GIB {
+            write!(f, "{:.2} GiB", bytes / GIB)?;
+        } else if bytes >= MIB {
+            write!(f, "{:.1} MiB", bytes / MIB)?;
+        } else {
+            write!(f, "{:.0} KiB", bytes / KIB)?;
+        }
+        write!(f, " across {} core(s)", self.cores)
     }
 }
 

@@ -5166,6 +5166,7 @@ name = "px-imageproc"
 version = "0.3.0"
 dependencies = [
  "criterion",
+ "dhat",
  "px-fits",
  "rayon",
  "rustafits",

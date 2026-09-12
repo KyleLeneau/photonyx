@@ -109,8 +109,76 @@ impl flags::SirilReference {
         std::fs::write(&path, render_json(&version, &corpus, &records))
             .with_context(|| format!("writing {}", path.display()))?;
         println!("wrote {} records to {}", records.len(), path.display());
+
+        if self.masters {
+            stack_masters(sh, &siril, &corpus, &out)?;
+        }
         Ok(())
     }
+}
+
+/// Median-stacks master bias and dark frames with Siril, issuing exactly the
+/// commands `px --engine siril` issues today so the comparison is against what
+/// the project actually ships.
+fn stack_masters(sh: &Shell, siril: &Path, corpus: &Path, out: &Path) -> Result<()> {
+    let masters = out.join("masters");
+    std::fs::create_dir_all(&masters)?;
+
+    for kind in ["bias", "dark"] {
+        let dir = corpus.join(kind);
+        if !dir.is_dir() {
+            continue;
+        }
+        let frames = std::fs::read_dir(&dir)?.count();
+        let target = masters.join(format!("master_{kind}"));
+        let produced = target.with_extension("fits");
+        if produced.exists() {
+            println!("  master {kind}: already present, skipping");
+            continue;
+        }
+
+        // Siril converts into a sequence in its working directory; keep that
+        // out of the corpus so the inputs stay pristine.
+        let work = sh.create_temp_dir()?;
+        let work_path = work.path();
+        let script = work_path.join("stack.ssf");
+        std::fs::write(
+            &script,
+            format!(
+                "requires 1.2.0\nsetext fits\ncd {}\nconvert {kind}_ -out={}\ncd {}\nstack {kind}_ med -out={}\n",
+                dir.display(),
+                work_path.display(),
+                work_path.display(),
+                target.display()
+            ),
+        )?;
+
+        println!("  stacking master {kind} from {frames} frames (this takes a while)...");
+        let started = std::time::Instant::now();
+        let log = cmd!(sh, "{siril} -s {script}").ignore_status().read()?;
+        let elapsed = started.elapsed();
+
+        if !produced.exists() {
+            bail!(
+                "siril did not produce {}. Log tail:\n{}",
+                produced.display(),
+                log.lines().rev().take(15).collect::<Vec<_>>().join("\n")
+            );
+        }
+        println!(
+            "  master {kind}: {} in {:.1}s",
+            produced.display(),
+            elapsed.as_secs_f64()
+        );
+        std::fs::write(
+            masters.join(format!("master_{kind}.log")),
+            format!(
+                "frames: {frames}\nelapsed_seconds: {:.3}\n\n{log}",
+                elapsed.as_secs_f64()
+            ),
+        )?;
+    }
+    Ok(())
 }
 
 fn siril_version(sh: &Shell, siril: &Path) -> Result<String> {
