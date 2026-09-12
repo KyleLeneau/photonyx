@@ -2,11 +2,13 @@
 //! Phases 7-10).
 //!
 //! The registration pipeline runs in four stages, each a module here:
-//! candidate detection ([`starfind`]), profile fitting and star rejection,
-//! correspondence and transform estimation, then warping. Stage
+//! candidate detection ([`starfind`]), profile fitting and star rejection
+//! ([`psf`]), correspondence and transform estimation, then warping. Stage
 //! boundaries are where the cost changes by an order of magnitude, which is
 //! also where the budget scheduler needs to be able to cut.
 
+pub mod psf;
 pub mod starfind;
 
+pub use psf::{Profile, PsfStar};
 pub use starfind::{Background, Candidate, StarfindOptions, detect_candidates};
