@@ -182,11 +182,14 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
 
         Commands::Observation(ObservationNamespace {
             command: ObservationCommand::Calibrate(args),
-        }) => commands::calibrate_observation(args, printer, profile_index.unwrap()).await,
+        }) => commands::calibrate_observation(args, printer, profile_index.unwrap(), engine).await,
 
         Commands::Observation(ObservationNamespace {
             command: ObservationCommand::BatchCalibrate(args),
-        }) => commands::batch_calibrate_observations(args, printer, profile_index.unwrap()).await,
+        }) => {
+            commands::batch_calibrate_observations(args, printer, profile_index.unwrap(), engine)
+                .await
+        }
 
         Commands::Observation(ObservationNamespace {
             command: ObservationCommand::Preview(args),

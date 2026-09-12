@@ -1,11 +1,11 @@
 //! Resolving how much memory and how many cores a run may use (ADR 007,
 //! P1-T3).
 //!
-//! Siril resolves its budget as a ratio of *available* (not total) memory,
-//! capped by whatever the OS or a container reports
-//! (`get_max_memory_in_MB`, `src/core/OS_utils.c` l. 819). The native engine
-//! does the same so the two engines behave alike when handed the same
-//! `--max-memory` value.
+//! A ratio is resolved against *available* memory rather than total: the
+//! total is not a number this process can actually use, since the rest of the
+//! system already holds some of it. Under a container the cgroup ceiling wins,
+//! because inside one the host figure is not what this process may allocate
+//! either.
 
 use std::fmt;
 
@@ -22,7 +22,8 @@ pub enum MemoryLimit {
 
 impl Default for MemoryLimit {
     fn default() -> Self {
-        // Matches siril_sys::Builder's default.
+        // Nine tenths: enough headroom for the allocator and the OS without
+        // leaving a meaningful share of the machine unused.
         Self::Ratio(0.9)
     }
 }
@@ -120,9 +121,8 @@ fn host_available_memory() -> u64 {
 
 /// Reads a cgroup v1 or v2 memory ceiling, if this process is under one.
 ///
-/// The paths and their precedence mirror what `siril-sys` already does for the
-/// Siril engine, reimplemented here because that crate is out of scope for
-/// ADR 007 to modify.
+/// Both cgroup generations are checked, v1 before v2, since a host may expose
+/// either. The paths are the documented kernel interface.
 fn cgroup_memory_limit() -> Option<u64> {
     const PATHS: [&str; 7] = [
         "/sys/fs/cgroup/memory/memory.limit_in_bytes",

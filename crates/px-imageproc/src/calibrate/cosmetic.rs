@@ -30,7 +30,9 @@ pub struct Thresholds {
 }
 
 impl Thresholds {
-    /// Siril's defaults for automatic detection from a master dark.
+    /// Conventional thresholds for automatic detection from a master dark:
+    /// three sigma either side, which on a normal distribution flags about one
+    /// pixel in 370 and so catches real defects without eating the noise.
     pub fn default_from_dark() -> Self {
         Self {
             cold: Some(3.0),

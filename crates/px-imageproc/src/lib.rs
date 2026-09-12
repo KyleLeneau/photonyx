@@ -27,6 +27,7 @@ pub mod stretch;
 
 pub use bayer::BayerPattern;
 pub use calibrate::{CalibrationOptions, CalibrationReport, DarkScaling, Masters, calibrate};
+pub use debayer::{Method as DebayerMethod, debayer_frame, debayer_frame_with};
 pub use error::ImageProcError;
 pub use frame::{Frame, ValueScale};
 pub use preview::{MAX_DISPLAY_DIM, PreviewImage, decode_preview};

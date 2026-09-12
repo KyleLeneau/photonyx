@@ -8,7 +8,7 @@
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use px_imageproc::runtime::{
-    BlockPlan, ImageDims, ResourceBudget, Runtime, blocks::max_rows_for_budget,
+    BlockPlan, ImageDims, ResourceBudget, Runtime, blocks::rows_per_worker,
 };
 
 const MB: u64 = 1024 * 1024;
@@ -20,7 +20,7 @@ fn plan(c: &mut Criterion) {
     // A 60 MP mono frame over 200 subs with a tight budget — the most blocks
     // a realistic run produces.
     let dims = ImageDims::new(7744, 7744, 1);
-    let rows = max_rows_for_budget(2 * GB, &dims, 200, 4, 0);
+    let rows = rows_per_worker(2 * GB, dims.width, 200, 4, 16);
     let plan = BlockPlan::compute(rows, &dims, 16).unwrap();
     group.throughput(criterion::Throughput::Elements(plan.blocks.len() as u64));
 
@@ -44,7 +44,7 @@ fn scaling(c: &mut Criterion) {
     let dims = ImageDims::new(4096, 4096, 1);
 
     for &frames in &[25usize, 50, 100, 200] {
-        let rows = max_rows_for_budget(512 * MB, &dims, frames, 4, 0);
+        let rows = rows_per_worker(512 * MB, dims.width, frames, 4, 8);
         if rows == 0 {
             continue;
         }

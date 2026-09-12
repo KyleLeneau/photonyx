@@ -10,7 +10,7 @@
 pub mod blocks;
 pub mod budget;
 
-pub use blocks::{Block, BlockPlan, ImageDims, max_rows_for_budget, refine_blocks_candidate};
+pub use blocks::{Block, BlockPlan, ImageDims, rows_per_worker};
 pub use budget::{MemoryLimit, ResourceBudget};
 
 use std::sync::Arc;
@@ -60,32 +60,15 @@ impl Runtime {
         self.pool.install(op)
     }
 
-    /// Plans how to cut `dims` into memory-bounded blocks for a reduction
-    /// across `nb_frames` frames, charging `nb_rejmaps` rejection maps and the
-    /// result image against the budget first.
+    /// Plans how to cut `dims` into memory-bounded bands for a reduction
+    /// across `nb_frames` frames.
+    ///
+    /// The result image and any rejection maps are live for the whole run, as
+    /// is anything named by `extra_resident_bytes` — a master frame being
+    /// subtracted in flight, say. All of it is charged before the bands are
+    /// sized, so what the plan promises is what the run actually holds.
     ///
     /// `elem_size` is 4 for the `f32` pipeline (ADR 007 D1).
-    ///
-    /// # Why this is not just `BlockPlan::compute`
-    ///
-    /// [`BlockPlan::compute`] is a faithful port of Siril's scheduler (D3), and
-    /// that scheduler can overshoot its own budget by a small margin. Its row
-    /// budget guarantees `height_of_blocks <= max_rows / nb_threads`, but
-    /// `height_of_blocks` is a *floor* while the per-thread buffers are sized
-    /// to the **largest** block, which is one row taller whenever the rows do
-    /// not divide evenly. With 4096 rows over 115 blocks on 4 threads the
-    /// budget permits 35.75 rows per thread, blocks come out 35 and 36 rows,
-    /// and buffers are sized for 36 — overrunning a 512 MiB budget by 2.1 MB
-    /// (0.39%). The `+1` working-stack pixel per frame adds a little more.
-    ///
-    /// 0.39% is not much, but ADR 007 says the budget bound is the one that
-    /// must not be negotiated, so this method tightens the row budget until the
-    /// plan actually fits. That is a deliberate, measured deviation from the
-    /// port; `BlockPlan::compute` itself stays faithful so the fidelity tests
-    /// keep testing the real thing.
-    /// `extra_resident_bytes` covers anything else the run holds for its whole
-    /// duration — a master frame being subtracted in flight, for instance. It
-    /// simply shrinks the budget the blocks are planned against.
     pub fn plan_blocks(
         &self,
         dims: &ImageDims,
@@ -94,51 +77,30 @@ impl Runtime {
         nb_rejmaps: usize,
         extra_resident_bytes: u64,
     ) -> Result<BlockPlan, ImageProcError> {
-        let available = self.budget.max_bytes.saturating_sub(extra_resident_bytes);
-        let insufficient = || {
-            let hint = if self.budget.max_bytes < 1024 * 1024 {
-                " (budgets are tracked in whole MiB; anything under 1 MiB rounds to zero)"
-            } else {
-                ""
-            };
-            ImageProcError::InsufficientMemory {
+        let pixels = dims.pixel_count() as u64;
+        let resident = pixels * elem_size as u64            // the result
+            + nb_rejmaps as u64 * pixels * 2                // rejection maps, u16
+            + extra_resident_bytes;
+
+        let for_bands = self.budget.max_bytes.saturating_sub(resident);
+        let rows = rows_per_worker(
+            for_bands,
+            dims.width,
+            nb_frames,
+            elem_size,
+            self.budget.cores,
+        );
+
+        if rows == 0 {
+            return Err(ImageProcError::InsufficientMemory {
                 what: format!(
-                    "a {}x{}x{} result plus one row of {nb_frames} frames within {}{hint}",
+                    "a {}x{}x{} result plus one row of {nb_frames} frames per core, within {}",
                     dims.width, dims.height, dims.channels, self.budget
                 ),
-            }
-        };
-
-        // Live for the whole run, so charged before any block buffer.
-        let fixed_bytes = dims.pixel_count() as u64 * elem_size as u64
-            + nb_rejmaps as u64 * dims.pixel_count() as u64 * 2;
-        let for_blocks = available.saturating_sub(fixed_bytes);
-        if for_blocks == 0 {
-            return Err(insufficient());
+            });
         }
 
-        let mut rows = max_rows_for_budget(available, dims, nb_frames, elem_size, nb_rejmaps);
-        if rows == 0 {
-            return Err(insufficient());
-        }
-
-        loop {
-            let plan = BlockPlan::compute(rows, dims, self.budget.cores)?;
-            let pool_bytes =
-                self.budget.cores as u64 * plan.buffer_bytes_per_thread(dims, nb_frames, elem_size);
-            if pool_bytes <= for_blocks {
-                return Ok(plan);
-            }
-
-            // Scale the row budget down by however much we overshot, and always
-            // make progress so this terminates.
-            let scaled = (rows as u64 * for_blocks / pool_bytes) as usize;
-            let next = scaled.min(rows - 1);
-            if next == 0 {
-                return Err(insufficient());
-            }
-            rows = next;
-        }
+        BlockPlan::compute(rows, dims, self.budget.cores)
     }
 }
 

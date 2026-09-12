@@ -5,14 +5,15 @@ use px_cli::BatchCalibrateObservationArgs;
 use px_conventions::observation::ObservationPath;
 use px_index::{MasterKind, ProfileIndex};
 use px_pipeline::{RunIn, calibration::calibrate_light::CalibrateLightSetPipeline};
-use siril_sys::Builder;
 
-use crate::{ExitStatus, printer::Printer, reporters::DefaultPipelineReporter, utils::to_fits_ext};
+use crate::engine::EngineConfig;
+use crate::{ExitStatus, printer::Printer, utils::to_fits_ext};
 
 pub(crate) async fn batch_calibrate_observations(
     args: BatchCalibrateObservationArgs,
     printer: Printer,
     index: ProfileIndex,
+    engine: EngineConfig,
 ) -> Result<ExitStatus> {
     let target = args.target.as_deref();
     let observations = if args.clean {
@@ -123,16 +124,20 @@ pub(crate) async fn batch_calibrate_observations(
         printer.info(format!("  {label}  →  calibrating…"))?;
         print_master_paths(printer, &dark, &flat, &bias)?;
 
-        let result = CalibrateLightSetPipeline::builder()
+        let pipeline = CalibrateLightSetPipeline::builder()
             .ext(to_fits_ext(args.ext))
             .raw_folder(raw_path)
             .out_folder(out_folder.clone())
             .maybe_bias(bias)
             .maybe_dark(dark)
             .maybe_flat(flat)
-            .build()
-            .run(DefaultPipelineReporter::from(printer), Builder::default())
-            .await;
+            .build();
+
+        let result = if engine.is_native() {
+            pipeline.run(printer.reporter(), engine.native()).await
+        } else {
+            pipeline.run(printer.reporter(), engine.siril()).await
+        };
 
         match result {
             Ok(light) => {

@@ -5,7 +5,7 @@
 //! implements `RunIn` for both — so this exists only to decide which one to
 //! hand over, and to apply the same resource limits to either.
 
-use px_cli::{Engine, GlobalArgs, MemoryLimitArg};
+use px_cli::{DebayerMethod as CliDebayer, Engine, GlobalArgs, MemoryLimitArg};
 use px_pipeline::NativeRuntime;
 use siril_sys::Builder;
 
@@ -15,6 +15,7 @@ pub struct EngineConfig {
     pub engine: Engine,
     cores: Option<usize>,
     memory: Option<MemoryLimitArg>,
+    debayer: CliDebayer,
 }
 
 impl EngineConfig {
@@ -23,6 +24,7 @@ impl EngineConfig {
             engine: args.engine,
             cores: args.max_cores,
             memory: args.max_memory,
+            debayer: args.debayer,
         }
     }
 
@@ -61,6 +63,9 @@ impl EngineConfig {
             Some(MemoryLimitArg::Bytes(b)) => runtime = runtime.use_memory_bytes(b),
             None => {}
         }
-        runtime
+        runtime.use_debayer(match self.debayer {
+            CliDebayer::GradientCorrected => px_imageproc::debayer::Method::GradientCorrected,
+            CliDebayer::Bilinear => px_imageproc::debayer::Method::Bilinear,
+        })
     }
 }

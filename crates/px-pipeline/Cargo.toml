@@ -12,6 +12,8 @@ px-fits = { workspace = true}
 px-imageproc = { workspace = true }
 px-fs = { workspace = true}
 px-static = { workspace = true }
+
+rayon = { workspace = true }
 siril-sys = { workspace = true }
 
 bon = { workspace = true }

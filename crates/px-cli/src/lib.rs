@@ -36,6 +36,28 @@ impl std::fmt::Display for Engine {
     }
 }
 
+/// Which reconstruction turns a colour-filter-array frame into full colour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
+pub enum DebayerMethod {
+    /// Gradient-corrected linear interpolation (Malvar-He-Cutler). Sharper and
+    /// measurably more accurate; amplifies high-frequency noise a little.
+    #[default]
+    GradientCorrected,
+    /// Averaging of nearest same-colour neighbours. Softer, and quieter in the
+    /// background because averaging suppresses noise rather than sharpening
+    /// it.
+    Bilinear,
+}
+
+impl std::fmt::Display for DebayerMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DebayerMethod::GradientCorrected => write!(f, "gradient-corrected"),
+            DebayerMethod::Bilinear => write!(f, "bilinear"),
+        }
+    }
+}
+
 /// A memory ceiling, either a share of what is available or a fixed amount.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MemoryLimitArg {
@@ -204,6 +226,19 @@ pub struct GlobalArgs {
         value_parser = parse_memory_limit
     )]
     pub max_memory: Option<MemoryLimitArg>,
+
+    /// How colour-filter-array frames are reconstructed into colour.
+    ///
+    /// `gradient-corrected` is sharper and more accurate against known truth;
+    /// `bilinear` is softer but quieter in the background. Applies to the
+    /// native engine only — the Siril engine uses its own setting.
+    #[arg(
+        global = true,
+        long,
+        env = "PX_DEBAYER",
+        default_value = "gradient-corrected"
+    )]
+    pub debayer: DebayerMethod,
 }
 
 #[derive(Subcommand)]
@@ -284,6 +319,8 @@ impl Commands {
             self,
             Commands::Master(MasterNamespace {
                 command: MasterCommand::Bias(_) | MasterCommand::Dark(_) | MasterCommand::Flat(_),
+            }) | Commands::Observation(ObservationNamespace {
+                command: ObservationCommand::Calibrate(_) | ObservationCommand::BatchCalibrate(_),
             })
         )
     }

@@ -109,3 +109,25 @@ cosmetic correction patches anyway.
 
 Outputs land in `data/output/calibrated/` for comparison against `data/reference/calibrated/`
 and `data/reference-osc/calibrated/`.
+
+### Demosaicing (ADR 007 Phase 6)
+
+Two reconstructions ship. `--debayer` / `PX_DEBAYER` selects; the default is
+`gradient-corrected`.
+
+| | vs RCD background noise (R/G/B) | RMS error vs known truth |
+|---|---|---|
+| `gradient-corrected` (Malvar-He-Cutler) | 1.23× / 1.45× / 1.24× | **0.002192** |
+| `bilinear` | 0.93× / 0.92× / 0.75× | 0.003385 |
+
+Read on noise alone, bilinear wins; it does not. A blurrier reconstruction *measures* as
+quieter, because smoothing correlates neighbouring pixels and a background-noise estimator reads
+that as less noise — ranking demosaics that way rewards the blurriest one. Against a synthetic
+star field with known truth the ranking inverts, and gradient-corrected is 35% more accurate.
+
+Channel levels match RCD to better than 0.01% either way, so there is no colour cast. A 61 MP
+frame demosaics in 0.07 s.
+
+Neither is RCD, which Siril uses: RCD has no published specification independent of its GPL
+implementation, so it cannot be written clean-room. ADR 007 Phase 6b tables AHD as the way to
+close the remaining gap.

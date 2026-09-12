@@ -437,6 +437,43 @@ fn build_calibration_reference(sh: &Shell, siril: &Path, corpus: &Path, out: &Pa
         );
     }
     std::fs::copy(&emitted, &produced)?;
+    // A second reference with debayering on, so the demosaic can be measured
+    // in isolation: the same calibration, the only difference being the CFA
+    // interpolation.
+    if Frame_is_cfa(&light) {
+        let debayer_name = format!(
+            "pp_debayered_{}.fits",
+            light.file_stem().unwrap().to_string_lossy()
+        );
+        let debayered = calibrated_dir.join(&debayer_name);
+        if !debayered.exists() {
+            let work = sh.create_temp_dir()?;
+            let work_path = work.path();
+            let script = work_path.join("deb.ssf");
+            std::fs::write(
+                &script,
+                format!(
+                    "requires 1.2.0\nsetext fits\ncd {}\n\
+                     calibrate_single {} -dark={} -flat={} -cfa -debayer\n",
+                    quoted(work_path),
+                    quoted(&light),
+                    flag_value(&dark)?,
+                    flag_value(&flat)?
+                ),
+            )?;
+            println!("  calibrating + debayering one light frame...");
+            let log = cmd!(sh, "{siril} -s {script}").ignore_status().read()?;
+            let emitted = work_path.join(&emitted_name);
+            if emitted.exists() {
+                std::fs::copy(&emitted, &debayered)?;
+                println!("  debayered light: {}", debayered.display());
+            } else {
+                println!("  (no debayered output; frame is probably not CFA)");
+            }
+            std::fs::write(calibrated_dir.join("debayer.log"), log)?;
+        }
+    }
+
     std::fs::write(
         calibrated_dir.join("source.txt"),
         format!(
@@ -451,4 +488,20 @@ fn build_calibration_reference(sh: &Shell, siril: &Path, corpus: &Path, out: &Pa
     std::fs::write(calibrated_dir.join("calibrate.log"), log)?;
     println!("  calibrated light: {}", produced.display());
     Ok(())
+}
+
+/// Whether a frame declares a Bayer pattern, read straight from its header
+/// block. Cheap enough not to warrant pulling a FITS reader into the build
+/// tool.
+#[allow(non_snake_case)]
+fn Frame_is_cfa(path: &Path) -> bool {
+    use std::io::Read;
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return false;
+    };
+    let mut head = vec![0u8; 2880 * 4];
+    if file.read_exact(&mut head).is_err() {
+        return false;
+    }
+    String::from_utf8_lossy(&head).contains("BAYERPAT")
 }

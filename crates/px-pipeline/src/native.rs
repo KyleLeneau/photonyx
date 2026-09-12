@@ -12,6 +12,7 @@
 
 use std::path::{Path, PathBuf};
 
+use px_imageproc::debayer::Method as DebayerMethod;
 use px_imageproc::runtime::{MemoryLimit, ResourceBudget, Runtime, budget};
 use siril_sys::FitsExt;
 
@@ -24,6 +25,7 @@ pub struct NativeRuntime {
     cores: Option<usize>,
     ext: FitsExt,
     work_dir: Option<PathBuf>,
+    debayer: DebayerMethod,
 }
 
 impl Default for NativeRuntime {
@@ -35,6 +37,7 @@ impl Default for NativeRuntime {
             cores: None,
             ext: FitsExt::FITS,
             work_dir: None,
+            debayer: DebayerMethod::default(),
         }
     }
 }
@@ -80,6 +83,12 @@ impl NativeRuntime {
         self
     }
 
+    /// How CFA frames are reconstructed into colour.
+    pub fn use_debayer(mut self, method: DebayerMethod) -> Self {
+        self.debayer = method;
+        self
+    }
+
     pub fn ext(&self) -> FitsExt {
         self.ext.clone()
     }
@@ -91,6 +100,7 @@ impl NativeRuntime {
             runtime,
             ext: self.ext.clone(),
             work_dir: self.work_dir.clone(),
+            debayer: self.debayer,
         })
     }
 }
@@ -101,6 +111,7 @@ pub struct NativeEngine {
     runtime: Runtime,
     ext: FitsExt,
     work_dir: Option<PathBuf>,
+    debayer: DebayerMethod,
 }
 
 impl NativeEngine {
@@ -118,6 +129,10 @@ impl NativeEngine {
 
     pub fn work_dir(&self) -> Option<&Path> {
         self.work_dir.as_deref()
+    }
+
+    pub fn debayer(&self) -> DebayerMethod {
+        self.debayer
     }
 
     /// Appends the configured FITS extension to a path built without one.

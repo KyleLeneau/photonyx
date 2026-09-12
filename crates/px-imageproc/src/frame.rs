@@ -186,6 +186,25 @@ impl Frame {
         self.dims
     }
 
+    /// Swaps in a new buffer and shape, keeping the header.
+    ///
+    /// Used by demosaicing, which turns one CFA channel into three colour
+    /// ones — and by super-pixel demosaicing, which halves the dimensions too.
+    pub fn replace(&mut self, dims: ImageDims, data: Vec<f32>) -> Result<(), ImageProcError> {
+        if data.len() != dims.pixel_count() {
+            return Err(ImageProcError::Processing(format!(
+                "buffer of {} samples does not match {}x{}x{}",
+                data.len(),
+                dims.width,
+                dims.height,
+                dims.channels
+            )));
+        }
+        self.dims = dims;
+        self.data = data;
+        Ok(())
+    }
+
     pub fn width(&self) -> usize {
         self.dims.width
     }
@@ -374,7 +393,14 @@ pub(crate) fn probe_value_scale<S: ByteSource + ?Sized>(
     }
 
     let dims = dims_of(hdu)?;
-    let row = hdu.read_region::<f32>(&Region::rect(0, dims.height / 2, dims.width, 1))?;
+    // The region must carry the channel axis when the image has one, or the
+    // read is checked against a shape it does not match.
+    let region = if hdu.shape().len() > 2 {
+        Region::new(vec![0, dims.height / 2, 0], vec![dims.width, 1, 1])
+    } else {
+        Region::rect(0, dims.height / 2, dims.width, 1)
+    };
+    let row = hdu.read_region::<f32>(&region)?;
     let max = row.iter().copied().fold(f32::NEG_INFINITY, f32::max);
     Ok(ValueScale::choose(bitpix, has_bzero, Some(max)))
 }

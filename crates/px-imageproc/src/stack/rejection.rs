@@ -1,23 +1,37 @@
-//! Outlier rejection for mean stacking (ADR 007, P3-T5).
+//! Outlier rejection for mean stacking (ADR 007, Phase 3).
 //!
 //! Every routine here works on one pixel's stack — the `n` values that pixel
 //! takes across the sequence — and partitions it into kept and rejected. They
 //! run once per output pixel, so a 61 MP stack calls them 61 million times;
 //! that is why they take a caller-owned scratch buffer and never allocate.
 //!
-//! The shared shape is: estimate a centre and a spread, drop whatever lies
-//! more than `low`/`high` multiples of the spread away, re-estimate, repeat
-//! until nothing more is dropped. What varies is the spread estimator, which
-//! is what makes each method suited to a different frame count — a standard
-//! deviation is fine with many frames and useless with six, where it is
-//! dominated by the outlier it is supposed to find.
+//! All but one share a shape: estimate a centre and a spread, drop whatever
+//! lies more than `low`/`high` multiples of the spread from the centre,
+//! re-estimate, and repeat until a pass drops nothing. What varies is the
+//! spread estimator, and that is what suits each method to a different frame
+//! count — a standard deviation is fine with many frames and useless with six,
+//! where the outlier it is meant to find is what dominates it.
+//!
+//! The estimators are standard:
+//!
+//! - Sigma and MAD clipping are the textbook iterated k-sigma clip, the second
+//!   swapping the standard deviation for the median absolute deviation.
+//! - Winsorized sigma clipping follows Huber's proposal: pull the tails in to
+//!   ±1.5σ, re-measure, iterate to convergence, and rescale by 1.134 to undo
+//!   the bias that pulling them in introduces for normally distributed data.
+//! - Percentile clipping thresholds on a fraction of the median *level* rather
+//!   than on a spread, which is what makes it usable when there are too few
+//!   frames to estimate a spread at all.
+//! - Linear-fit clipping fits a least-squares line through the sorted values
+//!   and clips on the residual, so a stack with a genuine trend across the
+//!   sequence is not mistaken for one with a wide spread.
 
 use crate::error::ImageProcError;
 use crate::stats;
 
 /// Rejection bounds, in units of the method's spread estimate. Asymmetric
-/// because cosmic rays and satellites are bright: the high side is usually
-/// tightened relative to the low.
+/// because the outliers that matter are usually bright — cosmic rays,
+/// satellites, aircraft — so the high side is typically tightened.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Bounds {
     pub low: f32,
@@ -46,8 +60,7 @@ pub enum Rejection {
     /// The only method that works with very few frames, where no spread
     /// estimate is trustworthy.
     Percentile(Bounds),
-    /// Iterated clipping about the median, spread from the standard
-    /// deviation.
+    /// Iterated clipping about the median, spread from the standard deviation.
     Sigma(Bounds),
     /// Iterated clipping about the median, spread from the MAD — more robust
     /// than [`Rejection::Sigma`] when outliers are numerous.
@@ -56,12 +69,12 @@ pub enum Rejection {
     /// rather than dropped, so every frame keeps contributing.
     SigmaMedian(Bounds),
     /// Iterated clipping whose spread comes from a Winsorized standard
-    /// deviation: the tails are pulled in to ±1.5σ before measuring, so the
-    /// outliers cannot inflate the very estimate meant to catch them.
+    /// deviation, so the outliers cannot inflate the estimate meant to catch
+    /// them.
     Winsorized(Bounds),
     /// Fits a line to the sorted stack and clips on the residual. Suits long
-    /// sequences with a gradual trend — sky brightening, a drifting gradient
-    /// — that a constant centre would mistake for spread.
+    /// sequences with a gradual trend — sky brightening, a drifting gradient —
+    /// that a constant centre would mistake for spread.
     LinearFit(Bounds),
     /// Generalized Extreme Studentized Deviate. **Not implemented**: it needs
     /// the inverse Student's t CDF, and nothing in the project selects it.
@@ -108,25 +121,38 @@ impl Rejected {
     }
 }
 
-/// Below this many surviving values, clipping stops. Rejecting down to a
-/// handful makes the remaining estimate meaningless, and a pixel where every
-/// frame disagrees is better served by keeping them all.
+/// Fewest values a clip may leave behind.
+///
+/// Below this there is nothing left to estimate a spread from, so further
+/// clipping would be measuring its own noise. A pixel where that many frames
+/// genuinely disagree is better served by keeping them all and letting the
+/// mean say so.
 const MIN_KEPT: usize = 4;
 
-/// Scratch the rejection routines need, sized once per thread rather than per
+/// Winsorizing pulls the tails to this many sigma before re-measuring.
+const WINSOR_LIMIT: f32 = 1.5;
+
+/// Rescales a Winsorized standard deviation so it estimates the same quantity
+/// as an ordinary one for normally distributed data.
+const WINSOR_CONSISTENCY: f32 = 1.134;
+
+/// Relative change below which the Winsorized sigma iteration has converged.
+const WINSOR_TOLERANCE: f32 = 5e-4;
+
+/// Scratch the rejection routines need, sized once per worker rather than per
 /// pixel.
 pub struct Scratch {
-    /// Winsorized copy of the stack.
-    winsorized: Vec<f32>,
-    /// Per-value verdict: -1 low, 0 keep, +1 high.
-    verdict: Vec<i8>,
+    /// Working copy for estimators that must not disturb the stack.
+    work: Vec<f32>,
+    /// Absolute deviations, for the MAD estimator.
+    deviations: Vec<f32>,
 }
 
 impl Scratch {
     pub fn new(frames: usize) -> Self {
         Self {
-            winsorized: vec![0.0; frames],
-            verdict: vec![0; frames],
+            work: vec![0.0; frames],
+            deviations: vec![0.0; frames],
         }
     }
 }
@@ -135,8 +161,8 @@ impl Scratch {
 /// returning how many there are.
 ///
 /// A zero means the pixel had no data in that frame — outside a warped
-/// frame's footprint, or an unexposed region — so it must not pull the
-/// average toward zero.
+/// frame's footprint, or an unexposed region — so it must not pull the average
+/// toward zero.
 pub fn compact_non_null(stack: &mut [f32]) -> usize {
     let mut kept = 0;
     for i in 0..stack.len() {
@@ -151,8 +177,7 @@ pub fn compact_non_null(stack: &mut [f32]) -> usize {
 /// Applies `rejection` to `stack[..n]`, compacting the survivors to the front
 /// and returning how many survived.
 ///
-/// `stack` is reordered freely. Returns 0 only when the stack is degenerate
-/// enough that the caller should fall back to a median.
+/// `stack` is reordered freely.
 pub fn reject(
     stack: &mut [f32],
     n: usize,
@@ -160,68 +185,108 @@ pub fn reject(
     scratch: &mut Scratch,
     counts: &mut Rejected,
 ) -> usize {
-    // One or two values leave nothing to reject against.
-    if n <= 2 || matches!(rejection, Rejection::None) {
+    // Two values leave nothing to reject against: whichever you drop, the
+    // other is the answer.
+    if n <= 2 || matches!(rejection, Rejection::None | Rejection::Gesdt(_)) {
         return n;
     }
 
     match rejection {
         Rejection::None | Rejection::Gesdt(_) => n,
         Rejection::Percentile(b) => percentile(stack, n, b, scratch, counts),
-        Rejection::Sigma(b) => iterated_clip(stack, n, b, scratch, counts, Spread::StdDev),
-        Rejection::Mad(b) => iterated_clip(stack, n, b, scratch, counts, Spread::Mad),
-        Rejection::Winsorized(b) => iterated_clip(stack, n, b, scratch, counts, Spread::Winsorized),
-        Rejection::SigmaMedian(b) => sigma_median(stack, n, b, counts),
-        Rejection::LinearFit(b) => linear_fit(stack, n, b, scratch, counts),
+        Rejection::SigmaMedian(b) => sigma_median(stack, n, b, scratch, counts),
+        Rejection::LinearFit(b) => linear_fit(stack, n, b, counts),
+        Rejection::Sigma(b) => clip_until_stable(
+            stack,
+            n,
+            b,
+            counts,
+            |values, scratch| {
+                let centre = median_of(values, scratch);
+                Some((centre, standard_deviation(values)))
+            },
+            scratch,
+        ),
+        Rejection::Mad(b) => clip_until_stable(
+            stack,
+            n,
+            b,
+            counts,
+            |values, scratch| {
+                let centre = median_of(values, scratch);
+                Some((centre, mad_about(values, centre, scratch)))
+            },
+            scratch,
+        ),
+        Rejection::Winsorized(b) => clip_until_stable(
+            stack,
+            n,
+            b,
+            counts,
+            |values, scratch| {
+                let centre = median_of(values, scratch);
+                Some((centre, winsorized_deviation(values, centre, scratch)))
+            },
+            scratch,
+        ),
     }
 }
 
-/// Which spread estimate drives an iterated clip.
-#[derive(Clone, Copy, PartialEq)]
-enum Spread {
-    StdDev,
-    Mad,
-    Winsorized,
-}
+/// Iterated clipping about a centre, with the estimator supplied by the
+/// caller. Stops when a pass drops nothing, when the estimate degenerates, or
+/// when dropping more would leave fewer than [`MIN_KEPT`] values.
+fn clip_until_stable(
+    stack: &mut [f32],
+    mut n: usize,
+    bounds: Bounds,
+    counts: &mut Rejected,
+    mut estimate: impl FnMut(&[f32], &mut Scratch) -> Option<(f32, f32)>,
+    scratch: &mut Scratch,
+) -> usize {
+    loop {
+        let Some((centre, spread)) = estimate(&stack[..n], scratch) else {
+            return n;
+        };
+        // No spread means every value is the centre; there is no outlier to
+        // find and the thresholds would reject nothing or everything.
+        if spread <= 0.0 || !spread.is_finite() {
+            return n;
+        }
 
-/// Sample standard deviation of `data`, and its mean.
-fn std_dev(data: &[f32]) -> (f32, f32) {
-    let n = data.len();
-    if n < 2 {
-        return (0.0, data.first().copied().unwrap_or(0.0));
+        let lower = centre - bounds.low * spread;
+        let upper = centre + bounds.high * spread;
+
+        // Count first, so a pass that would cut too deep can be abandoned
+        // whole rather than leaving the stack half-clipped.
+        let survivors = stack[..n]
+            .iter()
+            .filter(|v| **v >= lower && **v <= upper)
+            .count();
+        if survivors == n || survivors < MIN_KEPT {
+            return n;
+        }
+
+        let mut kept = 0;
+        for i in 0..n {
+            let v = stack[i];
+            if v < lower {
+                counts.low += 1;
+            } else if v > upper {
+                counts.high += 1;
+            } else {
+                stack[kept] = v;
+                kept += 1;
+            }
+        }
+        n = kept;
     }
-    let mut sum = 0.0f64;
-    for &v in data {
-        sum += v as f64;
-    }
-    let mean = (sum / n as f64) as f32;
-
-    let mut acc = 0.0f64;
-    for &v in data {
-        let d = (v - mean) as f64;
-        acc += d * d;
-    }
-    // Sample form: this is an estimate from n draws, and at the frame counts
-    // that matter (6-40) the difference from the population form is not
-    // negligible.
-    (((acc / (n - 1) as f64) as f32).sqrt(), mean)
-}
-
-fn median_of(data: &mut [f32]) -> f32 {
-    stats::median_in_place(data)
-}
-
-fn mad_about(data: &[f32], centre: f32, scratch: &mut Vec<f32>) -> f32 {
-    scratch.clear();
-    scratch.extend(data.iter().map(|v| (v - centre).abs()));
-    stats::median_in_place(scratch)
 }
 
 /// Rejection at fixed fractions of the median value.
 ///
 /// The bounds are relative to the median *level*, not to a spread — with only
 /// a handful of frames there is no spread estimate worth trusting, but the
-/// median level is still meaningful.
+/// median level is still meaningful. One pass: there is no estimate to refine.
 fn percentile(
     stack: &mut [f32],
     n: usize,
@@ -229,18 +294,35 @@ fn percentile(
     scratch: &mut Scratch,
     counts: &mut Rejected,
 ) -> usize {
-    scratch.winsorized[..n].copy_from_slice(&stack[..n]);
-    let median = median_of(&mut scratch.winsorized[..n]);
-    if median == 0.0 {
-        return 0;
+    let median = median_of(&stack[..n], scratch);
+    // Thresholds are proportional to the level, so a zero level has none.
+    if median <= 0.0 {
+        return n;
+    }
+
+    let lower = median - median * bounds.low;
+    let upper = median + median * bounds.high;
+
+    // The MIN_KEPT floor that guards the iterative methods does not apply
+    // here. It exists because re-estimating a spread from a dwindling stack
+    // measures its own noise — and this method estimates no spread. It is also
+    // the method chosen when frames are few, so a floor of four would stop it
+    // rejecting anything at all on the stacks it exists for. One survivor is
+    // enough; none falls back to the median in the caller.
+    let survivors = stack[..n]
+        .iter()
+        .filter(|v| **v >= lower && **v <= upper)
+        .count();
+    if survivors == 0 {
+        return n;
     }
 
     let mut kept = 0;
     for i in 0..n {
         let v = stack[i];
-        if median - v > median * bounds.low {
+        if v < lower {
             counts.low += 1;
-        } else if v - median > median * bounds.high {
+        } else if v > upper {
             counts.high += 1;
         } else {
             stack[kept] = v;
@@ -250,135 +332,35 @@ fn percentile(
     kept
 }
 
-/// Iterated clipping about the median, with the spread estimate chosen by
-/// `spread`. Loops until a pass drops nothing, or the survivors hit the floor.
-fn iterated_clip(
+/// Replaces outliers with the median instead of dropping them, so every frame
+/// keeps contributing and the frame count stays constant. Repeats until a pass
+/// replaces nothing.
+fn sigma_median(
     stack: &mut [f32],
-    mut n: usize,
+    n: usize,
     bounds: Bounds,
     scratch: &mut Scratch,
     counts: &mut Rejected,
-    spread: Spread,
 ) -> usize {
-    let mut deviations: Vec<f32> = Vec::new();
-
-    scratch.winsorized[..n].copy_from_slice(&stack[..n]);
-    let mut median = median_of(&mut scratch.winsorized[..n]);
-
-    // Cumulative across iterations, not per pass: once this many values have
-    // gone, the stack is too thin to keep cutting.
-    let mut removed = 0usize;
-    let mut first_pass = true;
-
     loop {
-        // Winsorizing pulls the tails in toward the centre, so it has to use
-        // *this* pass's centre — measuring the pulled-in spread around a
-        // centre the last pass left behind would winsorize against the wrong
-        // point. The clipping estimators have no such coupling: they measure
-        // the spread about the previous centre and then move it, which avoids
-        // understating the spread on a pass that just removed something.
-        if spread == Spread::Winsorized && !first_pass {
-            scratch.winsorized[..n].copy_from_slice(&stack[..n]);
-            median = median_of(&mut scratch.winsorized[..n]);
-        }
-
-        let sigma = match spread {
-            Spread::StdDev => std_dev(&stack[..n]).0,
-            Spread::Mad => mad_about(&stack[..n], median, &mut deviations),
-            Spread::Winsorized => winsorized_sigma(&stack[..n], median, &mut scratch.winsorized),
-        };
-
-        if first_pass {
-            first_pass = false;
-        } else if spread != Spread::Winsorized {
-            scratch.winsorized[..n].copy_from_slice(&stack[..n]);
-            median = median_of(&mut scratch.winsorized[..n]);
-        }
-
-        if sigma <= 0.0 {
+        let centre = median_of(&stack[..n], scratch);
+        let spread = standard_deviation(&stack[..n]);
+        if spread <= 0.0 || !spread.is_finite() {
             return n;
         }
 
-        let mut kept = 0;
-        for i in 0..n {
-            let v = stack[i];
-            if n.saturating_sub(removed) <= MIN_KEPT {
-                stack[kept] = v;
-                kept += 1;
-                continue;
-            }
-            if median - v > sigma * bounds.low {
-                counts.low += 1;
-                removed += 1;
-            } else if v - median > sigma * bounds.high {
-                counts.high += 1;
-                removed += 1;
-            } else {
-                stack[kept] = v;
-                kept += 1;
-            }
-        }
-
-        let changed = kept != n;
-        n = kept;
-        if !changed || n < MIN_KEPT {
-            return n;
-        }
-    }
-}
-
-/// Standard deviation of the stack after its tails are pulled in to
-/// ±1.5σ about the median, iterated to convergence and rescaled by the
-/// factor that makes it consistent with a true sigma for normal data.
-fn winsorized_sigma(data: &[f32], median: f32, scratch: &mut [f32]) -> f32 {
-    let n = data.len();
-    scratch[..n].copy_from_slice(data);
-
-    let mut sigma = std_dev(data).0;
-    if sigma <= 0.0 {
-        return 0.0;
-    }
-
-    loop {
-        let lo = median - 1.5 * sigma;
-        let hi = median + 1.5 * sigma;
-        for v in scratch[..n].iter_mut() {
-            *v = v.clamp(lo, hi);
-        }
-        let previous = sigma;
-        sigma = 1.134 * std_dev(&scratch[..n]).0;
-        if (sigma - previous).abs() <= previous * 0.0005 {
-            return sigma;
-        }
-        if sigma <= 0.0 {
-            return 0.0;
-        }
-    }
-}
-
-/// Replaces outliers with the median instead of dropping them, so the frame
-/// count stays constant. Repeats until a pass replaces nothing.
-fn sigma_median(stack: &mut [f32], n: usize, bounds: Bounds, counts: &mut Rejected) -> usize {
-    let mut copy: Vec<f32> = Vec::with_capacity(n);
-    loop {
-        let sigma = std_dev(&stack[..n]).0;
-        copy.clear();
-        copy.extend_from_slice(&stack[..n]);
-        let median = median_of(&mut copy);
-
-        if sigma <= 0.0 {
-            return n;
-        }
+        let lower = centre - bounds.low * spread;
+        let upper = centre + bounds.high * spread;
 
         let mut replaced = 0;
         for v in stack[..n].iter_mut() {
-            if median - *v > sigma * bounds.low {
+            if *v < lower {
                 counts.low += 1;
-                *v = median;
+                *v = centre;
                 replaced += 1;
-            } else if *v - median > sigma * bounds.high {
+            } else if *v > upper {
                 counts.high += 1;
-                *v = median;
+                *v = centre;
                 replaced += 1;
             }
         }
@@ -388,80 +370,135 @@ fn sigma_median(stack: &mut [f32], n: usize, bounds: Bounds, counts: &mut Reject
     }
 }
 
-/// Fits a line through the sorted stack and clips on the residual.
+/// Fits a least-squares line through the sorted values and clips on the
+/// residual.
 ///
-/// **This differs deliberately from the reference implementation.** Siril
-/// precomputes the index mean and index variance once for the *full* frame
-/// count and keeps using them as the stack shrinks across clipping
-/// iterations, so every pass after the first fits against constants that no
-/// longer describe its data. Recomputing them for the current length is a
-/// two-line change and is what a least-squares fit means; the divergence is
-/// measured in `tests/stack_parity.rs` rather than assumed harmless.
-fn linear_fit(
-    stack: &mut [f32],
-    mut n: usize,
-    bounds: Bounds,
-    scratch: &mut Scratch,
-    counts: &mut Rejected,
-) -> usize {
-    let mut removed = 0usize;
+/// Sorting first is what makes the fit meaningful: against the sorted index, a
+/// well-behaved stack is close to a straight line, and an outlier shows as a
+/// large residual at one end. Against the original frame order it would be
+/// fitting the sequence's own history instead.
+fn linear_fit(stack: &mut [f32], mut n: usize, bounds: Bounds, counts: &mut Rejected) -> usize {
     loop {
         stack[..n].sort_by(f32::total_cmp);
-
         let (intercept, slope) = least_squares_over_index(&stack[..n]);
 
-        // Spread is the mean absolute residual, not an RMS: the whole point
-        // is that the stack still contains the outliers being looked for.
+        // Mean absolute residual rather than an RMS one: the stack still
+        // contains the outliers being looked for, and squaring would let them
+        // set the threshold that is supposed to exclude them.
         let mut residual = 0.0f64;
         for (i, &v) in stack[..n].iter().enumerate() {
             residual += (v - (slope * i as f32 + intercept)).abs() as f64;
         }
-        let sigma = (residual / n as f64) as f32;
-        if sigma <= 0.0 {
+        let spread = (residual / n as f64) as f32;
+        if spread <= 0.0 || !spread.is_finite() {
             return n;
         }
 
-        for (i, verdict) in scratch.verdict[..n].iter_mut().enumerate() {
-            let fitted = slope * i as f32 + intercept;
-            let v = stack[i];
-            *verdict = if fitted - v > sigma * bounds.low {
-                -1
-            } else if v - fitted > sigma * bounds.high {
-                1
-            } else {
-                0
-            };
+        let fitted = |i: usize| slope * i as f32 + intercept;
+        let survivors = stack[..n]
+            .iter()
+            .enumerate()
+            .filter(|(i, v)| {
+                let f = fitted(*i);
+                **v >= f - bounds.low * spread && **v <= f + bounds.high * spread
+            })
+            .count();
+        if survivors == n || survivors < MIN_KEPT {
+            return n;
         }
 
         let mut kept = 0;
         for i in 0..n {
-            if n.saturating_sub(removed) <= MIN_KEPT {
-                stack[kept] = stack[i];
+            let v = stack[i];
+            let f = fitted(i);
+            if v < f - bounds.low * spread {
+                counts.low += 1;
+            } else if v > f + bounds.high * spread {
+                counts.high += 1;
+            } else {
+                stack[kept] = v;
                 kept += 1;
-                continue;
             }
-            match scratch.verdict[i] {
-                -1 => {
-                    counts.low += 1;
-                    removed += 1;
-                }
-                1 => {
-                    counts.high += 1;
-                    removed += 1;
-                }
-                _ => {
-                    stack[kept] = stack[i];
-                    kept += 1;
-                }
-            }
+        }
+        n = kept;
+    }
+}
+
+/// Median of `values`, using scratch so the caller's order is untouched.
+fn median_of(values: &[f32], scratch: &mut Scratch) -> f32 {
+    let n = values.len();
+    scratch.work[..n].copy_from_slice(values);
+    stats::median_in_place(&mut scratch.work[..n])
+}
+
+/// Median absolute deviation about `centre`.
+fn mad_about(values: &[f32], centre: f32, scratch: &mut Scratch) -> f32 {
+    let n = values.len();
+    for (slot, v) in scratch.deviations[..n].iter_mut().zip(values) {
+        *slot = (v - centre).abs();
+    }
+    stats::median_in_place(&mut scratch.deviations[..n])
+}
+
+/// Sample standard deviation.
+///
+/// The sample form, not the population one: at the frame counts this runs at —
+/// six to a few hundred — the difference is not negligible, and these values
+/// are a sample of what the pixel could have read.
+fn standard_deviation(values: &[f32]) -> f32 {
+    let n = values.len();
+    if n < 2 {
+        return 0.0;
+    }
+    let mut sum = 0.0f64;
+    for &v in values {
+        sum += v as f64;
+    }
+    let mean = sum / n as f64;
+
+    let mut acc = 0.0f64;
+    for &v in values {
+        let d = v as f64 - mean;
+        acc += d * d;
+    }
+    (acc / (n - 1) as f64).sqrt() as f32
+}
+
+/// Standard deviation of the values after their tails are repeatedly pulled in
+/// to `centre ± 1.5σ`, iterated to convergence and rescaled for consistency.
+///
+/// The point is that an ordinary standard deviation is inflated by exactly the
+/// outliers it is being used to detect. Clamping the tails to a fixed multiple
+/// of the current estimate and re-measuring converges on a spread that
+/// describes the bulk of the distribution; the 1.134 factor puts that back on
+/// the same scale as an ordinary sigma for normal data.
+fn winsorized_deviation(values: &[f32], centre: f32, scratch: &mut Scratch) -> f32 {
+    let n = values.len();
+    let mut sigma = standard_deviation(values);
+    if sigma <= 0.0 || !sigma.is_finite() {
+        return 0.0;
+    }
+
+    // Bounded: the iteration converges quickly in practice, and a stack that
+    // somehow oscillates must not spin here once per pixel.
+    for _ in 0..32 {
+        let lower = centre - WINSOR_LIMIT * sigma;
+        let upper = centre + WINSOR_LIMIT * sigma;
+        for (slot, v) in scratch.work[..n].iter_mut().zip(values) {
+            *slot = v.clamp(lower, upper);
         }
 
-        let changed = kept != n;
-        n = kept;
-        if !changed || n < MIN_KEPT {
-            return n;
+        let next = WINSOR_CONSISTENCY * standard_deviation(&scratch.work[..n]);
+        if next <= 0.0 || !next.is_finite() {
+            return 0.0;
+        }
+        let converged = (next - sigma).abs() <= sigma * WINSOR_TOLERANCE;
+        sigma = next;
+        if converged {
+            break;
         }
     }
+    sigma
 }
 
 /// Least-squares fit of `y` against its own index, returning

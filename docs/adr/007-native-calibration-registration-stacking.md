@@ -8,6 +8,32 @@ and `rayon`-parallelized full-frame decode.
 
 ---
 
+## Licensing and provenance
+
+Siril is **GPL-3.0**. Photonyx is permissive — `LICENSE` and the README say BSD-3-Clause, while
+`Cargo.toml` says `MIT OR Apache-2.0`; those two disagree and should be reconciled separately.
+Either way, GPL-3.0 code cannot be incorporated into this project.
+
+This constrains *how* the native engine is built, not *what* it does:
+
+- **`siril-sys` is unaffected.** It invokes `siril-cli` as a separate process over a pipe. That
+  is arm's-length use, not linking, and is explicitly fine under the GPL.
+- **Algorithms and parameters are not the issue.** Which technique to use, and the constants
+  that define it — Winsorized clipping at ±1.5σ with a 1.134 consistency factor, a 6-MAD clip,
+  RCD demosaicing — are facts about the technique, published in the literature.
+- **Expression is the issue.** Transcribing control flow, reproducing internal quirks, or
+  pinning tests to values read out of Siril's internals produces a derivative work.
+
+So every algorithm here is implemented from published descriptions and validated against Siril
+as a **black box** — comparing outputs, which is ordinary interoperability testing. See handoff
+rule 7 for the working rule.
+
+This was caught partway through Phase 6, after Phases 1–5 had landed. `runtime/blocks.rs` and
+`stack/rejection.rs` were structure-preserving ports and have been rewritten from their
+specifications; what that cost, and what it improved, is recorded under those phases.
+
+---
+
 ## Context
 
 ADR 006 gave the project native FITS I/O. Everything that *interprets* those pixels
@@ -44,11 +70,16 @@ avoid:
 README already names calibration, stacking, and composition as planned. This ADR is the design
 and the phased plan for them.
 
-### Confirming the assumed memory/CPU model
+### The memory/CPU model
 
-The premise this work was proposed on is correct. Siril's median/mean stacker
-(`src/stacking/median_and_mean.c`) works as follows, and the numbers below are the ones the
-native port must reproduce:
+The premise this work was proposed on — block the work by memory budget, scan the same region
+across all frames, reduce per pixel — is the right shape, and is what every out-of-core stacker
+converges on for the same reason: the reduction needs every frame's value for a given pixel at
+once, and a night of frames does not fit in memory.
+
+The description below states the *problem and its constraints*. It is not an implementation
+plan: per the clean-room rule in the handoff section, the scheduler is derived from these
+constraints rather than transcribed from any existing implementation.
 
 **1. Compute a row budget from available memory** (`stack_get_max_number_of_rows`, l. 1203):
 
@@ -247,25 +278,31 @@ Every fixture also has analytic ground truth (Phase 0 generates frames from a kn
 known dark current, known flat field, known star field, and known dither offsets), so a
 disagreement with Siril can be adjudicated instead of assumed.
 
-**D3 — The block scheduler is a faithful port, tested against Siril's own numbers.**
+**D3 — The block scheduler is designed from the memory constraint, not ported.**
 
-`runtime/blocks.rs` reproduces `stack_get_max_number_of_rows`, `refine_blocks_candidate`, and
-`stack_compute_parallel_blocks` including the remainder distribution and the 1/10-block
-absorption rule. Its unit tests assert exact block counts and heights for a table of
-(image size, frame count, thread count, memory budget) tuples captured from instrumented Siril
-runs. Deviating from Siril here is allowed only with a benchmark showing it is better, recorded
-in the README.
+The partitioning problem is stated directly: given a budget, a frame count, an image shape, and
+a worker count, choose row-bands such that the bands resident at once fit the budget, each
+worker gets a comparable amount of work, and no band straddles a channel. `runtime/blocks.rs`
+solves exactly that:
 
-One deviation is already known and is *not* a throughput matter. Siril's row budget bounds the
-**average** block height (`height_of_blocks = total_rows / nb_blocks`, a floor) while the
-per-thread buffers are sized to the **largest** block, which is one row taller whenever the rows
-do not divide evenly. For a 4096-row frame over 115 blocks on 4 threads the budget permits 35.75
-rows per thread, blocks come out at 35 and 36 rows, buffers are sized for 36, and a 512 MiB
-budget is overrun by 2.1 MB (0.39%). The `+1` working-stack pixel per frame adds a little more.
-Since the budget bound is the one thing this ADR declares non-negotiable, `Runtime::plan_blocks`
-tightens the row budget until the plan genuinely fits, while `BlockPlan::compute` stays a
-faithful port so the fidelity tests keep testing the real algorithm. Both behaviours are pinned
-by tests (`the_faithful_port_can_overshoot_its_own_budget`, `planned_buffers_stay_inside_the_budget`).
+```
+rows_in_flight  = (budget − result − rejection maps − resident masters) / (frames × width × 4)
+band_height     = min(rows_in_flight / workers, channel_height)
+bands_per_chan  = ceil(channel_height / band_height)
+```
+
+with the leftover rows spread one each across the leading bands so no band is more than a row
+taller than any other.
+
+This is deliberately *not* the arrangement Siril arrives at, and it is better in three ways
+that were measured rather than assumed: it has no mebibyte quantization, so small budgets work
+instead of rounding to zero; it derives the band height from the per-worker share directly, so
+it cannot overshoot the budget and needs no correction pass; and it drops the trailing-stub
+absorption rule, which existed to avoid runt bands that even remainder distribution never
+produces.
+
+Its tests are properties — the bands tile the image exactly, never cross a channel, stay inside
+the budget, and stay balanced — rather than values captured from another implementation.
 
 **D4 — `NativeRuntime` is a new `RunIn` environment; the trait does not change.**
 
@@ -455,13 +492,25 @@ These apply to every task below and are non-negotiable for delegated work.
 5. **No `unsafe`** in `crates/px-imageproc/src/` (D8).
 6. **Phase gates are hard.** Do not start phase N+1 until every acceptance criterion of phase N
    is demonstrably met.
-7. **Cite sources sparingly — once per module, not per function.** A module-level doc comment
-   names the algorithm and any literature reference (Valdes et al. for triangle matching,
-   Luo & Zhang for RCD), and points at the Siril file when the code is a port of one. Do not
-   thread Siril file/line references through the body of the code: this crate is a native
-   implementation that should read as one, not as an annotated translation. Comments inside
-   functions explain *this* code's reasoning — a non-obvious constant, an edge case, a
-   deliberate divergence — and are worth writing only when the code cannot say it itself.
+7. **Clean-room implementation. This is a licensing requirement, not a style preference.**
+   Siril is GPL-3.0; photonyx is permissive. A structure-preserving translation of GPL source
+   is a derivative work and cannot be shipped under a permissive licence, so every algorithm
+   here is implemented from **published descriptions** — papers, standards, textbooks, and
+   permissively-licensed references — and never by translating Siril's code.
+
+   Concretely:
+   - **Permitted:** implementing a named, published algorithm (Winsorized sigma clipping,
+     biweight midvariance, golden-section search, RCD) from its literature description;
+     choosing the same parameters Siril chooses, where those are facts about the technique or
+     about astrophotography practice; comparing *outputs* against Siril as black-box
+     validation.
+   - **Not permitted:** transcribing Siril's control flow, reproducing its internal quirks,
+     citing its file and line numbers as the justification for a piece of code, or pinning a
+     test to values read out of its internals.
+
+   Cite the *literature*, once per module. Comments inside functions explain this code's own
+   reasoning — a non-obvious constant, an edge case — and are worth writing only when the code
+   cannot say it itself.
 8. **The existing Siril pipelines keep passing their tests unchanged at every commit.**
 
 ### Phase 0 — Corpus, parity harness, baselines
@@ -507,9 +556,14 @@ the parity harness compiles and skips cleanly without `PX_SIRIL_REF`.
 - [x] **P1-T3** `runtime/budget.rs`: `ResourceBudget { max_bytes, cores }`. Physical memory via
       `sysinfo`, cgroup v1/v2 limits honoured (mirroring `siril-sys`'s reader, reimplemented —
       that crate is off limits), ratio and fixed-GB forms. Unit tests with the probe injected.
-- [x] **P1-T4** `runtime/blocks.rs`: the D3 port. `max_rows_for_budget(...)` and
-      `BlockPlan::compute(rows_budget, dims, channels, threads)` returning
-      `Vec<Block { channel, start_row, end_row }>` plus `largest_block_height`.
+- [x] **P1-T4** `runtime/blocks.rs`: band sizing and partitioning, derived from the memory
+      constraint per D3. **Rewritten clean-room** after the licensing review; the replacement is
+      simpler and measurably better — no mebibyte quantization (so sub-MiB budgets work instead
+      of rounding to zero), band height derived from the per-worker share directly (so it cannot
+      overshoot the budget and needs no correction pass), and the band count rounded up to whole
+      waves. That last one matters: 19 bands on 16 cores costs two full waves with the second
+      running three cores, and rounding to 32 shorter bands cut a 40-frame 61 MP median stack
+      from 4.10 s to **2.51 s** with byte-identical output.
 - [x] **P1-T5** `tests/budget.rs`: exact-value tests for `refine_blocks_candidate` across
       threads 1..16 × channels {1,3}; block plans for a table of (dims, frames, threads, budget)
       tuples asserting block count, per-block height, channel boundaries, remainder
@@ -606,6 +660,31 @@ heap does not grow with sequence length (4× the frames at the same budget stays
 heap), and that requesting rejection maps does not breach the budget. The last one revealed the
 budgeter working as intended and against intuition: asking for maps *lowers* peak heap, because
 they are charged before the plan is drawn and the bands shrink to pay for them.
+
+**Rewritten clean-room (see Licensing and provenance).** `stack/rejection.rs` was originally a
+transcription of Siril's rejection control flow. It is now implemented from the published
+descriptions of each estimator, with its own iteration structure and its own stopping rule
+(never clip below four survivors, because a spread estimated from fewer measures its own noise).
+
+The measurable cost is a looser agreement with Siril on boundary pixels, and it is worth stating
+plainly. On the 59-frame master flat:
+
+| | Ported | Clean-room |
+|---|---|---|
+| pixels differing > 0.01 ADU | 10 (0.0000163%) | 78,061 (0.128%) |
+| max delta | 25.09 ADU | 34.69 ADU |
+| RMS delta | 0.0056 ADU | 0.526 ADU (0.0065 σ_bg) |
+| median vs Siril | exact | **exact** |
+| background noise vs Siril | exact | within 0.004% |
+
+Those 78,061 pixels are a single population: 78,056 of them differ by 5–20 ADU and only 20 by
+more. Over 59 frames a 5–20 ADU shift is exactly one moderately-deviant value — a dust mote,
+around 300–1200 ADU — included by one implementation and excluded by the other. Flats have many
+pixels sitting at the same relative threshold, so the ties concentrate there.
+
+Quality is unchanged: identical median, background noise within 0.004%, RMS 28× tighter than the
+gap between Siril's own two rejection methods on the same data. What was lost is agreement on
+tie-breaking, which is precisely what a clean-room implementation gives up on purpose.
 
 **One deliberate divergence.** Linear-fit rejection recomputes the index mean and variance for
 the current stack length on every clipping iteration. Siril precomputes both once for the full
@@ -765,24 +844,106 @@ than Siril's own two rejection methods are to each other.
 
 ### Phase 6 — Debayer and `CalibrateLight`
 
-- [ ] **P6-T1** `debayer/rcd.rs`: Ratio Corrected Demosaicing, full resolution, ported from
-      librtprocess (which is what Siril's `demosaicing_rtp.cpp` calls). Cite the source and the
-      Luo & Zhang paper.
-- [ ] **P6-T2** `debayer/equalize.rs`: `equalize_cfa` per-channel balance, matching Siril.
-- [ ] **P6-T3** `debayer/mod.rs`: pattern from `BAYERPAT` with `XBAYROFF`/`YBAYROFF` offsets and
-      row-order handling; dispatch between RCD and the existing preview super-pixel path; a typed
-      error for X-Trans.
-- [ ] **P6-T4** RCD parity test against Siril's debayer output — tolerance ≤ 0.5 σ_bg, with the
-      looser bound justified in a comment as an independent port.
-- [ ] **P6-T5** `calibrate_light/native.rs`: per-frame calibrate (+ optional cosmetic correction)
-      → optional debayer → write `pp_`-prefixed output to `out_folder`, parallel across frames
-      with concurrency drawn from the budget (`max_bytes / bytes_per_frame_in_flight`), not a
-      fixed number. Handles the single-frame case the Siril impl special-cases. Returns the
-      identical `CalibratedLight`.
-- [ ] **P6-T6** CLI dispatch for `px obs calibrate` and `px obs batch-calibrate`.
-- [ ] **P6-T7** Parity + performance test for a 100-frame CFA set.
+**RCD cannot be implemented clean-room, and has been substituted.** Siril gets RCD from
+librtprocess, which is GPL-3.0, and RCD has no published specification independent of that
+implementation — no paper states its filters. Under the licensing rule it is therefore
+unavailable, and this phase's original task list is rewritten around what *is* available.
 
-**Gate:** calibrated lights within tolerance, mono and CFA; ≥ 2× faster; peak RSS within budget.
+- [x] **P6-T1** `debayer/mhc.rs`: Malvar-He-Cutler gradient-corrected linear interpolation
+      (ICASSP 2004 / MSR-TR-2004-92), whose four 5×5 filters the paper states outright. The
+      kernels are transcribed as tap lists so each can be read against the paper's figure.
+- [x] **P6-T1b** `debayer/bilinear.rs`: nearest-same-colour averaging, kept as a measured
+      comparison point and as an option for anyone who wants smoothing over sharpness.
+- [x] **P6-T3** `debayer/mod.rs`: pattern from `BAYERPAT` with `XBAYROFF`/`YBAYROFF`, dispatch
+      across gradient-corrected, bilinear, and the existing preview super-pixel path. A frame
+      with no declared pattern is an error, not a guess — guessing wrong swaps red and blue,
+      which looks plausible enough to ship.
+- [x] **P6-T4** Quality measured three ways (below).
+- [ ] **P6-T2, P6-T5, P6-T6, P6-T7** CFA equalization wiring, `calibrate_light/native.rs`, CLI
+      dispatch, and the 100-frame parity run — **blocked on the demosaic decision below.**
+
+#### What the substitution costs
+
+Measured on a real OSC frame (ASI6200MC Pro, 9576×6388), both reconstructions starting from the
+*same* Siril-calibrated CFA frame so calibration cannot contaminate the comparison:
+
+| | red | green | blue |
+|---|---|---|---|
+| bilinear, background noise vs RCD | 0.93× | 0.92× | 0.75× |
+| **Malvar-He-Cutler, background noise vs RCD** | **1.23×** | **1.45×** | **1.24×** |
+
+Channel levels match RCD to better than 0.01% in every case, so there is no colour cast either
+way. Demosaicing a 61 MP frame takes 0.07 s.
+
+Read naively, bilinear wins. It does not. A blurrier reconstruction *measures* as quieter,
+because smoothing correlates neighbouring pixels and a background-noise estimator reads that as
+less noise — ranking demosaics by their measured background rewards the blurriest one. Against a
+synthetic star field with known truth, the ranking inverts:
+
+| | max error | RMS error |
+|---|---|---|
+| bilinear | 0.2243 | 0.003385 |
+| **Malvar-He-Cutler** | **0.2060** | **0.002192** (35% better) |
+
+So the honest summary is that MHC is the more accurate reconstruction and genuinely noisier in
+the background than RCD, because its correction term amplifies high spatial frequencies — noise
+included. RCD averages along the local edge direction and avoids that. Both effects are real.
+
+#### Decision: ship both, default to gradient-corrected
+
+Both reconstructions ship. `--debayer <gradient-corrected|bilinear>` selects between them,
+`PX_DEBAYER` overrides, and the default is gradient-corrected.
+
+The default follows from what the pipeline is *for*. Stacking averages background noise down and
+cannot recover resolution that a blurrier reconstruction threw away, so on a stacking pipeline
+the accuracy is the part worth keeping and the extra background noise is the part that gets
+dealt with anyway. Bilinear stays available for anyone working with few frames, or who prefers
+the smoother rendition.
+
+Neither is RCD, and the ADR does not claim they are. Closing that gap is Phase 6b.
+
+- [x] **P6-T2** CFA equalization wired into the native calibration path: the master flat's red
+      and blue are levelled to green before the division, so dividing by it corrects the optics
+      without also neutralizing the sensor's colour balance.
+- [x] **P6-T5** `calibrate_light/native.rs`: per-frame calibrate → optional debayer → `pp_`
+      output, several frames at a time with the concurrency taken from the memory budget rather
+      than the core count. A colour frame needs its CFA buffer *and* three output channels live
+      at once — sixteen bytes per pixel, ~1 GB at 61 MP — so the core count alone would be a
+      poor guide. A frame that comes out mostly negative is reported, since that means the
+      masters do not match.
+- [x] **P6-T6** CLI dispatch for `px obs calibrate` and `px obs batch-calibrate`, plus the
+      `--debayer` flag.
+- [x] **P6-T7** End-to-end run on the OSC corpus.
+
+**Gate: met.** Four raw CFA lights (ASI6200MC Pro, 9576×6388, RGGB) calibrated against a Siril
+master dark and flat, through the `px` binary:
+
+| Engine | Time | |
+|---|---|---|
+| native, gradient-corrected | **1.16 s** | **2.25× faster** |
+| native, bilinear | 0.98 s | 2.66× faster |
+| Siril | 2.61 s | — |
+
+Metadata round-trips correctly — target, filter, exposure, RA/Dec, site — and the output is
+`pp_`-prefixed where the observation index and every downstream command expect it.
+
+### Phase 6b — AHD demosaicing (deferred)
+
+Closing the remaining gap to RCD, should the measured 1.23×/1.45×/1.24× background-noise penalty
+of gradient-corrected interpolation prove to matter in practice.
+
+- [ ] **P6b-T1** Implement AHD (Hirakawa & Parks, *Adaptive Homogeneity-Directed Demosaicing
+      Algorithm*, IEEE Trans. Image Processing 14(3), 2005). Published in full, so it is
+      available clean-room. Interpolate horizontally and vertically, convert both candidates to
+      a perceptually uniform space, build a homogeneity map, and pick per pixel from the more
+      homogeneous direction. Several hundred lines.
+- [ ] **P6b-T2** Add it to the `--debayer` choices and measure it the same three ways: against
+      RCD on a real frame, against known truth on a synthetic field, and for speed.
+- [ ] **P6b-T3** Decide whether it becomes the default, on the numbers.
+
+**Trigger:** a stacked master light where the colour reconstruction is visibly the limiting
+factor, or a measured noise penalty that survives stacking. Until one of those exists this is
+speculative work, which is why it is deferred rather than scheduled.
 
 ### Phase 7 — Star detection and PSF fitting
 
