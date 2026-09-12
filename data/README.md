@@ -2,6 +2,14 @@
 
 Uses real data captured from a telescope to have real results in benchmarks.
 
+### Processing Steps for Both Sets
+
+* master bias - stack the raw images
+* master dark - stack of raw images
+* master flat - calibrate frames by removing master bias first
+* calibrated light - using master dark and master flat (with bias already removed)
+* master light - stack of calibrated & aligned (registered) lights
+
 ## FRA 300 Mono (6200mm pro) - 300s - H filter - Veil Nebula
 
 src: `'/Users/kyle/Pictures/Astro/FRA300_6200mc_pro/LIGHT/Veil Nebula'`

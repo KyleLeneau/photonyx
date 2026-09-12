@@ -1,4 +1,5 @@
 mod commands;
+pub mod engine;
 mod logging;
 mod printer;
 mod reporters;
@@ -57,6 +58,19 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
     // Configure the `Printer`, which controls user-facing output in the CLI.
     let printer = Printer::Default;
 
+    let engine = crate::engine::EngineConfig::from_globals(&cli.top_level.global_args);
+
+    // A native run of a pipeline that has no native implementation must fail
+    // loudly. Silently using Siril instead would leave the user with no way to
+    // tell which engine produced their master.
+    if engine.is_native() && !cli.command.has_native_engine() {
+        printer.error(
+            "the native engine does not implement this command yet; \
+             re-run without --engine native to use Siril",
+        )?;
+        return Ok(ExitStatus::Error);
+    }
+
     // Open the profile index (finds profile dir, loads config, opens DB, runs migrations).
     let profile_index = ProfileIndex::find_and_open(cli.top_level.global_args.profile).await;
 
@@ -73,7 +87,7 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         }
     }
 
-    if cli.command.requires_siril() {
+    if cli.command.requires_siril(engine.engine) {
         match check_siril_version("siril-cli", SIRIL_MIN_VERSION) {
             Ok(_) => {}
             Err(SirilError::NotInstalled) => {
@@ -151,15 +165,15 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
 
         Commands::Master(MasterNamespace {
             command: MasterCommand::Bias(args),
-        }) => commands::create_master_bias(args, printer, profile_index.unwrap()).await,
+        }) => commands::create_master_bias(args, printer, profile_index.unwrap(), engine).await,
 
         Commands::Master(MasterNamespace {
             command: MasterCommand::Dark(args),
-        }) => commands::create_master_dark(args, printer, profile_index.unwrap()).await,
+        }) => commands::create_master_dark(args, printer, profile_index.unwrap(), engine).await,
 
         Commands::Master(MasterNamespace {
             command: MasterCommand::Flat(args),
-        }) => commands::create_master_flat(args, printer, profile_index.unwrap()).await,
+        }) => commands::create_master_flat(args, printer, profile_index.unwrap(), engine).await,
 
         // Observations
         Commands::Observation(ObservationNamespace {

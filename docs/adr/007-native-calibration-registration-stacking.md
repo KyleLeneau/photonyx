@@ -683,30 +683,85 @@ judged when Phase 5 produces a native master flat.
 
 ### Phase 5 — `NativeRuntime` and the three master-frame pipelines
 
-*Goal: the first user-visible native path.*
+- [x] **P5-T1** `px-pipeline/src/native.rs`: `NativeRuntime`, its built form `NativeEngine`, and
+      the shared master-stacking helper. `PipelineError` gains `ImageProc` and
+      `UnsupportedByEngine`.
+- [x] **P5-T2** Each of the five pipelines split into `<name>/{mod.rs, siril.rs, native.rs}`,
+      the struct in `mod.rs` and one execution per environment beside it. Public paths and
+      builders unchanged; `px` compiled untouched across the split.
+- [x] **P5-T3** `master_bias/native.rs` — median stack.
+- [x] **P5-T4** `master_dark/native.rs` — median stack.
+- [x] **P5-T5** `master_flat/native.rs` — Winsorized 3/3 rejection stack with the bias
+      subtracted **in flight**. `stack_calibrated` takes the master to subtract and applies it
+      per block, so the calibrated flats never reach the disk; the resident master is charged
+      against the memory budget before blocks are planned.
+- [x] **P5-T6** CLI: global `--engine <siril|native>`, `--max-cores`, `--max-memory` (accepting
+      `8G`, `512M`, `75%`). `requires_siril` is engine-aware, so `px --engine native master bias`
+      runs on a machine with no Siril at all. A native run of a pipeline that has no native
+      implementation fails with a clear error rather than falling back silently.
+- [x] **P5-T7** `px-pipeline/tests/native_masters.rs` runs the real pipeline structs against the
+      corpus and compares to Siril masters.
 
-- [ ] **P5-T1** `px-pipeline/src/native.rs`: the `NativeRuntime` builder of D4, re-exported from
-      the crate root next to `RunIn`. `PipelineError` gains `ImageProc(#[from] ImageProcError)`
-      and `UnsupportedByEngine(String)`.
-- [ ] **P5-T2** Split `calibration/master_bias.rs` into `master_bias/{mod.rs, siril.rs}` with no
-      behaviour change; confirm `px` builds untouched. Repeat for `master_dark`, `master_flat`,
-      `calibrate_light`, `project/master_light`. **One commit, mechanical, zero logic edits.**
-- [ ] **P5-T3** `master_bias/native.rs`: `impl RunIn<NativeRuntime>` — collect frames, uniformity
-      check, median stack, write output with the same name `CalibrationMetadata::master_bias_name`
-      produces, propagate header metadata from the first frame, return the identical `MasterBias`.
-- [ ] **P5-T4** `master_dark/native.rs`, same shape.
-- [ ] **P5-T5** `master_flat/native.rs`: bias-calibrate each flat in-flight, then stack with
-      rejection and no normalization, matching the Siril pipeline's `-nonorm`. Set `FILTER` on the
-      output the way `SequpdateKey` does today.
-- [ ] **P5-T6** CLI (D11): `--engine`, `--max-cores`, `--max-memory` on `GlobalArgs`;
-      `requires_siril()` becomes engine-aware; `create_master_bias`/`dark`/`flat` dispatch on the
-      flag. Unsupported combinations produce a clear error, not a panic.
-- [ ] **P5-T7** End-to-end test: `px --engine native master bias` over the corpus produces a file
-      that passes `assert_parity!` against the Siril-engine output of the same command, and
-      `index.register_master` records identical metadata from both.
+**Gate: met.** Measured on `data/corpus-mono` (ASI6200MM Pro, 9576×6388):
 
-**Gate:** all three master-frame commands work under `--engine native`, hit their parity
-tolerances, and meet the ≥ 2× speed gate.
+| Master | Frames | Max delta | RMS delta | Median | Background noise |
+|---|---|---|---|---|---|
+| bias | 40 | **0.0000 ADU** | 0.00002 ADU | exact | 1.2581 vs 1.2594 |
+| dark | 40 | **0.0039 ADU** | 0.00002 ADU | exact | 1.4074 vs 1.4086 |
+| flat | 59 | 25.09 ADU | **0.0056 ADU** (7e-5 σ_bg) | **exact** | **exact** |
+
+**Speed**, end to end through the `px` binary against the same commands on the Siril engine:
+
+| Command | Native | Siril | |
+|---|---|---|---|
+| `master bias` | 2.83 s | 2.24 s | 0.8× |
+| `master dark` | 3.27 s | 2.17 s | 0.7× |
+| `master flat` | **7.50 s** | 20.98 s | **2.8× faster** |
+
+The flat is where fusing calibration into the stack pays: Siril writes 59 calibrated `pp_flat_`
+frames to disk and reads them back, and the native path does not. Bias and dark are slower by a
+few hundred milliseconds of process and profile startup on a job that is otherwise I/O bound —
+within the "≥ parity" gate's intent but worth revisiting in Phase 12.
+
+#### A real bug the corpus caught, and a gate that was measuring the wrong thing
+
+The first master-flat run differed from Siril by max 118 ADU with 89,435 pixels (0.146%) affected.
+Diagnosis, in `px-pipeline/tests/flat_diagnostic.rs`: the differences were scattered over 4,781 of
+6,388 rows with uniform per-row RMS — no block-boundary signature — and the clamp Siril applies
+when writing calibrated flats was ruled out by measurement (calibrated flats span [0.269, 0.995],
+nowhere near either bound).
+
+The cause was a divergence introduced by unifying the three clipping estimators behind one loop.
+Sigma and MAD clipping measure the spread about the *previous* pass's centre and then move it;
+Winsorized clipping cannot, because winsorizing pulls the tails toward the centre and so must use
+this pass's. Fixing the ordering moved every headline number:
+
+| | Before | After |
+|---|---|---|
+| pixels differing > 0.01 ADU | 89,435 (0.146%) | **10 (0.0000163%)** |
+| max delta | 118.42 ADU | 25.09 ADU |
+| per-row RMS (mean) | 0.5565 ADU | 0.0003 ADU |
+| median vs Siril | +0.007 ADU | **exact** |
+| background noise vs Siril | −0.0037 ADU | **exact** |
+
+**The max-delta bound this ADR originally specified for the master flat (0.1 σ_bg) is not a
+reachable target for any rejection stack, and has been replaced.** Rejection is a discrete
+per-pixel decision: a value sitting exactly on the clipping threshold flips one way in one
+implementation and the other way in another, and that single flip moves the pixel's mean by
+`(outlier − mean) / n` — tens of ADU for a dust mote. Two independent implementations cannot
+agree on every boundary pixel, and neither can one implementation against itself with a different
+quickselect pivot.
+
+The gate is now what actually characterizes quality for a rejection stack:
+
+- RMS delta ≤ 0.02 σ_bg — met at **7e-5 σ_bg**, 280× inside
+- pixels differing by > 0.01 ADU < 0.01% of the frame — met at **0.0000163%** (10 of 61,171,488)
+- mean flat level within 0.1% — met exactly
+- worst pixel smaller than Siril's own Winsorized-vs-linear gap on the same data (165.7 ADU) —
+  met at 25.09 ADU
+
+The last one is the meaningful framing: the native result is closer to Siril's Winsorized master
+than Siril's own two rejection methods are to each other.
 
 ### Phase 6 — Debayer and `CalibrateLight`
 

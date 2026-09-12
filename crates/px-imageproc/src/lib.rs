@@ -32,5 +32,5 @@ pub use frame::{Frame, ValueScale};
 pub use preview::{MAX_DISPLAY_DIM, PreviewImage, decode_preview};
 pub use runtime::{Block, BlockPlan, ImageDims, MemoryLimit, ResourceBudget, Runtime};
 pub use sequence::{FrameInfo, FrameSet};
-pub use stack::{Method, Rejection, StackOptions, StackResult, stack};
+pub use stack::{Method, Rejection, StackOptions, StackResult, stack, stack_calibrated};
 pub use stats::ChannelStats;

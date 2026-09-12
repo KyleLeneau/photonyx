@@ -1,7 +1,6 @@
-//! Pipeline for calibrating an observation set using master frames.
-//! Outputs all calibrated frames to output folder.
-//!
+//! Execution in a local Siril process.
 
+use super::CalibrateLightSetPipeline;
 use crate::RunIn;
 use crate::meta::{CalibrationMetadata, ObservationMetadata};
 use crate::model::CalibratedLight;
@@ -9,21 +8,10 @@ use crate::{PipelineReporter, error::PipelineError};
 use px_fits::{all_color_raw_frames, all_fits_files};
 use px_fs::{OptionPath, move_file};
 use siril_sys::{
-    ConversionFile, FitsExt,
+    ConversionFile,
     commands::{Calibrate, CalibrateSingle, Convert},
     siril_ext::CdExt,
 };
-use std::path::PathBuf;
-
-#[derive(bon::Builder)]
-pub struct CalibrateLightSetPipeline {
-    pub ext: FitsExt,
-    pub raw_folder: PathBuf,
-    pub bias: Option<PathBuf>,
-    pub dark: Option<PathBuf>,
-    pub flat: Option<PathBuf>,
-    pub out_folder: PathBuf,
-}
 
 // raw light frame calibration with siril
 //

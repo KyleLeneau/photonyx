@@ -32,7 +32,7 @@ fn plan(c: &mut Criterion) {
     // is the figure that actually matters at a call site.
     let runtime = Runtime::new(ResourceBudget::new(2 * GB, 16)).unwrap();
     group.bench_function("plan_blocks/60mp_200frames_16threads", |b| {
-        b.iter(|| runtime.plan_blocks(&dims, 200, 4, 0).unwrap())
+        b.iter(|| runtime.plan_blocks(&dims, 200, 4, 0, 0).unwrap())
     });
 
     group.finish();

@@ -271,10 +271,17 @@ fn iterated_clip(
     let mut first_pass = true;
 
     loop {
-        // The spread is measured about the centre from the *previous* pass,
-        // then the centre is refreshed for this pass's clipping. Measuring
-        // both against the same freshly-moved centre would understate the
-        // spread on the pass that just removed something.
+        // Winsorizing pulls the tails in toward the centre, so it has to use
+        // *this* pass's centre — measuring the pulled-in spread around a
+        // centre the last pass left behind would winsorize against the wrong
+        // point. The clipping estimators have no such coupling: they measure
+        // the spread about the previous centre and then move it, which avoids
+        // understating the spread on a pass that just removed something.
+        if spread == Spread::Winsorized && !first_pass {
+            scratch.winsorized[..n].copy_from_slice(&stack[..n]);
+            median = median_of(&mut scratch.winsorized[..n]);
+        }
+
         let sigma = match spread {
             Spread::StdDev => std_dev(&stack[..n]).0,
             Spread::Mad => mad_about(&stack[..n], median, &mut deviations),
@@ -283,7 +290,7 @@ fn iterated_clip(
 
         if first_pass {
             first_pass = false;
-        } else {
+        } else if spread != Spread::Winsorized {
             scratch.winsorized[..n].copy_from_slice(&stack[..n]);
             median = median_of(&mut scratch.winsorized[..n]);
         }

@@ -1,35 +1,28 @@
-//! Pipeline for creating a master bias from an array of raw bias frames
-//!
+//! Execution in a local Siril process.
 
-use crate::RunIn;
+use super::CreateMasterBiasPipeline;
+use crate::PipelineReporter;
+use crate::environment::RunIn;
 use crate::error::PipelineError;
-use crate::model::MasterDark;
-use crate::{PipelineReporter, meta::CalibrationMetadata};
+use crate::meta::CalibrationMetadata;
+use crate::model::MasterBias;
 use px_fits::all_fits_files;
 use siril_sys::{
-    FitsExt,
     commands::{Convert, Stack},
     siril_ext::CdExt,
 };
 use std::path::PathBuf;
 
-#[derive(bon::Builder)]
-pub struct CreateMasterDarkPipeline {
-    pub ext: FitsExt,
-    pub raw_folder: PathBuf,
-    pub out_folder: PathBuf,
-}
-
-// master dark pipeline with siril
+// master bias pipeline using siril
 //
-impl RunIn<siril_sys::Builder> for CreateMasterDarkPipeline {
-    type Output = MasterDark;
+impl RunIn<siril_sys::Builder> for CreateMasterBiasPipeline {
+    type Output = MasterBias;
 
     async fn run(
         &self,
         _reporter: impl PipelineReporter,
         siril_builder: siril_sys::Builder,
-    ) -> Result<MasterDark, PipelineError> {
+    ) -> Result<MasterBias, PipelineError> {
         let raw_files = all_fits_files(&self.raw_folder)?;
         if raw_files.is_empty() {
             return Err(PipelineError::FileNotFound(
@@ -38,7 +31,7 @@ impl RunIn<siril_sys::Builder> for CreateMasterDarkPipeline {
         }
 
         // Setup the output file
-        let name = CalibrationMetadata::from(raw_files.first().unwrap())?.master_dark_name();
+        let name = CalibrationMetadata::from(raw_files.first().unwrap())?.master_bias_name();
         let output_file = self.out_folder.join(name).display().to_string();
 
         let mut siril = siril_builder
@@ -50,7 +43,7 @@ impl RunIn<siril_sys::Builder> for CreateMasterDarkPipeline {
         siril.cd(&self.raw_folder).await?;
         siril
             .execute(
-                &Convert::builder("dark_")
+                &Convert::builder("bias_")
                     .output_dir(siril.initial_directory())
                     .build(),
             )
@@ -62,7 +55,7 @@ impl RunIn<siril_sys::Builder> for CreateMasterDarkPipeline {
         // Stack with defaults
         siril
             .execute(
-                &Stack::builder("dark_")
+                &Stack::builder("bias_")
                     .stack_type(siril_sys::StackType::Med)
                     .out(&output_file)
                     .build(),
@@ -79,13 +72,12 @@ impl RunIn<siril_sys::Builder> for CreateMasterDarkPipeline {
         }
 
         let meta = CalibrationMetadata::from(&result)?;
-        let bias = MasterDark {
+        let bias = MasterBias {
             source: self.raw_folder.clone(),
             path: result,
             temperature: meta.temperature.unwrap_or_default(),
             gain: meta.gain.unwrap_or_default(),
             offset: meta.offset.unwrap_or_default(),
-            exposure: meta.exposure.unwrap_or_default(),
             binning: meta.binning,
             frame_count: raw_files.len(),
             capture_date: meta.capture_date().expect("Missing capture date"),

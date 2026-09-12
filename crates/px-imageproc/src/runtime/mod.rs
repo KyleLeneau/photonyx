@@ -83,13 +83,18 @@ impl Runtime {
     /// plan actually fits. That is a deliberate, measured deviation from the
     /// port; `BlockPlan::compute` itself stays faithful so the fidelity tests
     /// keep testing the real thing.
+    /// `extra_resident_bytes` covers anything else the run holds for its whole
+    /// duration — a master frame being subtracted in flight, for instance. It
+    /// simply shrinks the budget the blocks are planned against.
     pub fn plan_blocks(
         &self,
         dims: &ImageDims,
         nb_frames: usize,
         elem_size: usize,
         nb_rejmaps: usize,
+        extra_resident_bytes: u64,
     ) -> Result<BlockPlan, ImageProcError> {
+        let available = self.budget.max_bytes.saturating_sub(extra_resident_bytes);
         let insufficient = || {
             let hint = if self.budget.max_bytes < 1024 * 1024 {
                 " (budgets are tracked in whole MiB; anything under 1 MiB rounds to zero)"
@@ -107,18 +112,12 @@ impl Runtime {
         // Live for the whole run, so charged before any block buffer.
         let fixed_bytes = dims.pixel_count() as u64 * elem_size as u64
             + nb_rejmaps as u64 * dims.pixel_count() as u64 * 2;
-        let for_blocks = self.budget.max_bytes.saturating_sub(fixed_bytes);
+        let for_blocks = available.saturating_sub(fixed_bytes);
         if for_blocks == 0 {
             return Err(insufficient());
         }
 
-        let mut rows = max_rows_for_budget(
-            self.budget.max_bytes,
-            dims,
-            nb_frames,
-            elem_size,
-            nb_rejmaps,
-        );
+        let mut rows = max_rows_for_budget(available, dims, nb_frames, elem_size, nb_rejmaps);
         if rows == 0 {
             return Err(insufficient());
         }

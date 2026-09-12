@@ -75,7 +75,7 @@ fn a_stack_stays_inside_its_planned_allocation() {
     // 6 MiB forces a real multi-block plan for a 1 MiB result.
     let runtime = Runtime::new(ResourceBudget::new(6 * MIB, cores)).expect("runtime");
     let plan = runtime
-        .plan_blocks(&set.dims(), frames, 4, 0)
+        .plan_blocks(&set.dims(), frames, 4, 0, 0)
         .expect("plan");
 
     let profiler = dhat::Profiler::new_heap();

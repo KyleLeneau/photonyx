@@ -14,6 +14,79 @@ fn absolute_path(s: &str) -> Result<PathBuf, String> {
     std::path::absolute(s).map_err(|e| e.to_string())
 }
 
+/// Which implementation runs a pipeline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
+pub enum Engine {
+    /// Drive a local Siril installation. The default, and the only engine
+    /// that supports every pipeline.
+    #[default]
+    Siril,
+    /// Run natively in `px`, with no Siril process. Faster and memory-bounded
+    /// where it is implemented; reports an error for pipelines that are not
+    /// yet ported.
+    Native,
+}
+
+impl std::fmt::Display for Engine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Engine::Siril => write!(f, "siril"),
+            Engine::Native => write!(f, "native"),
+        }
+    }
+}
+
+/// A memory ceiling, either a share of what is available or a fixed amount.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MemoryLimitArg {
+    /// Fraction of available memory, in `(0, 1]`.
+    Ratio(f64),
+    Bytes(u64),
+}
+
+/// Parses `--max-memory`: `75%`, `8G`, `8GB`, `8GiB`, `512M`, or a bare number
+/// read as gibibytes.
+pub fn parse_memory_limit(raw: &str) -> Result<MemoryLimitArg, String> {
+    let text = raw.trim();
+    if text.is_empty() {
+        return Err("expected a value like 8G or 75%".to_string());
+    }
+
+    if let Some(percent) = text.strip_suffix('%') {
+        let value: f64 = percent
+            .trim()
+            .parse()
+            .map_err(|_| format!("{raw:?} is not a valid percentage"))?;
+        if !(0.0..=100.0).contains(&value) || value == 0.0 {
+            return Err(format!("{raw:?} must be between 0% and 100%"));
+        }
+        return Ok(MemoryLimitArg::Ratio(value / 100.0));
+    }
+
+    let upper = text.to_ascii_uppercase();
+    let (digits, scale) = if let Some(v) = upper.strip_suffix("GIB").or(upper.strip_suffix("GB")) {
+        (v, 1024f64 * 1024.0 * 1024.0)
+    } else if let Some(v) = upper.strip_suffix("MIB").or(upper.strip_suffix("MB")) {
+        (v, 1024f64 * 1024.0)
+    } else if let Some(v) = upper.strip_suffix('G') {
+        (v, 1024f64 * 1024.0 * 1024.0)
+    } else if let Some(v) = upper.strip_suffix('M') {
+        (v, 1024f64 * 1024.0)
+    } else {
+        // A bare number is gibibytes: nobody caps an image pipeline in bytes.
+        (upper.as_str(), 1024f64 * 1024.0 * 1024.0)
+    };
+
+    let value: f64 = digits
+        .trim()
+        .parse()
+        .map_err(|_| format!("{raw:?} is not a valid size (try 8G, 512M, or 75%)"))?;
+    if value <= 0.0 {
+        return Err(format!("{raw:?} must be greater than zero"));
+    }
+    Ok(MemoryLimitArg::Bytes((value * scale) as u64))
+}
+
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
 pub enum CalibrationImageType {
     Bias,
@@ -104,6 +177,33 @@ pub struct GlobalArgs {
     ///
     #[arg(global = true, long, env = EnvVars::PX_PROFILE, value_hint = ValueHint::DirPath)]
     pub profile: Option<PathBuf>,
+
+    /// Which engine runs the pipeline.
+    ///
+    /// `siril` drives a local Siril installation and supports every command.
+    /// `native` runs inside `px` with no Siril process — faster and bounded by
+    /// `--max-memory`, but only implemented for some pipelines, which report
+    /// an error rather than silently falling back.
+    #[arg(global = true, long, env = "PX_ENGINE", default_value = "siril")]
+    pub engine: Engine,
+
+    /// Maximum CPU cores to use. Defaults to all of them, or to the
+    /// container's quota when running under one.
+    #[arg(global = true, long, env = "PX_MAX_CORES", value_name = "N")]
+    pub max_cores: Option<usize>,
+
+    /// Maximum memory to use: `8G`, `512M`, or `75%` of what is available.
+    ///
+    /// Applies to whichever engine is selected. Defaults to 90% of available
+    /// memory, matching Siril's own default.
+    #[arg(
+        global = true,
+        long,
+        env = "PX_MAX_MEMORY",
+        value_name = "SIZE",
+        value_parser = parse_memory_limit
+    )]
+    pub max_memory: Option<MemoryLimitArg>,
 }
 
 #[derive(Subcommand)]
@@ -146,8 +246,15 @@ pub enum Commands {
 }
 
 impl Commands {
-    /// Only commands that actually invoke Siril return true.
-    pub fn requires_siril(&self) -> bool {
+    /// Whether this command needs a working Siril installation.
+    ///
+    /// Engine-aware: a pipeline that has a native implementation does not
+    /// require Siril when the native engine is selected, so `px --engine
+    /// native master bias` works on a machine without Siril at all.
+    pub fn requires_siril(&self, engine: Engine) -> bool {
+        if engine == Engine::Native && self.has_native_engine() {
+            return false;
+        }
         matches!(
             self,
             Commands::SirilTest
@@ -164,6 +271,20 @@ impl Commands {
                     command: ProjectCommand::Stack(_) | ProjectCommand::Sample(_),
                     ..
                 })
+        )
+    }
+
+    /// Whether a native implementation exists for this command.
+    ///
+    /// Kept as its own list rather than folded into `requires_siril` so that
+    /// the dispatch can give a precise error for a command the native engine
+    /// cannot run yet.
+    pub fn has_native_engine(&self) -> bool {
+        matches!(
+            self,
+            Commands::Master(MasterNamespace {
+                command: MasterCommand::Bias(_) | MasterCommand::Dark(_) | MasterCommand::Flat(_),
+            })
         )
     }
 

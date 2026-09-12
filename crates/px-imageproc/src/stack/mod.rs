@@ -108,6 +108,22 @@ pub fn stack(
     runtime: &Runtime,
     options: StackOptions,
 ) -> Result<StackResult, ImageProcError> {
+    stack_calibrated(set, runtime, options, None)
+}
+
+/// Reduces `set` to a single frame, subtracting `subtract` from every input
+/// frame on the way.
+///
+/// This is how a master flat is built: the flats must be bias-corrected before
+/// they are combined, and doing it per block means the calibrated frames never
+/// touch the disk. The subtracted master stays resident for the whole run, so
+/// its size is charged against the budget before blocks are planned.
+pub fn stack_calibrated(
+    set: &FrameSet,
+    runtime: &Runtime,
+    options: StackOptions,
+    subtract: Option<&Frame>,
+) -> Result<StackResult, ImageProcError> {
     if set.is_empty() {
         return Err(ImageProcError::EmptySequence);
     }
@@ -119,7 +135,28 @@ pub fn stack(
     let frames = set.len();
     let elem_size = std::mem::size_of::<f32>();
 
-    let plan = runtime.plan_blocks(&dims, frames, elem_size, options.rejection_map_count())?;
+    if let Some(master) = subtract
+        && master.dims() != dims
+    {
+        return Err(ImageProcError::Processing(format!(
+            "frame to subtract is {}x{}x{} but the sequence is {}x{}x{}",
+            master.width(),
+            master.height(),
+            master.channels(),
+            dims.width,
+            dims.height,
+            dims.channels
+        )));
+    }
+    let resident = subtract.map_or(0, |m| m.data().len() as u64 * elem_size as u64);
+
+    let plan = runtime.plan_blocks(
+        &dims,
+        frames,
+        elem_size,
+        options.rejection_map_count(),
+        resident,
+    )?;
     assert_blocks_are_contiguous(&plan.blocks, &dims);
 
     let mut output = vec![0.0f32; dims.pixel_count()];
@@ -171,7 +208,7 @@ pub fn stack(
                 .par_iter()
                 .zip(workers.par_iter_mut())
                 .zip(out_parts.par_iter_mut())
-                .map(|((block, worker), out)| worker.run(set, block, &dims, options, out))
+                .map(|((block, worker), out)| worker.run(set, block, &dims, options, subtract, out))
                 .collect();
 
             // Each worker holds its block's rejection counts; they are copied
@@ -259,20 +296,31 @@ impl Worker {
         self
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn run(
         &mut self,
         set: &FrameSet,
         block: &Block,
         dims: &ImageDims,
         options: StackOptions,
+        subtract: Option<&Frame>,
         out: &mut [f32],
     ) -> Result<Rejected, ImageProcError> {
         let frames = set.len();
         let pixels = block.pixel_count(dims);
 
+        // The master's rows for this block, borrowed once rather than per
+        // frame.
+        let correction = subtract.map(|m| m.rows(block.channel, block.start_row, block.height()));
+
         for frame in 0..frames {
             let slot = &mut self.band[frame * pixels..(frame + 1) * pixels];
             set.read_block_into(frame, block, slot)?;
+            if let Some(correction) = correction {
+                for (v, c) in slot.iter_mut().zip(correction) {
+                    *v -= *c;
+                }
+            }
         }
 
         let mut tally = Rejected::default();

@@ -131,6 +131,13 @@ impl Frame {
         }
     }
 
+    /// Opens a FITS file and decodes its primary image.
+    pub fn open(path: &std::path::Path) -> Result<Self, ImageProcError> {
+        let reader = px_fits::reader::FitsReader::open(path)?;
+        let hdu = reader.primary_image()?;
+        Self::from_hdu(&hdu)
+    }
+
     /// Decodes a whole image HDU.
     pub fn from_hdu<S: ByteSource + ?Sized>(hdu: &ImageHdu<'_, S>) -> Result<Self, ImageProcError> {
         let dims = dims_of(hdu)?;

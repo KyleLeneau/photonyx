@@ -7,10 +7,12 @@ pub mod environment;
 pub mod error;
 pub mod meta;
 pub mod model;
+pub mod native;
 pub mod pause;
 pub mod project;
 
 pub use environment::RunIn;
+pub use native::{NativeEngine, NativeRuntime};
 
 pub trait PipelineReporter {
     fn step_started(&self, message: &str) -> usize;

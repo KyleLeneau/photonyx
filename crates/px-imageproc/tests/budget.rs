@@ -356,7 +356,7 @@ fn planned_buffers_stay_inside_the_budget() {
             for &budget in &[512 * MB, 2 * GB, 8 * GB] {
                 for threads in [1usize, 4, 8, 16] {
                     let runtime = Runtime::new(ResourceBudget::new(budget, threads)).unwrap();
-                    let plan = match runtime.plan_blocks(&dims, frames, elem_size, 0) {
+                    let plan = match runtime.plan_blocks(&dims, frames, elem_size, 0, 0) {
                         Ok(p) => p,
                         // A budget that genuinely cannot hold the work is a
                         // typed error, not an overrun. That is the other half
@@ -393,7 +393,7 @@ fn tightening_the_budget_does_not_gut_the_plan() {
         BlockPlan::compute(rows, &dims, threads).unwrap()
     };
     let runtime = Runtime::new(ResourceBudget::new(budget, threads)).unwrap();
-    let tightened = runtime.plan_blocks(&dims, frames, elem_size, 0).unwrap();
+    let tightened = runtime.plan_blocks(&dims, frames, elem_size, 0, 0).unwrap();
 
     assert!(tightened.blocks.len() >= faithful.blocks.len());
     assert!(
