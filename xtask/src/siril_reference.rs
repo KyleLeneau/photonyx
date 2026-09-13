@@ -144,6 +144,10 @@ impl flags::SirilReference {
         if self.stars {
             build_star_reference(sh, &siril, &corpus, &out, per_kind)?;
         }
+        if self.registration {
+            let frames = self.reg_frames.unwrap_or(100) as usize;
+            build_registration_reference(sh, &siril, &corpus, &out, frames)?;
+        }
         Ok(())
     }
 }
@@ -582,6 +586,103 @@ roundness={FINDSTAR_ROUNDNESS}"
     }
 
     std::fs::write(stars.join("frames.txt"), manifest)?;
+    Ok(())
+}
+
+/// Two-pass registers a run of light frames and keeps Siril's sequence file,
+/// which carries one homography per frame (ADR 007 P8-T6).
+///
+/// `register -2pass` computes the transforms without writing registered images,
+/// which is exactly what the parity test needs and saves writing a hundred
+/// 61 MP frames to disk. Siril's `convert` symlinks FITS input rather than
+/// copying it, so the working sequence costs kilobytes.
+fn build_registration_reference(
+    sh: &Shell,
+    siril: &Path,
+    corpus: &Path,
+    out: &Path,
+    frames: usize,
+) -> Result<()> {
+    let dir = out.join("registration");
+    let work = dir.join("work");
+    let sequence = work.join("reg_.seq");
+    if sequence.exists() {
+        println!(
+            "  registration: {} already present, skipping",
+            sequence.display()
+        );
+        return Ok(());
+    }
+    std::fs::create_dir_all(&work)?;
+
+    let lights = corpus.join("light");
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(&lights)?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "fits" | "fit" | "fts"))
+        })
+        .collect();
+    paths.sort();
+    paths.truncate(frames);
+    if paths.len() < 2 {
+        bail!(
+            "need at least two light frames to register, found {}",
+            paths.len()
+        );
+    }
+
+    // Siril converts whatever is in one directory, so the frames to register are
+    // linked into a directory of their own rather than the whole corpus.
+    let staged = work.join("src");
+    std::fs::create_dir_all(&staged)?;
+    for path in &paths {
+        let link = staged.join(path.file_name().unwrap());
+        if !link.exists() {
+            std::os::unix::fs::symlink(path, &link)?;
+        }
+    }
+
+    let script = work.join("register.ssf");
+    std::fs::write(
+        &script,
+        format!(
+            "requires 1.2.0\nsetext fits\ncd {}\nconvert reg -out={}\ncd {}\nregister reg_ -2pass\n",
+            quoted(&staged),
+            flag_value(&work)?,
+            quoted(&work)
+        ),
+    )?;
+
+    println!(
+        "  two-pass registering {} light frames (this takes a while)...",
+        paths.len()
+    );
+    let started = std::time::Instant::now();
+    let log = cmd!(sh, "{siril} -s {script}").ignore_status().read()?;
+    if !sequence.exists() {
+        bail!(
+            "siril did not produce {}. Log tail:\n{}",
+            sequence.display(),
+            log.lines().rev().take(20).collect::<Vec<_>>().join("\n")
+        );
+    }
+    println!(
+        "  registration: {} in {:.1}s",
+        sequence.display(),
+        started.elapsed().as_secs_f64()
+    );
+    std::fs::write(dir.join("register.log"), &log)?;
+
+    // The sequence file indexes frames by position; the parity test needs the
+    // original paths, so the mapping is recorded alongside it.
+    let mut manifest = String::new();
+    for (i, path) in paths.iter().enumerate() {
+        let relative = path.strip_prefix(corpus).unwrap_or(path).display();
+        let _ = writeln!(manifest, "{}\t{relative}", i + 1);
+    }
+    std::fs::write(dir.join("frames.txt"), manifest)?;
     Ok(())
 }
 

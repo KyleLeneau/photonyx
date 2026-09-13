@@ -51,6 +51,10 @@ xflags::xflags! {
             optional --calibration
             /// Also run findstar over light frames and record the star lists
             optional --stars
+            /// Also two-pass register the light frames and record Siril's homographies
+            optional --registration
+            /// Light frames to register (default: 100)
+            optional --reg-frames reg_frames: u32
         }
     }
 }
@@ -110,6 +114,8 @@ pub struct SirilReference {
     pub masters: bool,
     pub calibration: bool,
     pub stars: bool,
+    pub registration: bool,
+    pub reg_frames: Option<u32>,
 }
 
 impl Xtask {
