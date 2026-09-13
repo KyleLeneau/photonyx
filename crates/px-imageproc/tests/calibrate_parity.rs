@@ -78,17 +78,25 @@ fn source_light(root: &Path) -> Option<PathBuf> {
     path.exists().then_some(path)
 }
 
-/// The `pp_` frame Siril produced.
+/// The `pp_` frame Siril produced, still in its capture mosaic.
+///
+/// The OSC reference directory holds two: the calibrated CFA frame and the
+/// demosaiced one Phase 6 compares against. This test calibrates without
+/// demosaicing, so it wants the first — named explicitly rather than taken as
+/// whichever `read_dir` happens to yield, which is unordered and made this
+/// test pass or fail by luck of the filesystem.
 fn calibrated_reference(root: &Path) -> Option<PathBuf> {
-    std::fs::read_dir(root.join("calibrated"))
-        .ok()
-        .and_then(|d| {
-            d.filter_map(|e| e.ok().map(|e| e.path())).find(|p| {
-                p.file_name()
-                    .and_then(|n| n.to_str())
-                    .is_some_and(|n| n.starts_with("pp_"))
-            })
+    let mut candidates: Vec<PathBuf> = std::fs::read_dir(root.join("calibrated"))
+        .ok()?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("pp_") && !n.starts_with("pp_debayered_"))
         })
+        .collect();
+    candidates.sort();
+    candidates.into_iter().next()
 }
 
 /// How the clamping rule in `calibrate::ops` actually bit on a real frame.
