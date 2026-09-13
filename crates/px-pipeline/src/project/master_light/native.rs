@@ -150,7 +150,8 @@ impl RunIn<NativeRuntime> for CreateMasterLightPipeline {
         reporter.step_ended(
             id,
             &format!(
-                "[2/3] Stacked {} frames, {} method, {} in {} blocks ({} values rejected)",
+                "[2/3] Stacked {} frames, {} method, {} in {} blocks ({} values rejected) \
+                 — warp {:.1}s, combine {:.1}s",
                 outcome.frame_count,
                 outcome.method,
                 if outcome.spilled {
@@ -159,7 +160,9 @@ impl RunIn<NativeRuntime> for CreateMasterLightPipeline {
                     "warped frames held in memory"
                 },
                 outcome.blocks,
-                outcome.rejected
+                outcome.rejected,
+                outcome.warp_seconds,
+                outcome.stack_seconds
             ),
             true,
         );
@@ -210,6 +213,12 @@ struct StackOutcome {
     rejected: u64,
     spilled: bool,
     method: String,
+    /// Seconds spent warping and seconds spent combining, reported separately:
+    /// they scale differently — warping with the frame count and the kernel,
+    /// combining with the frame count and the rejection method — and a run that
+    /// is slower than expected is usually slower in exactly one of them.
+    warp_seconds: f64,
+    stack_seconds: f64,
 }
 
 /// Warps every included frame and combines them.
@@ -248,24 +257,36 @@ fn run_warp_and_stack(engine: &NativeEngine, job: StackJob) -> Result<StackOutco
         // Siril's `-output_norm`, which rescales the result into the unit range.
         .output_norm(true);
 
-    let (result, blocks, rejected) = if spill {
-        let temp = tempfile::tempdir()?;
-        let paths = warp_to_disk(engine, &job, &included, temp.path())?;
+    let warp_started = std::time::Instant::now();
+    let (result, blocks, rejected, warp_seconds) = if spill {
+        // Honours the configured working directory when there is one: the spill
+        // is tens of gigabytes for a real session, and which volume that lands
+        // on is a decision a user may well have made deliberately.
+        let temp = match engine.work_dir() {
+            Some(dir) => {
+                std::fs::create_dir_all(dir)?;
+                tempfile::tempdir_in(dir)?
+            }
+            None => tempfile::tempdir()?,
+        };
+        // Levels are measured as each frame is warped, while it is still in
+        // memory. Measuring them afterwards, from the files, would mean a second
+        // full read of every frame — 23 GB on a hundred 61 MP frames, for
+        // numbers that were free a moment earlier.
+        let (paths, levels) = warp_to_disk(engine, &job, &included, temp.path())?;
+        let warp_seconds = warp_started.elapsed().as_secs_f64();
+
+        let normalization = normalization_from(&levels, reference);
         let set = FrameSet::open(&paths)?;
-        let normalization = px_imageproc::stack::normalize::compute(
-            &set,
-            engine.runtime(),
-            NormMethod::AdditiveScaling,
-            reference,
-            false,
-        )?;
         let result = stack_normalized(&set, engine.runtime(), options, None, Some(&normalization))?;
         let blocks = result.block_count;
         let rejected = result.rejected.total() as u64;
-        (result.frame, blocks, rejected)
+        (result.frame, blocks, rejected, warp_seconds)
     } else {
-        let warped = warp_in_memory(engine, &job, &included)?;
-        let normalization = normalization_of(&warped, reference);
+        let (warped, levels) = warp_in_memory(engine, &job, &included)?;
+        let warp_seconds = warp_started.elapsed().as_secs_f64();
+
+        let normalization = normalization_from(&levels, reference);
         let loaded = LoadedFrames::new(&warped)?;
         let result = stack_normalized(
             &loaded,
@@ -276,8 +297,9 @@ fn run_warp_and_stack(engine: &NativeEngine, job: StackJob) -> Result<StackOutco
         )?;
         let blocks = result.block_count;
         let rejected = result.rejected.total() as u64;
-        (result.frame, blocks, rejected)
+        (result.frame, blocks, rejected, warp_seconds)
     };
+    let stack_seconds = warp_started.elapsed().as_secs_f64() - warp_seconds;
 
     let mut master = result;
     // The orientation step the Siril pipeline performs after stacking (P11-T4);
@@ -318,7 +340,65 @@ fn run_warp_and_stack(engine: &NativeEngine, job: StackJob) -> Result<StackOutco
         rejected,
         spilled: spill,
         method: describe(&best),
+        warp_seconds,
+        stack_seconds,
     })
+}
+
+/// How many frames may be warped at once, from the memory budget.
+///
+/// Each one in flight holds its source frame and its warped result at the same
+/// time. The concurrency is worth having even though `warp` is already parallel
+/// inside: a frame's cost is not all warp — it is a 122 MB read, a decode, the
+/// warp, and a robust level measurement, and only the middle two keep every core
+/// busy. Overlapping several frames fills the gaps, and measured on a hundred
+/// 61 MP frames it is the difference between 169 s and 47 s.
+fn warp_concurrency(engine: &NativeEngine, dims: px_imageproc::ImageDims) -> usize {
+    let per_frame = dims.pixel_count() as u64 * 4 * 2;
+    engine
+        .budget()
+        .max_frames_in_flight(per_frame)
+        .clamp(1, engine.budget().cores)
+}
+
+/// Warps every included frame, measuring its photometric level while it is still
+/// in memory, and hands each result to `sink` in sequence order.
+///
+/// The two callers differ only in what they do with a warped frame — keep it or
+/// write it — so the concurrency, the ordering and the level measurement live
+/// here once.
+fn warp_all<T: Send>(
+    engine: &NativeEngine,
+    job: &StackJob,
+    included: &[usize],
+    sink: impl Fn(usize, Frame) -> Result<T, PipelineError> + Sync,
+) -> Result<(Vec<T>, Vec<Vec<ChannelLevel>>), PipelineError> {
+    use rayon::prelude::*;
+
+    let in_flight = warp_concurrency(engine, job.registration.geometry.dims);
+    let positions: Vec<(usize, usize)> = included.iter().copied().enumerate().collect();
+
+    let mut produced: Vec<(usize, T, Vec<ChannelLevel>)> = engine.runtime().install(|| {
+        positions
+            .par_chunks(positions.len().div_ceil(in_flight).max(1))
+            .flat_map_iter(|chunk| {
+                chunk.iter().map(|&(position, index)| {
+                    let frame = warp_one(engine, job, index)?;
+                    let levels = measure_levels(&frame);
+                    Ok((position, sink(position, frame)?, levels))
+                })
+            })
+            .collect::<Result<Vec<_>, PipelineError>>()
+    })?;
+
+    produced.sort_by_key(|(position, _, _)| *position);
+    let mut outputs = Vec::with_capacity(produced.len());
+    let mut levels = Vec::with_capacity(produced.len());
+    for (_, output, level) in produced {
+        outputs.push(output);
+        levels.push(level);
+    }
+    Ok((outputs, levels))
 }
 
 /// Warps the included frames, keeping them in memory.
@@ -326,33 +406,31 @@ fn warp_in_memory(
     engine: &NativeEngine,
     job: &StackJob,
     included: &[usize],
-) -> Result<Vec<Frame>, PipelineError> {
-    let mut warped = Vec::with_capacity(included.len());
-    for &index in included {
-        warped.push(warp_one(engine, job, index)?);
-    }
-    Ok(warped)
+) -> Result<(Vec<Frame>, Vec<Vec<ChannelLevel>>), PipelineError> {
+    warp_all(engine, job, included, |_, frame| Ok(frame))
 }
 
 /// Warps the included frames into `dir`, returning their paths in order.
-///
-/// Sequential rather than parallel: each warp is already parallel inside, over
-/// output row bands, and running several at once would multiply the resident
-/// frames without using any more cores.
 fn warp_to_disk(
     engine: &NativeEngine,
     job: &StackJob,
     included: &[usize],
     dir: &Path,
-) -> Result<Vec<PathBuf>, PipelineError> {
-    let mut paths = Vec::with_capacity(included.len());
-    for (position, &index) in included.iter().enumerate() {
-        let frame = warp_one(engine, job, index)?;
+) -> Result<(Vec<PathBuf>, Vec<Vec<ChannelLevel>>), PipelineError> {
+    warp_all(engine, job, included, |position, frame| {
         let path = dir.join(format!("r_{position:05}.fits"));
         frame.write(&path, &[])?;
-        paths.push(path);
-    }
-    Ok(paths)
+        Ok(path)
+    })
+}
+
+/// The robust level and spread of every channel of one warped frame.
+fn measure_levels(frame: &Frame) -> Vec<ChannelLevel> {
+    (0..frame.channels())
+        .map(|channel| {
+            ChannelLevel::measure(frame.channel(channel), frame.width(), frame.height(), false)
+        })
+        .collect()
 }
 
 fn warp_one(engine: &NativeEngine, job: &StackJob, index: usize) -> Result<Frame, PipelineError> {
@@ -369,27 +447,8 @@ fn warp_one(engine: &NativeEngine, job: &StackJob, index: usize) -> Result<Frame
     )?)
 }
 
-/// Normalization coefficients measured directly from in-memory warped frames.
-///
-/// The on-disk path can use `normalize::compute`, which loads what it measures;
-/// here the frames are already loaded and re-reading them would be the only cost.
-fn normalization_of(warped: &[Frame], reference: usize) -> Normalization {
-    let levels: Vec<Vec<ChannelLevel>> = warped
-        .iter()
-        .map(|frame| {
-            (0..frame.channels())
-                .map(|channel| {
-                    ChannelLevel::measure(
-                        frame.channel(channel),
-                        frame.width(),
-                        frame.height(),
-                        false,
-                    )
-                })
-                .collect()
-        })
-        .collect();
-
+/// Normalization coefficients from already-measured per-frame levels.
+fn normalization_from(levels: &[Vec<ChannelLevel>], reference: usize) -> Normalization {
     let reference_levels = &levels[reference.min(levels.len() - 1)];
     let coefficients = levels
         .iter()

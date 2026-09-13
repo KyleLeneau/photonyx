@@ -151,6 +151,10 @@ impl flags::SirilReference {
         if self.warp {
             build_warp_reference(sh, &siril, &out, per_kind)?;
         }
+        if self.master_light {
+            let frames = self.reg_frames.unwrap_or(100) as usize;
+            build_master_light_reference(sh, &siril, &corpus, &out, frames)?;
+        }
         Ok(())
     }
 }
@@ -740,6 +744,118 @@ fn build_warp_reference(sh: &Shell, siril: &Path, out: &Path, frames: usize) -> 
         started.elapsed().as_secs_f64()
     );
     std::fs::write(dir.join("apply.log"), &log)?;
+    Ok(())
+}
+
+/// Builds a master light with Siril, issuing exactly the commands
+/// `px --engine siril project stack` issues (ADR 007 P11-T6).
+///
+/// A separate sequence from the `--registration` one, because this run applies
+/// the registration and writes a hundred registered frames; keeping it apart
+/// leaves the registration reference reusable and makes the disk cost explicit.
+fn build_master_light_reference(
+    sh: &Shell,
+    siril: &Path,
+    corpus: &Path,
+    out: &Path,
+    frames: usize,
+) -> Result<()> {
+    let dir = out.join("master-light");
+    let work = dir.join("work");
+    let target = dir.join("master_light");
+    let produced = target.with_extension("fits");
+    if produced.exists() {
+        println!("  master light: already present, skipping");
+        return Ok(());
+    }
+    std::fs::create_dir_all(&work)?;
+
+    let lights = corpus.join("light");
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(&lights)?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "fits" | "fit" | "fts"))
+        })
+        .collect();
+    paths.sort();
+    paths.truncate(frames);
+
+    let staged = work.join("src");
+    std::fs::create_dir_all(&staged)?;
+    for path in &paths {
+        let link = staged.join(path.file_name().unwrap());
+        if !link.exists() {
+            std::os::unix::fs::symlink(path, &link)?;
+        }
+    }
+
+    // The same command sequence as `project/master_light/siril.rs`: convert,
+    // two-pass register, apply, stack with additive+scaling normalization and
+    // the rejection `BestRejection::find` picks, then mirrorx and save.
+    let rejection = if paths.len() <= 6 {
+        "p 0.2 0.1"
+    } else if paths.len() <= 30 {
+        "w 3 3"
+    } else {
+        "l 5 5"
+    };
+    let script = work.join("stack.ssf");
+    std::fs::write(
+        &script,
+        format!(
+            "requires 1.2.0\nsetext fits\ncd {}\nconvert ml -out={}\ncd {}\n\
+             register ml_ -2pass\nseqapplyreg ml_\n\
+             stack r_ml_ rej {rejection} -norm=addscale -filter-included -output_norm -out={}\n\
+             load {}\nmirrorx\nsave {}\n",
+            quoted(&staged),
+            flag_value(&work)?,
+            quoted(&work),
+            flag_value(&target)?,
+            flag_value(&target)?,
+            flag_value(&target)?
+        ),
+    )?;
+
+    println!(
+        "  building a master light from {} frames with siril (several minutes)...",
+        paths.len()
+    );
+    let started = std::time::Instant::now();
+    let log = cmd!(sh, "{siril} -s {script}").ignore_status().read()?;
+    let elapsed = started.elapsed();
+    if !produced.exists() {
+        bail!(
+            "siril did not produce {}. Log tail:\n{}",
+            produced.display(),
+            log.lines().rev().take(25).collect::<Vec<_>>().join("\n")
+        );
+    }
+    println!(
+        "  master light: {} in {:.1}s",
+        produced.display(),
+        elapsed.as_secs_f64()
+    );
+    std::fs::write(
+        dir.join("master_light.log"),
+        format!(
+            "frames: {}\nrejection: {rejection}\nelapsed_seconds: {:.3}\n\n{log}",
+            paths.len(),
+            elapsed.as_secs_f64()
+        ),
+    )?;
+
+    // The frame list, so the parity test stacks exactly the same inputs.
+    let mut manifest = String::new();
+    for path in &paths {
+        let _ = writeln!(
+            manifest,
+            "{}",
+            path.strip_prefix(corpus).unwrap_or(path).display()
+        );
+    }
+    std::fs::write(dir.join("frames.txt"), manifest)?;
     Ok(())
 }
 

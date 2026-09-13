@@ -57,6 +57,8 @@ xflags::xflags! {
             optional --reg-frames reg_frames: u32
             /// Also apply the registration to a few frames, keeping Siril's warped output
             optional --warp
+            /// Also build a master light from the registered frames, as the px pipeline does
+            optional --master-light
         }
     }
 }
@@ -119,6 +121,7 @@ pub struct SirilReference {
     pub registration: bool,
     pub reg_frames: Option<u32>,
     pub warp: bool,
+    pub master_light: bool,
 }
 
 impl Xtask {
