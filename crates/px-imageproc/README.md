@@ -160,3 +160,32 @@ cargo test --release -p px-imageproc --test starfind_parity -- --nocapture
 A 61 MP light yields 123k candidates, so the fitter works through them brightest-first and stops
 once `max_stars` is met: **1.13 s** for the default 2,000 stars, against 4.40 s to fit every
 candidate. 2,000 stars on a 2048×2048 frame take 43 ms end to end, 36 ms of that detection.
+
+### Registration (ADR 007 Phase 8)
+
+Star lists are matched by triangle similarity (Groth 1986; Valdes et al. 1995), then a homography
+is fitted by RANSAC with iterative refinement. The triangle match runs on the brightest 40 stars
+and is used as a seed: both full lists are re-paired by proximity under it and the transform
+refitted, which is what makes the result precise to hundredths of a pixel rather than tenths.
+
+Against Siril 1.4.4's own two-pass homographies over 94 real 61 MP lights:
+
+| | Value |
+|---|---|
+| corner error, median | 0.0644 px |
+| corner error, 90th percentile | 0.1065 px |
+| frames where our fit is the better least-squares fit | 92 of 94 |
+| worst corner error as a multiple of that frame's own misfit | 1.46× |
+
+The absolute 0.1 px bound holds on every frame where a homography actually describes the mapping
+(42 of 94, worst 0.091 px). On the rest, our own fit leaves 0.35–0.46 px of *spatially structured*
+residual — unmodelled optical distortion, not noise — so the two implementations land a fraction of
+that misfit apart and neither is wrong. The gate there is scale-free: the disagreement never
+exceeds twice the scatter both are fitting through.
+
+```
+cargo xtask siril-reference --registration          # register 100 lights with Siril
+cargo test --release -p px-imageproc --test starmatch_parity -- --nocapture
+```
+
+Per-frame cost on 2,000-star lists: 3.5 ms to match, 4.5 ms to match and fit.

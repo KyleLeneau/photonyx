@@ -7,7 +7,10 @@
 //! many candidates are fitted at all.
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use px_imageproc::register::starfind::{detect_candidates, find_stars_reported};
+use px_imageproc::register::psf::PsfStar;
+use px_imageproc::register::starfind::{detect_candidates, find_stars, find_stars_reported};
+use px_imageproc::register::starmatch::{MatchOptions, match_stars, register_pair};
+use px_imageproc::register::transform::{RansacOptions, Transform, TransformKind};
 use px_imageproc::runtime::{ResourceBudget, Runtime};
 use px_imageproc::{Profile, StarfindOptions};
 
@@ -144,11 +147,70 @@ fn cores(c: &mut Criterion) {
     group.finish();
 }
 
+/// A second field, the first one shifted and rotated, for the matching
+/// benchmarks. Built by re-rendering rather than by moving star coordinates, so
+/// the star lists being matched are genuinely independent detections.
+fn shifted_field() -> (Vec<PsfStar>, Vec<PsfStar>) {
+    let reference = star_field();
+    let options = StarfindOptions::default();
+    let reference_stars = find_stars(&reference, WIDTH, HEIGHT, &options);
+
+    let transform = Transform::similarity(1.0, 0.004, -23.0, 41.0);
+    let mut target = vec![0.02f32; WIDTH * HEIGHT];
+    let inverse = transform.invert().expect("invertible");
+    for star in &reference_stars {
+        let p = inverse.apply(px_imageproc::register::transform::Point::new(
+            star.x0, star.y0,
+        ));
+        let sigma = star.sx;
+        let reach = (6.0 * sigma).ceil() as isize;
+        let (cx, cy) = (p.x.round() as isize, p.y.round() as isize);
+        for y in (cy - reach).max(0)..(cy + reach + 1).min(HEIGHT as isize) {
+            for x in (cx - reach).max(0)..(cx + reach + 1).min(WIDTH as isize) {
+                let (dx, dy) = (x as f64 - p.x, y as f64 - p.y);
+                let q = (dx * dx + dy * dy) / (2.0 * sigma * sigma);
+                if q < 30.0 {
+                    target[y as usize * WIDTH + x as usize] += (star.amplitude * (-q).exp()) as f32;
+                }
+            }
+        }
+    }
+    let target_stars = find_stars(&target, WIDTH, HEIGHT, &options);
+    (target_stars, reference_stars)
+}
+
+/// Triangle matching and transform fitting, which is the per-frame cost of
+/// registration once the stars are known.
+fn matching(c: &mut Criterion) {
+    let (target, reference) = shifted_field();
+    let match_options = MatchOptions::default();
+    let ransac_options = RansacOptions::default();
+
+    let mut group = c.benchmark_group("register_match");
+    group.sample_size(20);
+    group.bench_function("triangle_match", |b| {
+        b.iter(|| match_stars(&target, &reference, &match_options).expect("match"))
+    });
+    group.bench_function("match_and_fit", |b| {
+        b.iter(|| {
+            register_pair(
+                &target,
+                &reference,
+                TransformKind::Homography,
+                &match_options,
+                &ransac_options,
+            )
+            .expect("register")
+        })
+    });
+    group.finish();
+}
+
 fn num_cores() -> usize {
     std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4)
 }
 
-criterion_group!(benches, detection, fitting, star_caps, cores);
+criterion_group!(benches, detection, fitting, star_caps, cores, matching);
 criterion_main!(benches);
