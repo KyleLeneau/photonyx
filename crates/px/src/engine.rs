@@ -28,6 +28,18 @@ impl EngineConfig {
         }
     }
 
+    /// A configuration pinned to Siril, for the paths that have no native
+    /// implementation. Explicit rather than implicit: a call site that cannot
+    /// run natively should say so where it is, not depend on a flag it ignores.
+    pub fn siril_only() -> Self {
+        Self {
+            engine: Engine::Siril,
+            cores: None,
+            memory: None,
+            debayer: CliDebayer::default(),
+        }
+    }
+
     pub fn is_native(&self) -> bool {
         self.engine == Engine::Native
     }

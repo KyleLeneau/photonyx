@@ -209,7 +209,7 @@ pub async fn run(cli: Cli) -> Result<ExitStatus> {
         Commands::Project(ProjectNamespace {
             project,
             command: ProjectCommand::Stack(args),
-        }) => commands::stack_project_observations(project, args, printer).await,
+        }) => commands::stack_project_observations(project, args, printer, engine).await,
 
         Commands::Project(ProjectNamespace {
             project,

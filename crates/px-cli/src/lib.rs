@@ -321,6 +321,9 @@ impl Commands {
                 command: MasterCommand::Bias(_) | MasterCommand::Dark(_) | MasterCommand::Flat(_),
             }) | Commands::Observation(ObservationNamespace {
                 command: ObservationCommand::Calibrate(_) | ObservationCommand::BatchCalibrate(_),
+            }) | Commands::Project(ProjectNamespace {
+                command: ProjectCommand::Stack(_),
+                ..
             })
         )
     }
