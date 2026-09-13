@@ -378,8 +378,18 @@ fn sigma_median(
 /// large residual at one end. Against the original frame order it would be
 /// fitting the sequence's own history instead.
 fn linear_fit(stack: &mut [f32], mut n: usize, bounds: Bounds, counts: &mut Rejected) -> usize {
+    // Sorted once, not once per pass. The compaction at the foot of the loop
+    // writes survivors back in the order it met them, so an ascending run stays
+    // ascending however many values are dropped from it.
+    //
+    // Unstable because there is nothing to be stable about: two f32 that
+    // compare equal under `total_cmp` have identical bit patterns, so their
+    // order is unobservable. It is the allocating one — the stable sort asks
+    // the allocator for scratch above twenty elements, and a sequence is
+    // routinely longer than that — and this runs once per pixel.
+    stack[..n].sort_unstable_by(f32::total_cmp);
+
     loop {
-        stack[..n].sort_by(f32::total_cmp);
         let (intercept, slope) = least_squares_over_index(&stack[..n]);
 
         // Mean absolute residual rather than an RMS one: the stack still
@@ -516,12 +526,15 @@ fn least_squares_over_index(y: &[f32]) -> (f32, f32) {
     }
     mean_y /= n as f64;
 
+    // The abscissae are the indices 0..n, so their spread does not depend on
+    // the data and need not be summed: sum((i - (n-1)/2)^2) is n(n^2 - 1)/12.
+    // Exact in f64 at any sequence length this runs at, and it takes a
+    // multiply-add per element out of the loop below.
+    let sxx = (n as f64) * ((n * n) as f64 - 1.0) / 12.0;
+
     let mut sxy = 0.0f64;
-    let mut sxx = 0.0f64;
     for (i, &v) in y.iter().enumerate() {
-        let dx = i as f64 - mean_x;
-        sxy += dx * (v as f64 - mean_y);
-        sxx += dx * dx;
+        sxy += (i as f64 - mean_x) * (v as f64 - mean_y);
     }
 
     let slope = if sxx == 0.0 { 0.0 } else { sxy / sxx };
