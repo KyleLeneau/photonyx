@@ -7,6 +7,7 @@
 //! before the next band is read. Memory is bounded by the block size, which
 //! is chosen from the budget, and threads each hold one band.
 
+pub mod normalize;
 pub mod rejection;
 
 use rayon::prelude::*;
@@ -17,6 +18,7 @@ use crate::runtime::{Block, ImageDims, Runtime};
 use crate::sequence::FrameSet;
 use crate::stats;
 
+pub use normalize::{NormCoefficients, NormMethod, Normalization};
 pub use rejection::{Bounds, Rejected, Rejection};
 
 /// How a pixel's values across the sequence become one value.
@@ -124,6 +126,24 @@ pub fn stack_calibrated(
     options: StackOptions,
     subtract: Option<&Frame>,
 ) -> Result<StackResult, ImageProcError> {
+    stack_normalized(set, runtime, options, subtract, None)
+}
+
+/// [`stack_calibrated`] with per-frame photometric normalization applied as the
+/// blocks are read (ADR 007 P11-T2).
+///
+/// This is the master-light path: frames of one session differ in sky brightness
+/// and transparency, and rejection run on unnormalized frames fires on the
+/// *frame* rather than on the outlier. Coefficients come from
+/// [`normalize::compute`] and are applied per frame and channel, after any
+/// `subtract` and before the reduction.
+pub fn stack_normalized(
+    set: &FrameSet,
+    runtime: &Runtime,
+    options: StackOptions,
+    subtract: Option<&Frame>,
+    normalization: Option<&Normalization>,
+) -> Result<StackResult, ImageProcError> {
     if set.is_empty() {
         return Err(ImageProcError::EmptySequence);
     }
@@ -149,6 +169,18 @@ pub fn stack_calibrated(
         )));
     }
     let resident = subtract.map_or(0, |m| m.data().len() as u64 * elem_size as u64);
+
+    // A normalization of all-identity coefficients is dropped here rather than
+    // carried through the inner loop.
+    let normalization = normalization.filter(|n| !n.is_identity());
+    if let Some(n) = normalization
+        && n.coefficients.len() != frames
+    {
+        return Err(ImageProcError::Processing(format!(
+            "normalization has {} frames but the sequence has {frames}",
+            n.coefficients.len()
+        )));
+    }
 
     let plan = runtime.plan_blocks(
         &dims,
@@ -208,7 +240,9 @@ pub fn stack_calibrated(
                 .par_iter()
                 .zip(workers.par_iter_mut())
                 .zip(out_parts.par_iter_mut())
-                .map(|((block, worker), out)| worker.run(set, block, &dims, options, subtract, out))
+                .map(|((block, worker), out)| {
+                    worker.run(set, block, &dims, options, subtract, normalization, out)
+                })
                 .collect();
 
             // Each worker holds its block's rejection counts; they are copied
@@ -304,6 +338,7 @@ impl Worker {
         dims: &ImageDims,
         options: StackOptions,
         subtract: Option<&Frame>,
+        normalization: Option<&Normalization>,
         out: &mut [f32],
     ) -> Result<Rejected, ImageProcError> {
         let frames = set.len();
@@ -319,6 +354,17 @@ impl Worker {
             if let Some(correction) = correction {
                 for (v, c) in slot.iter_mut().zip(correction) {
                     *v -= *c;
+                }
+            }
+            // Normalization is per channel, and a block never straddles one
+            // (asserted by `assert_blocks_are_contiguous`), so the coefficients
+            // are fetched once per frame rather than per pixel.
+            if let Some(normalization) = normalization {
+                let coefficients = normalization.get(frame, block.channel);
+                if !coefficients.is_identity() {
+                    for v in slot.iter_mut() {
+                        *v = coefficients.apply(*v);
+                    }
                 }
             }
         }
