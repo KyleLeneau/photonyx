@@ -7,11 +7,15 @@
 //! boundaries are where the cost changes by an order of magnitude, which is
 //! also where the budget scheduler needs to be able to cut.
 
+pub mod framing;
 pub mod psf;
 pub mod starfind;
 pub mod starmatch;
 pub mod transform;
 
+pub use framing::{
+    FrameQuality, Framing, OutputGeometry, frame_qualities, output_geometry, select_reference,
+};
 pub use psf::{
     FwhmStats, Profile, PsfStar, Rejected, amplitude_threshold_for, filter_stars_by_amplitude,
     fwhm_stats,
