@@ -3,12 +3,15 @@
 Pixel-space image processing for FITS data, built on top of [`px-fits`](../px-fits).
 
 `px-fits` reads and writes FITS bytes and has no opinion on what the pixels mean
-photographically. This crate owns that interpretation: debayering, display
-normalization, autostretch, and — planned — calibration, stacking, and composition.
+photographically. This crate owns that interpretation: calibration, debayering, star detection
+and PSF fitting, registration, warping, stacking, statistics, display normalization and
+autostretch — together with the memory-budgeted block scheduler the large ones run under.
 
-Scaffolded as part of ADR 006 Phase 9. See
-[`docs/adr/006-native-fits-implementation.md`](../../docs/adr/006-native-fits-implementation.md)
-for the phased plan and rationale for the crate split.
+Scaffolded as part of ADR 006 Phase 9 and built out by
+[`docs/adr/007-native-calibration-registration-stacking.md`](../../docs/adr/007-native-calibration-registration-stacking.md),
+which carries the phased plan, the parity gates, and the reasoning behind each algorithm choice.
+Everything here is implemented from published literature rather than translated from Siril, which
+is a licensing requirement and not a style preference — see that ADR's handoff rules.
 
 ## Parity against Siril
 
@@ -225,15 +228,15 @@ percent of its value and the sky by nothing.
 
 ### Speed and memory
 
-| | Native | Siril |
-|---|---|---|
-| 100 frames, register + warp + stack | **68.9 s** | 73.6 s |
+| | Native | Siril | |
+|---|---|---|---|
+| 100 frames, register + warp + stack | **49.0 s** | 73.6 s | **1.50× faster** |
 
-Per phase: registration 20 s, warping 29 s, combining 11 s.
+Per phase: warping 24.5 s, combining 9.6 s, everything else 14.9 s.
 
 | Budget (`--max-memory`) | Peak footprint | Wall clock | Warped frames |
 |---|---|---|---|
-| default (90% of RAM) | 53.2 GB | 68.9 s | held in memory |
+| default (90% of RAM) | 53.2 GB | 49.0 s | held in memory |
 | 8 GB | **4.88 GB** | 89.3 s | spilled to disk |
 
 The budget is partitioned across phases rather than lent to each of them in turn. Sizing every
@@ -245,6 +248,34 @@ it is dropped, so the later phases allocated on top of the earlier ones.
 cargo xtask siril-reference --master-light     # 100-frame master light from Siril
 cargo test --release -p px-pipeline --test master_light_parity -- --nocapture
 ```
+
+## Profiling (ADR 007 Phase 12)
+
+Every stage of the native path can time itself. Recording is off unless asked for, and a disabled
+span costs one relaxed atomic load, so the instrumentation lives on the code users run:
+
+```sh
+PX_TIMING=1 px --engine native master flat -f H ./flats     # table to stderr
+cargo test --release -p px-pipeline --test profile -- --nocapture   # all five pipelines
+```
+
+Totals are **inclusive** (a span containing another counts the inner one) and **per-thread** (a
+parallel stage's total exceeds the wall clock by roughly its worker count — a stage that does not
+is one that is not actually running in parallel, which is the finding).
+
+This is what took the master light from 68.9 s to 49.0 s without changing a single output value.
+The largest single win was not where any of the earlier phases would have guessed: 96% of star
+*detection* turned out to be measuring the channel's background, and 82% of a star-finding pass
+was one serial quickselect over a 244 MB copy. Counting the samples into buckets of an
+order-preserving integer key instead is exact, parallel, and copies nothing — 484 ms to 19.5 ms.
+
+| Star finding, per 61 MP frame | Before | After |
+|---|---|---|
+| median of the channel | 484 ms | **19.5 ms** |
+| background noise | 23 ms | 23 ms |
+| the scan that actually finds stars | 22 ms | 22 ms |
+| PSF fitting | 71 ms | 71 ms |
+| **whole pass** | **591 ms** | **117 ms** |
 
 ### What the native engine does not do
 

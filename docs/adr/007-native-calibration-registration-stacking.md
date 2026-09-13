@@ -808,6 +808,16 @@ frames to disk and reads them back, and the native path does not. Bias and dark 
 few hundred milliseconds of process and profile startup on a job that is otherwise I/O bound —
 within the "≥ parity" gate's intent but worth revisiting in Phase 12.
 
+**Revisited and closed in Phase 12.** The bias and dark deficit was not startup, it was the
+reduction kernel, and P12-T2 removed enough of it to flip both. Re-measured through the same
+binary, best of three warm runs:
+
+| Command | Native | Siril | |
+|---|---|---|---|
+| `master bias` | **2.01 s** | 2.15 s | **1.07× faster** (was 0.8×) |
+| `master dark` | **1.98 s** | 2.13 s | **1.08× faster** (was 0.7×) |
+| `master flat` | **7.72 s** | 18.20 s | **2.4× faster** |
+
 #### A real bug the corpus caught, and a gate that was measuring the wrong thing
 
 The first master-flat run differed from Siril by max 118 ADU with 89,435 pixels (0.146%) affected.
@@ -1379,15 +1389,178 @@ remain Siril-only. Both are reported rather than silently skipped, which is the 
 
 ### Phase 12 — Tuning and consolidation
 
-- [ ] **P12-T1** Profile all five pipelines; record where time actually goes.
-- [ ] **P12-T2** Act on what the profile shows. If it shows a kernel where autovectorization is
-      not firing, report the numbers (D8) rather than reaching for `unsafe`.
-- [ ] **P12-T3** Revisit D3: if the profile shows the ported block heuristic is leaving
-      throughput on the table, benchmark an alternative and record the comparison. Changing it
-      requires that evidence.
-- [ ] **P12-T4** Decide, with the report in hand, whether `--engine native` should become the
-      default. That decision is an ADR amendment, not a task outcome.
-- [ ] **P12-T5** Update ROADMAP and `docs/crate-dependencies.md`.
+- [x] **P12-T1** `px-imageproc/src/profile.rs`: named span accumulation, off unless enabled and
+      one relaxed load when it is, so the instrumentation lives on the paths users run rather
+      than behind a feature flag that would rot. `PX_TIMING=1 px ...` turns it on for a real
+      command and prints to stderr; `px-pipeline/tests/profile.rs` runs all five pipelines over
+      the corpus and writes `data/output/profile.txt`.
+- [x] **P12-T2** Acted on, four times, and the one thing not acted on is reported with numbers.
+- [x] **P12-T3** Revisited. No evidence the scheduler leaves throughput on the table, so
+      unchanged — the measurements are below.
+- [x] **P12-T4** Decided: **Siril stays the default.** Amendment below.
+- [x] **P12-T5** ROADMAP and `docs/crate-dependencies.md` updated. The dependency graph predated
+      `px-imageproc` entirely and five other edges had drifted.
+
+**Gate: met.** Every change in this phase is exact — the master-light parity figures are
+identical to Phase 11's in every digit (sky 0.333 sigma_bg, noise ratio 0.9766, FWHM ratio
+0.9978), which is the point: the output did not change, only the time it took.
+
+| | Phase 11 | Phase 12 | |
+|---|---|---|---|
+| master light, 95 frames | 68.9 s | **49.0 s** | **1.41x** |
+| — against Siril's 73.6 s | 1.07x | **1.50x** | |
+| master bias, 40 frames | 3.23 s | **1.88 s** | 1.72x |
+| master dark, 40 frames | 3.23 s | **1.95 s** | 1.66x |
+| master flat, 59 frames | 7.73 s | 7.62 s | — |
+
+Those are pipeline figures from `tests/profile.rs`. Through the `px` binary, which is what Phase 5
+measured and left as an open item, the bias and dark deficit is closed: **2.01 s against Siril's
+2.15 s** and **1.98 s against 2.13 s**, where Phase 5 measured 0.8x and 0.7x. The cause was never
+the startup cost that note guessed at — it was the reduction kernel.
+
+#### Where the time actually went, and what that was worth
+
+The profile is the whole point of the phase, so it is worth stating what it overturned. Phase 7
+had spent its optimization effort on PSF fitting, on the reasoning that fitting is two orders of
+magnitude dearer per candidate than detecting. That reasoning was right and the conclusion was
+wrong: detection was 611 ms a frame against fitting's 145, because **96% of "detection" was not
+detection**. It was `Background::measure`, and 484 ms of that was one call — the median.
+
+| Star finding, per 61 MP frame | Before | After |
+|---|---|---|
+| median of the channel | 484 ms | **19.5 ms** (24.8x) |
+| background noise | 23 ms | 23 ms |
+| the scan that actually finds stars | 22 ms | 22 ms |
+| PSF fitting | 71 ms | 71 ms |
+| **whole pass** | **591 ms** | **117 ms** (5.1x) |
+
+Quickselect has two problems at 61 megapixels and neither is the partition. It needs a copy it
+may reorder — 244 MB — and it is inherently serial, because each partition's bounds depend on the
+last. Counting has neither. IEEE-754 orders non-negative floats by their bit pattern, so flipping
+the negatives and setting the top bit of the rest yields a `u32` that compares exactly as the
+`f32` does; the samples can then be tallied into buckets of that key, which is per-sample
+independent and copies nothing. Two passes of sixteen bits resolve the key exactly.
+
+**This is the same number, not an approximation**, which matters because the alternative — a
+strided subsample, as P11 used for normalization levels — was available and would have been
+easier. The median sets the detection threshold, and a threshold that moved when a frame crossed
+a size boundary would make star lists depend on the frame's dimensions. `tests/stats.rs` asserts
+the two paths agree bit-for-bit over six distributions, including the duplicate-heavy and
+negative cases real frames present.
+
+It also removed a buffer: `ChannelStats::compute` needed one for the values and one for the
+deviations, and the MAD no longer materializes its deviations. 244 MB less per concurrent frame,
+which is part of how many fit a budget.
+
+Two smaller wins, both exact:
+
+- **The stacker's band is transposed into cache-sized tiles before reducing.** Reduction walks
+  across frames for one pixel and the band is frame-major, so a pixel's values sat one band apart
+  — hundreds of megabytes — and every frame's contribution was a cache miss and usually a TLB
+  miss. Worth a fifth of a plain median stack (31.8 s to 25.1 s of reduce time on 40 frames) and
+  nothing at all on a rejection stack, where the clipping costs far more than the fetch did.
+- **The linear fit was re-sorting on every pass.** It need not: the compaction writes survivors
+  back in the order it meets them, so an ascending run stays ascending. Sorting once, and
+  unstably — two `f32` equal under `total_cmp` have identical bit patterns, and the stable sort
+  asks the allocator for scratch above twenty elements, once per pixel — took the master light's
+  reduce from 198.8 s to 181.0 s.
+
+Against the Phase 11 breakdown of the same 95-frame run:
+
+| Phase | Phase 11 | Phase 12 |
+|---|---|---|
+| warping, 95 frames | 29 s | **24.5 s** |
+| combining | 11 s | **9.6 s** |
+| everything else — registration, collection, the write | 28.9 s | **14.9 s** |
+| total | 68.9 s | **49.0 s** |
+
+Warping and combining are reported by the pipeline; the third row is the remainder, and is
+dominated by the two-pass registration that the median work above halved.
+
+#### D8: the kernel is not slow for want of vectorization
+
+`stack.reduce` is 181 s of thread time in a 95-frame master light, more than every other stage
+together, and it is the kernel D8 anticipated. The answer is measured rather than assumed, in
+`benches/reduce.rs`, which runs the shipped single-accumulator loops against four-accumulator
+copies — what a vectorizer would do if it were allowed to, and it is not, because floating-point
+addition is not associative:
+
+| Loop | Shipped | Reassociated | |
+|---|---|---|---|
+| mean absolute residual | 166.7 us | 135.7 us | 1.23x faster |
+| least-squares cross moment | 270.1 us | 296.9 us | **0.91x, slower** |
+
+One loop gains a fifth and the other loses a tenth, and adopting either would move every
+rejection threshold and parity number in this project in its last bits. A third measurement makes
+the same point from the other side: `sxx` in the least-squares fit has a closed form,
+`n(n^2 - 1)/12`, and replacing the loop that computed it changed the total by nothing (181.0 s to
+182.6 s, inside the noise). **Taking arithmetic out of the loop did not help, because the loop is
+bound by its accumulator latency rather than by its arithmetic.**
+
+So the reduction is slow because iterated clipping walks the stack several times per pass — an
+algorithmic property, not a code-generation one — and no `unsafe` or explicit SIMD would address
+it. Recorded, per D8, and not changed.
+
+#### D3: the block scheduler is not leaving throughput on the table
+
+The evidence D3 requires before changing the heuristic does not exist, in three measurements.
+
+**Smaller bands are monotonically worse.** The heuristic takes the fewest bands the budget allows;
+the obvious alternative is more and smaller ones, for locality. Measured, on a 20-frame median:
+
+| Budget | Blocks | Time |
+|---|---|---|
+| 4 GiB | 16 | 35.7 ms |
+| 256 MiB | 16 | 35.8 ms |
+| 64 MiB | 32 | 37.2 ms |
+| 16 MiB | 128 | 47.1 ms |
+
+More bands cost, they do not pay. And a budget sixteen times larger than the one that already
+fits buys nothing, which is the property that lets the scheduler size to the budget rather than
+to the machine.
+
+**The wave rounding is doing its job.** Blocks are taken in waves of `cores`, so a count just over
+a multiple wastes most of a wave; `BlockPlan::compute` rounds the total up to whole waves to
+prevent it. Every plan in the profile — 32, 32, 32 and 112 blocks on 16 cores — is an exact
+multiple. There is no partial wave anywhere to reclaim.
+
+**Occupancy is 90-93%.** Summing the per-stage thread time against `cores x wall` for the stacking
+phase of each pipeline: master bias 90%, master flat 91%, master light 93%. The remaining 7-10%
+is the wave barrier and the variance in block read times, and closing it means letting blocks
+from different waves run concurrently — which means a band buffer per block rather than per
+worker, which is the memory the scheduler exists to bound. That is a worse trade, not a missed
+one.
+
+#### P12-T4 amendment: `--engine native` does not become the default
+
+On speed and on measured quality the native engine wins outright — every pipeline is faster, the
+master light is 1.50x faster than Siril's and simultaneously 2.3% quieter and 0.2% sharper, and it
+needs no Siril install at all. That is not sufficient, for two reasons that have nothing to do
+with either number.
+
+**It would silently change every OSC user's demosaic.** RCD cannot be implemented clean-room
+(Phase 6) and the native path substitutes Malvar-He-Cutler, which is the more accurate
+reconstruction against known truth and *measurably noisier in the background* — 1.23x to 1.45x
+RCD's, per channel. Both effects are real. A user who has been stacking colour data and suddenly
+finds the background noisier has had a decision made for them by a default change, and would have
+no reason to suspect it.
+
+**It would turn working commands into errors.** Background extraction and mosaic projects — grid
+and spiral — are Siril-only and refuse up front. That refusal is correct behaviour for a user who
+asked for the native engine and wrong for a user who asked for nothing.
+
+The default therefore stays Siril, and `--engine native` stays opt-in and documented. What would
+change this decision, in order:
+
+1. **Phase 6b closes the RCD gap**, or an equivalent edge-directed demosaic lands with measured
+   background noise at parity. This is the blocker; the rest is smaller.
+2. Background extraction and the mosaic pipelines gain native implementations, or the engine
+   selection becomes per-pipeline so a native default falls back for the ones it cannot do —
+   which is a change to D5's "report rather than silently skip" rule and needs its own argument.
+3. A release's worth of `--engine native` use on real projects without a correctness report.
+
+Until then the honest recommendation, and what the ROADMAP now says, is that the native engine is
+the better path for mono stacking today and should be chosen deliberately.
 
 ---
 
