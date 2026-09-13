@@ -131,3 +131,32 @@ frame demosaics in 0.07 s.
 Neither is RCD, which Siril uses: RCD has no published specification independent of its GPL
 implementation, so it cannot be written clean-room. ADR 007 Phase 6b tables AHD as the way to
 close the remaining gap.
+
+### Star detection (ADR 007 Phase 7)
+
+Candidates are local maxima above `median + 5·sigma·bgnoise`; each is fitted with an elliptical
+Gaussian (default) or a Moffat profile by Levenberg-Marquardt with an analytic Jacobian, then
+filtered on amplitude, width, roundness and residual.
+
+On synthetic fields with analytically placed stars, centroids come back within **0.02 px** and
+FWHM within **1%** of truth. Against Siril 1.4.4's `findstar` on three real 61 MP lights, at the
+same radius, sigma and roundness:
+
+| Frame | Siril stars | Matched within 0.2 px | Centroid RMS | FWHM bias |
+|---|---|---|---|---|
+| `…_0035` | 5,114 | 96.5% | 0.0371 px | −1.09% |
+| `…_0125` | 6,294 | 98.7% | 0.0120 px | −0.15% |
+| `…_0375` | 10,110 | 98.0% | 0.0129 px | −0.11% |
+
+The claim is one-directional: every star Siril found is a star this crate found, in the same
+place. The two do not agree on how many stars a frame *has* — uncapped, this crate keeps 25k–63k
+where Siril keeps 5k–10k, a threshold difference at the faint end.
+
+```
+cargo xtask siril-reference --stars              # generate the reference star lists
+cargo test --release -p px-imageproc --test starfind_parity -- --nocapture
+```
+
+A 61 MP light yields 123k candidates, so the fitter works through them brightest-first and stops
+once `max_stars` is met: **1.13 s** for the default 2,000 stars, against 4.40 s to fit every
+candidate. 2,000 stars on a 2048×2048 frame take 43 ms end to end, 36 ms of that detection.

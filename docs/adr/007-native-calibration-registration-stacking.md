@@ -222,7 +222,7 @@ crates/px-imageproc/
       sum.rs
     register/
       mod.rs                  # orchestration: detect -> match -> estimate -> apply
-      starfind.rs             # candidate detection (port of peaker)
+      starfind.rs             # candidate detection, the whole star-finding pass
       psf.rs                  # Gaussian/Moffat Levenberg-Marquardt fit
       match.rs                # triangle similarity matching + vote matrix
       transform.rs            # Transform enum, DLT, RANSAC
@@ -947,24 +947,84 @@ speculative work, which is why it is deferred rather than scheduled.
 
 ### Phase 7 — Star detection and PSF fitting
 
-- [ ] **P7-T1** `register/starfind.rs`: candidate detection — threshold at
+- [x] **P7-T1** `register/starfind.rs`: candidate detection — threshold at
       `median + 5·sigma·bgnoise`, local-maximum scan in a `radius`-box, duplicate suppression by
-      the `MAX_RADIUS_RATIO_DUP` rule, magnitude-ordered candidate list. Port of `peaker`.
-- [ ] **P7-T2** `register/psf.rs`: elliptical Gaussian fit with rotation (7 parameters) by
-      Levenberg-Marquardt on `nalgebra`, with Siril's initial guesses, parameter bounds, and
-      `MAX_ITER_ANGLE` iteration cap. Analytic Jacobian, matching `psf_Gaussian_df_ang`.
-- [ ] **P7-T3** Moffat profile (8 parameters, `min_beta = 1.5`), selectable, defaulting off as in
-      Siril.
-- [ ] **P7-T4** Star rejection rules: amplitude bounds, roundness floor, `max_r`, RMSE, and the
-      `relax_checks` variant. Port of `reject_star`.
-- [ ] **P7-T5** `FWHM_stats` and `filter_stars_by_amplitude`, needed by two-pass reference
-      selection.
-- [ ] **P7-T6** Tests: on synthetic frames with analytically placed stars, recovered centroids
-      within 0.02 px and FWHM within 1% of truth. Against Siril's `findstar` on real frames:
-      ≥ 95% matched within 0.2 px, centroid RMS ≤ 0.05 px.
-- [ ] **P7-T7** `benches/register.rs` part 1: detection + fitting throughput at 2000 stars.
+      the `MAX_RADIUS_RATIO_DUP` rule, magnitude-ordered candidate list. Implemented from
+      Stetson's DAOPHOT description (PASP 99, 1987, §II) rather than from `peaker`: the
+      threshold test runs first and the box scan only on the pixels that pass it, which is what
+      keeps detection linear in practice (0.1% of pixels reach the box scan on a real light).
+- [x] **P7-T2** `register/psf.rs`: elliptical Gaussian fit with rotation (7 parameters) by
+      Levenberg-Marquardt on `nalgebra`, with moment-based initial guesses (Bertin & Arnouts
+      1996, §4), parameter bounds, and the `MAX_ITER_ANGLE` iteration cap. Analytic Jacobian,
+      checked against finite differences in a unit test — a wrong derivative only slows
+      convergence, so it will not fail loudly on its own.
+- [x] **P7-T3** Moffat profile (8 parameters, `min_beta = 1.5`), selectable through
+      `StarfindOptions`, defaulting off.
+- [x] **P7-T4** Star rejection rules: amplitude bounds, roundness floor and ceiling, width,
+      RMSE, Moffat beta at its floor, and the `relax_checks` variant, which drops the two shape
+      tests and keeps the ones distinguishing a measurement from a non-measurement. Per-reason
+      counts are returned, because "twelve stars registered" needs a diagnosis.
+- [x] **P7-T5** `fwhm_stats` and `filter_stars_by_amplitude`, with `amplitude_threshold_for`
+      for the two-pass re-filter.
+- [x] **P7-T6** Tests: on synthetic frames with analytically placed stars, recovered centroids
+      within 0.02 px and FWHM within 1% of truth. Against Siril's `findstar` on real frames, the
+      measured numbers are below.
+- [x] **P7-T7** `benches/register.rs` part 1: detection + fitting throughput at 2000 stars.
 
-**Gate:** the detection parity numbers above, on at least three real frames from the large corpus.
+**Gate: met.** Against Siril 1.4.4 `findstar` at the same radius, sigma and roundness, on three
+real 61 MP lights from the large corpus:
+
+| Frame | Siril stars | Matched within 0.2 px | Centroid RMS | FWHM bias |
+|---|---|---|---|---|
+| `…_0035` | 5,114 | **96.5%** | **0.0371 px** | −1.09% |
+| `…_0125` | 6,294 | **98.7%** | **0.0120 px** | −0.15% |
+| `…_0375` | 10,110 | **98.0%** | **0.0129 px** | −0.11% |
+
+against gates of ≥ 95% and ≤ 0.05 px. The parity claim is deliberately one-directional — every
+star Siril found is a star this crate found, at the same position — because the two do not agree
+on how many stars a frame *has*: uncapped, the native pass keeps 25k–63k where Siril keeps 5k–10k.
+That is a threshold and rejection difference at the faint end, not a disagreement about any
+particular star.
+
+#### Two things the corpus corrected
+
+**Siril's default radius is 5, not 10.** The reference lists are generated with it set
+explicitly, so a future version changing its default cannot silently move the comparison.
+
+**A width bound on the profile scale is wrong for Moffat.** A Moffat alpha means a different
+width at every beta — at β = 10 it is twice the Gaussian sigma of the same star — so rejecting
+`sx >= radius` threw out every wide-beta fit: all sixteen stars of a synthetic field. Both width
+bounds are now in FWHM, the one width the two profiles agree on.
+
+#### Coordinate conventions differ, and it matters at the level these tests measure
+
+Siril reports star positions from the bottom-left *corner* of the first pixel; this crate puts
+integer coordinates at pixel *centres* and measures y downward from the top, which is the order
+samples arrive in from `px-fits`. The conversion is `ours.x = siril.x − 0.5`,
+`ours.y = height − siril.y − 0.5`. Without the half-pixel term every match sits at ~0.5 px and
+the centroid RMS gate fails by 10×, which is a good illustration of why the gate is stated in
+hundredths of a pixel.
+
+#### The star cap is a throughput decision, not just a bound
+
+A 61 MP light yields 123k candidates against a default cap of 2,000 stars, and fitting costs two
+orders of magnitude more per candidate than detecting. The fitter therefore works through
+candidates in brightest-first batches and stops once the cap is met: 8k candidates fitted instead
+of 123k, **1.13 s instead of 4.40 s** for the same 2,000 brightest stars. Batching is over the
+deterministic detection order, so which stars survive does not depend on where a batch boundary
+fell.
+
+Throughput on a 2048×2048 field carrying 2,000 fittable stars, 16 cores:
+
+| Workload | Time |
+|---|---|
+| detection alone | 35.6 ms |
+| full pass, Gaussian | 42.8 ms |
+| full pass, Moffat | 151.4 ms |
+| 1 / 2 / 4 / 8 / 16 cores | 135 / 87 / 60 / 47 / 43 ms |
+
+Detection is memory-bound and dominates, which is why the core scaling flattens: the Gaussian
+fitting of 2,000 stars is only ~7 ms of the 43 ms.
 
 ### Phase 8 — Star matching and transform estimation
 
