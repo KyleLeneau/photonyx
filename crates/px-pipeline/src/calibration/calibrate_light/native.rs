@@ -7,6 +7,7 @@ use px_fits::{all_color_raw_frames, all_fits_files};
 use px_imageproc::bayer::BayerPattern;
 use px_imageproc::calibrate::{self, CalibrationOptions, CalibrationReport, Masters};
 use px_imageproc::debayer::debayer_frame_with;
+use px_imageproc::profile;
 use px_imageproc::{Frame, bayer};
 
 use super::CalibrateLightSetPipeline;
@@ -231,7 +232,10 @@ fn calibrate_one(
     out_folder: &Path,
     extension: &str,
 ) -> Result<CalibrationReport, PipelineError> {
-    let mut frame = Frame::open(path)?;
+    let mut frame = {
+        let _span = profile::scope("calibrate.read");
+        Frame::open(path)?
+    };
 
     let masters = Masters {
         bias: bias.as_ref(),
@@ -239,9 +243,13 @@ fn calibrate_one(
         flat: flat.as_ref(),
         ..Default::default()
     };
-    let report = calibrate::calibrate(&mut frame, &masters, options)?;
+    let report = {
+        let _span = profile::scope("calibrate.apply");
+        calibrate::calibrate(&mut frame, &masters, options)?
+    };
 
     if is_cfa && options.pattern != BayerPattern::None {
+        let _span = profile::scope("calibrate.debayer");
         debayer_frame_with(&mut frame, engine.debayer(), options.pattern)?;
     }
 
@@ -253,6 +261,7 @@ fn calibrate_one(
         .unwrap_or_else(|| "frame".to_string());
     let out = out_folder.join(format!("pp_{stem}.{extension}"));
 
+    let _span = profile::scope("calibrate.write");
     frame.write(
         &out,
         &[(

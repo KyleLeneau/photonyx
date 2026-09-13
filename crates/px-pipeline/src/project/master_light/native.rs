@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 
 use px_fits::all_fits_files;
 use px_fits::card::Value;
+use px_imageproc::profile;
 use px_imageproc::register::framing::Framing;
 use px_imageproc::register::twopass::{Registration, RegistrationOptions, register_sequence};
 use px_imageproc::register::warp::{WarpOptions, warp};
@@ -478,6 +479,7 @@ fn warp_to_disk(
     dir: &Path,
 ) -> Result<(Vec<PathBuf>, Vec<Vec<ChannelLevel>>), PipelineError> {
     warp_all(engine, runtime, job, included, |position, frame| {
+        let _span = profile::scope("master_light.warp.write");
         let path = dir.join(format!("r_{position:05}.fits"));
         frame.write(&path, &[])?;
         // Flushed as it is written rather than left to the kernel's own
@@ -493,13 +495,17 @@ fn warp_to_disk(
 
 /// The robust level and spread of every channel of one warped frame.
 fn measure_levels(frame: &Frame) -> Vec<ChannelLevel> {
+    let _span = profile::scope("master_light.levels");
     (0..frame.channels())
         .map(|channel| ChannelLevel::measure_subsampled(frame.channel(channel), LEVEL_STRIDE))
         .collect()
 }
 
 fn warp_one(runtime: &Runtime, job: &StackJob, index: usize) -> Result<Frame, PipelineError> {
-    let source = Frame::open(&job.frames[index])?;
+    let source = {
+        let _span = profile::scope("master_light.warp.read");
+        Frame::open(&job.frames[index])?
+    };
     let transform = job.registration.output_transform(index).ok_or_else(|| {
         PipelineError::FileNotFound(format!("frame {index} has no registration transform"))
     })?;

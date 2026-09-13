@@ -4,6 +4,7 @@ mod logging;
 mod printer;
 mod reporters;
 mod resolve;
+mod timing;
 mod utils;
 
 use anyhow::Result;
@@ -52,6 +53,10 @@ fn siril_install_instructions() -> String {
 ///
 pub async fn run(cli: Cli) -> Result<ExitStatus> {
     init_logging(&cli);
+
+    // Dropped last, so the stage table lands after whatever the command
+    // printed, including on the error paths below.
+    let _timing = timing::start();
 
     // TODO: Use cli.top_level.global_args to load the global px config file
 

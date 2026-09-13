@@ -19,6 +19,7 @@ pub mod downscale;
 pub mod error;
 pub mod frame;
 pub mod preview;
+pub mod profile;
 pub mod register;
 pub mod runtime;
 pub mod sequence;

@@ -362,7 +362,10 @@ pub fn find_stars_reported(
     layer: usize,
 ) -> (Vec<PsfStar>, StarfindReport) {
     let options = options.normalized();
-    let candidates = detect_candidates(channel, width, height, &options);
+    let candidates = {
+        let _span = crate::profile::scope("starfind.detect");
+        detect_candidates(channel, width, height, &options)
+    };
 
     let mut report = StarfindReport {
         candidates: candidates.len(),
@@ -383,37 +386,40 @@ pub fn find_stars_reported(
         .clamp(MIN_FIT_CHUNK, MAX_FIT_CHUNK);
 
     let mut stars: Vec<PsfStar> = Vec::new();
-    for batch in candidates.chunks(chunk) {
-        // Every candidate in a batch is independent, which is where the
-        // parallelism belongs. Outcomes are collected rather than filtered in
-        // place so the rejection counts survive and the order stays the one
-        // detection produced — that is what makes the pass reproducible.
-        let outcomes: Vec<Result<PsfStar, Option<Rejected>>> = batch
-            .par_iter()
-            .map(|candidate| {
-                let Some(mut star) =
-                    psf::fit_candidate(channel, width, height, candidate, &options)
-                else {
-                    return Err(None);
-                };
-                star.layer = layer;
-                match psf::accept(&star, candidate, &options) {
-                    Ok(()) => Ok(star),
-                    Err(reason) => Err(Some(reason)),
-                }
-            })
-            .collect();
+    {
+        let _span = crate::profile::scope("starfind.fit");
+        for batch in candidates.chunks(chunk) {
+            // Every candidate in a batch is independent, which is where the
+            // parallelism belongs. Outcomes are collected rather than filtered in
+            // place so the rejection counts survive and the order stays the one
+            // detection produced — that is what makes the pass reproducible.
+            let outcomes: Vec<Result<PsfStar, Option<Rejected>>> = batch
+                .par_iter()
+                .map(|candidate| {
+                    let Some(mut star) =
+                        psf::fit_candidate(channel, width, height, candidate, &options)
+                    else {
+                        return Err(None);
+                    };
+                    star.layer = layer;
+                    match psf::accept(&star, candidate, &options) {
+                        Ok(()) => Ok(star),
+                        Err(reason) => Err(Some(reason)),
+                    }
+                })
+                .collect();
 
-        report.considered += batch.len();
-        for outcome in outcomes {
-            match outcome {
-                Ok(star) => stars.push(star),
-                Err(None) => report.failed_to_converge += 1,
-                Err(Some(reason)) => report.count(reason),
+            report.considered += batch.len();
+            for outcome in outcomes {
+                match outcome {
+                    Ok(star) => stars.push(star),
+                    Err(None) => report.failed_to_converge += 1,
+                    Err(Some(reason)) => report.count(reason),
+                }
             }
-        }
-        if stars.len() >= options.max_stars {
-            break;
+            if stars.len() >= options.max_stars {
+                break;
+            }
         }
     }
     report.fitted = stars.len();

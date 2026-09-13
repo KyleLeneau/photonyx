@@ -319,6 +319,7 @@ pub fn stack_normalized<S: BlockSource>(
     // inner loop.
     let normalization = normalization.filter(|n| !n.is_identity());
 
+    let _span = crate::profile::scope("stack.total");
     let plan = runtime.plan_blocks(
         &dims,
         frames,
@@ -403,6 +404,7 @@ pub fn stack_normalized<S: BlockSource>(
     debug_assert_eq!(consumed, dims.pixel_count());
 
     if options.output_norm {
+        let _span = crate::profile::scope("stack.output_norm");
         normalize_to_unit_range(&mut output);
     }
 
@@ -482,6 +484,7 @@ impl Worker {
         // frame.
         let correction = subtract.map(|m| m.rows(block.channel, block.start_row, block.height()));
 
+        let read = crate::profile::scope("stack.read");
         for frame in 0..frames {
             let slot = &mut self.band[frame * pixels..(frame + 1) * pixels];
             set.read_block_into(frame, block, slot)?;
@@ -502,7 +505,9 @@ impl Worker {
                 }
             }
         }
+        drop(read);
 
+        let _reduce = crate::profile::scope("stack.reduce");
         let mut tally = Rejected::default();
         for (p, slot) in out.iter_mut().enumerate().take(pixels) {
             for frame in 0..frames {

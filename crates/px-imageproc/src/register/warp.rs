@@ -112,17 +112,22 @@ pub fn warp(
         ImageProcError::Registration("cannot warp under a singular transform".into())
     })?;
 
+    let _span = crate::profile::scope("warp.total");
     let mut data = vec![0.0f32; dims.pixel_count()];
-    warp_into(
-        source,
-        &inverse,
-        dims,
-        runtime,
-        options.interpolation,
-        &mut data,
-    );
+    {
+        let _span = crate::profile::scope("warp.resample");
+        warp_into(
+            source,
+            &inverse,
+            dims,
+            runtime,
+            options.interpolation,
+            &mut data,
+        );
+    }
 
     if options.clamp && options.interpolation.has_negative_lobes() {
+        let _span = crate::profile::scope("warp.clamp");
         // The guide is the same warp with a kernel that cannot undershoot.
         let mut guide = vec![0.0f32; dims.pixel_count()];
         warp_into(

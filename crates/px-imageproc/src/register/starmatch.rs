@@ -283,6 +283,7 @@ pub fn match_stars(
     to: &[PsfStar],
     options: &MatchOptions,
 ) -> Result<Vec<Correspondence>, ImageProcError> {
+    let _span = crate::profile::scope("starmatch.match");
     let target = brightest(from, options.max_stars);
     let reference = brightest(to, options.max_stars);
     if target.len() < 3 || reference.len() < 3 {
@@ -339,8 +340,12 @@ pub fn register_pair(
     match_options: &MatchOptions,
     ransac_options: &RansacOptions,
 ) -> Result<Fit, ImageProcError> {
+    let _span = crate::profile::scope("starmatch.register_pair");
     let seed_pairs = match_stars(from, to, match_options)?;
-    let seed = super::transform::refine(kind, &seed_pairs, ransac_options)?;
+    let seed = {
+        let _span = crate::profile::scope("starmatch.ransac");
+        super::transform::refine(kind, &seed_pairs, ransac_options)?
+    };
 
     let expanded = pair_by_proximity(from, to, &seed.transform, EXPAND_TOLERANCE);
     if expanded.len() <= seed_pairs.len() {
