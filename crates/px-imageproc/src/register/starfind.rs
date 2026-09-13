@@ -18,7 +18,7 @@
 
 use rayon::prelude::*;
 
-use super::psf::Profile;
+use super::psf::{self, Profile, PsfStar, Rejected};
 use crate::stats;
 
 /// Multiplier on `sigma · bgnoise` that sets the detection threshold above the
@@ -285,6 +285,112 @@ pub fn suppress_duplicates<T>(
     kept
 }
 
+/// What a star-finding pass did, beyond the stars it kept.
+///
+/// The rejection counts are the diagnostic a thin star list needs: they say
+/// whether the threshold was too high (few candidates), the seeing too poor
+/// (roundness), or the frame not star-shaped at all (residual).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct StarfindReport {
+    pub candidates: usize,
+    pub fitted: usize,
+    pub kept: usize,
+    pub duplicates: usize,
+    pub truncated: usize,
+    pub rejected_amplitude: usize,
+    pub rejected_off_centre: usize,
+    pub rejected_width: usize,
+    pub rejected_roundness: usize,
+    pub rejected_residual: usize,
+    pub rejected_beta: usize,
+    pub failed_to_converge: usize,
+}
+
+impl StarfindReport {
+    fn count(&mut self, reason: Rejected) {
+        let slot = match reason {
+            Rejected::Amplitude => &mut self.rejected_amplitude,
+            Rejected::OffCentre => &mut self.rejected_off_centre,
+            Rejected::Width => &mut self.rejected_width,
+            Rejected::Roundness => &mut self.rejected_roundness,
+            Rejected::Residual => &mut self.rejected_residual,
+            Rejected::Beta => &mut self.rejected_beta,
+        };
+        *slot += 1;
+    }
+}
+
+/// Detects, fits, and filters the stars of one channel, row-major.
+///
+/// The result is brightest-first and no longer than `options.max_stars`.
+pub fn find_stars(
+    channel: &[f32],
+    width: usize,
+    height: usize,
+    options: &StarfindOptions,
+) -> Vec<PsfStar> {
+    find_stars_reported(channel, width, height, options, 0).0
+}
+
+/// [`find_stars`] with the pass's bookkeeping, and the channel index to stamp
+/// on each star.
+pub fn find_stars_reported(
+    channel: &[f32],
+    width: usize,
+    height: usize,
+    options: &StarfindOptions,
+    layer: usize,
+) -> (Vec<PsfStar>, StarfindReport) {
+    let options = options.normalized();
+    let candidates = detect_candidates(channel, width, height, &options);
+
+    let mut report = StarfindReport {
+        candidates: candidates.len(),
+        ..Default::default()
+    };
+
+    // Fitting is the expensive half and every candidate is independent, so
+    // this is where the parallelism belongs. The outcome per candidate is
+    // collected rather than filtered in place, so the rejection counts survive
+    // and the order stays the brightest-first order detection produced —
+    // which is what makes the whole pass reproducible.
+    let outcomes: Vec<Result<PsfStar, Option<Rejected>>> = candidates
+        .par_iter()
+        .map(|candidate| {
+            let Some(mut star) = psf::fit_candidate(channel, width, height, candidate, &options)
+            else {
+                return Err(None);
+            };
+            star.layer = layer;
+            match psf::accept(&star, candidate, &options) {
+                Ok(()) => Ok(star),
+                Err(reason) => Err(Some(reason)),
+            }
+        })
+        .collect();
+
+    let mut stars = Vec::with_capacity(outcomes.len());
+    for outcome in outcomes {
+        match outcome {
+            Ok(star) => stars.push(star),
+            Err(None) => report.failed_to_converge += 1,
+            Err(Some(reason)) => report.count(reason),
+        }
+    }
+    report.fitted = stars.len();
+
+    let before = stars.len();
+    let mut stars = suppress_duplicates(stars, options.radius, |s| (s.x0, s.y0));
+    report.duplicates = before - stars.len();
+
+    if stars.len() > options.max_stars {
+        report.truncated = stars.len() - options.max_stars;
+        stars.truncate(options.max_stars);
+    }
+    report.kept = stars.len();
+    (stars, report)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,6 +419,146 @@ mod tests {
             }
         }
         data
+    }
+
+    /// The same renderer the PSF tests use, kept separate because these tests
+    /// need many stars rather than one precise one.
+    fn frame_with_gaussians(
+        width: usize,
+        height: usize,
+        stars: &[(f64, f64, f64, f64, f64)],
+    ) -> Vec<f32> {
+        let mut data: Vec<f32> = (0..width * height)
+            .map(|i| 0.01 + 0.0005 * ((i as f32 * 12.9898).sin()))
+            .collect();
+        for &(x0, y0, amplitude, sx, sy) in stars {
+            for y in 0..height {
+                for x in 0..width {
+                    let (dx, dy) = (x as f64 - x0, y as f64 - y0);
+                    let q = 0.5 * (dx * dx / (sx * sx) + dy * dy / (sy * sy));
+                    if q < 30.0 {
+                        data[y * width + x] += (amplitude * (-q).exp()) as f32;
+                    }
+                }
+            }
+        }
+        data
+    }
+
+    #[test]
+    fn keeps_round_stars_and_reports_the_pass() {
+        let truth = [
+            (30.3, 40.6, 0.30, 2.0, 2.0),
+            (70.1, 20.9, 0.60, 2.0, 2.0),
+            (50.5, 75.2, 0.45, 2.0, 2.0),
+        ];
+        let data = frame_with_gaussians(100, 100, &truth);
+
+        let (stars, report) = find_stars_reported(&data, 100, 100, &StarfindOptions::default(), 0);
+
+        assert_eq!(report.candidates, 3, "{report:?}");
+        assert_eq!(stars.len(), 3, "{report:?}");
+        assert_eq!(report.kept, 3);
+        // Brightest first survives the fit and filter.
+        assert!((stars[0].x0 - 70.1).abs() < 0.02, "{:?}", stars[0]);
+        for star in &stars {
+            assert!(star.roundness > 0.95, "{star:?}");
+        }
+    }
+
+    #[test]
+    fn a_trailed_star_is_rejected_unless_checks_are_relaxed() {
+        // 4:1 elongation, well below the 0.5 roundness floor.
+        let data = frame_with_gaussians(100, 100, &[(50.0, 50.0, 0.5, 4.0, 1.0)]);
+
+        let strict = StarfindOptions::default();
+        let (stars, report) = find_stars_reported(&data, 100, 100, &strict, 0);
+        assert!(stars.is_empty(), "{stars:?}");
+        assert_eq!(report.rejected_roundness, 1, "{report:?}");
+
+        let relaxed = StarfindOptions {
+            relax_checks: true,
+            ..strict
+        };
+        let (stars, _) = find_stars_reported(&data, 100, 100, &relaxed, 0);
+        assert_eq!(stars.len(), 1);
+        assert!((stars[0].x0 - 50.0).abs() < 0.05, "{:?}", stars[0]);
+    }
+
+    #[test]
+    fn a_hot_pixel_is_rejected_as_too_narrow() {
+        let mut data = frame_with_gaussians(100, 100, &[]);
+        data[50 * 100 + 50] = 0.9;
+
+        let (stars, report) = find_stars_reported(&data, 100, 100, &StarfindOptions::default(), 0);
+        assert!(stars.is_empty(), "{stars:?}");
+        assert_eq!(report.candidates, 1);
+        assert_eq!(
+            report.rejected_width + report.rejected_residual,
+            1,
+            "{report:?}"
+        );
+    }
+
+    #[test]
+    fn amplitude_bounds_filter_the_star_list() {
+        let data = frame_with_gaussians(
+            100,
+            100,
+            &[(30.0, 30.0, 0.1, 2.0, 2.0), (70.0, 70.0, 0.8, 2.0, 2.0)],
+        );
+
+        let options = StarfindOptions {
+            min_amplitude: 0.3,
+            ..Default::default()
+        };
+        let (stars, report) = find_stars_reported(&data, 100, 100, &options, 0);
+        assert_eq!(stars.len(), 1, "{report:?}");
+        assert!(stars[0].amplitude > 0.3);
+
+        let options = StarfindOptions {
+            max_amplitude: 0.3,
+            ..Default::default()
+        };
+        let (stars, _) = find_stars_reported(&data, 100, 100, &options, 0);
+        assert_eq!(stars.len(), 1);
+        assert!(stars[0].amplitude < 0.3);
+    }
+
+    #[test]
+    fn the_star_list_is_capped_at_max_stars() {
+        let truth: Vec<(f64, f64, f64, f64, f64)> = (0..25)
+            .map(|i| {
+                let (gx, gy) = (i % 5, i / 5);
+                (
+                    20.0 + 15.0 * gx as f64,
+                    20.0 + 15.0 * gy as f64,
+                    0.2 + 0.02 * i as f64,
+                    2.0,
+                    2.0,
+                )
+            })
+            .collect();
+        let data = frame_with_gaussians(120, 120, &truth);
+
+        let options = StarfindOptions {
+            max_stars: 10,
+            ..Default::default()
+        };
+        let (stars, report) = find_stars_reported(&data, 120, 120, &options, 0);
+        assert_eq!(stars.len(), 10, "{report:?}");
+        assert!(report.truncated > 0, "{report:?}");
+        // The cap keeps the brightest ten, whose true amplitudes run from
+        // 0.5 up; the eleventh would be 0.48.
+        assert!(stars.iter().all(|s| s.amplitude > 0.49), "{stars:?}");
+    }
+
+    #[test]
+    fn the_layer_index_is_stamped_on_each_star() {
+        let data = frame_with_gaussians(100, 100, &[(50.0, 50.0, 0.5, 2.0, 2.0)]);
+        let (stars, _) = find_stars_reported(&data, 100, 100, &StarfindOptions::default(), 2);
+        assert_eq!(stars.len(), 1);
+        assert_eq!(stars[0].layer, 2);
     }
 
     #[test]

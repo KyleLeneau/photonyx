@@ -533,6 +533,98 @@ fn rmse(chi2: f64, samples: usize) -> f64 {
     (chi2 / samples as f64).sqrt()
 }
 
+/// Why a fitted candidate was not accepted as a star.
+///
+/// Carried rather than collapsed into a boolean because the counts are how a
+/// user diagnoses a frame that registered on twelve stars: a run dominated by
+/// `Roundness` means trailing, one dominated by `Residual` means the detection
+/// threshold is down in the noise.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rejected {
+    /// Amplitude outside the configured bounds, or not positive.
+    Amplitude,
+    /// The fitted centre left the box, so the fit is no longer describing the
+    /// candidate that produced it.
+    OffCentre,
+    /// A profile scale pinned against its bound: narrower than a pixel, or
+    /// wider than the box that constrains it.
+    Width,
+    /// Too elongated, or — with an upper bound configured — too round.
+    Roundness,
+    /// The residual is too large a fraction of the amplitude for the structure
+    /// to be a star.
+    Residual,
+    /// A Moffat exponent at its floor, where amplitude and beta trade off
+    /// freely and neither is measured.
+    Beta,
+}
+
+/// Largest residual a star may leave, as a fraction of its fitted amplitude.
+///
+/// A real star's residual is the noise, which on a detectable star is a few
+/// percent of its peak at worst. A galaxy, a cosmic ray track, or two blended
+/// stars leave a residual that is structured rather than random and a much
+/// larger fraction of the amplitude. The bound is deliberately loose: rejecting
+/// a marginal star costs one correspondence, while admitting a non-star biases
+/// a transform.
+const MAX_RELATIVE_RMSE: f64 = 0.25;
+
+/// Margin, in pixels, by which a fitted centre must stay inside its box.
+///
+/// The solver clamps the centre at the box edge, so a fit that wanted to go
+/// further sits exactly on the bound. Testing against a slightly smaller box
+/// catches that without depending on the clamp's exact behaviour.
+const CENTRE_MARGIN: f64 = 0.5;
+
+/// Whether a fitted star passes the detection criteria.
+///
+/// `relax_checks` drops the two shape tests — roundness and residual — and
+/// keeps the ones that distinguish a measurement from a non-measurement. That
+/// is the point of the relaxed mode: a comet or a badly trailed sub is not
+/// star-shaped, but its centroid is still a usable fiducial.
+pub fn accept(
+    star: &PsfStar,
+    candidate: &Candidate,
+    options: &StarfindOptions,
+) -> Result<(), Rejected> {
+    let radius = options.radius as f64;
+
+    if !star.amplitude.is_finite() || star.amplitude <= f64::from(options.min_amplitude) {
+        return Err(Rejected::Amplitude);
+    }
+    if options.max_amplitude > 0.0 && star.amplitude >= f64::from(options.max_amplitude) {
+        return Err(Rejected::Amplitude);
+    }
+
+    let bound = radius - CENTRE_MARGIN;
+    if (star.x0 - candidate.x as f64).abs() > bound || (star.y0 - candidate.y as f64).abs() > bound
+    {
+        return Err(Rejected::OffCentre);
+    }
+
+    if !(star.sx.is_finite() && star.sy.is_finite()) || star.sy <= MIN_SCALE || star.sx >= radius {
+        return Err(Rejected::Width);
+    }
+
+    if let Some(beta) = star.beta
+        && beta <= options.min_beta
+    {
+        return Err(Rejected::Beta);
+    }
+
+    if options.relax_checks {
+        return Ok(());
+    }
+
+    if star.roundness < options.roundness || star.roundness > options.max_roundness {
+        return Err(Rejected::Roundness);
+    }
+    if !star.rmse.is_finite() || star.rmse > MAX_RELATIVE_RMSE * star.amplitude {
+        return Err(Rejected::Residual);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

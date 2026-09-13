@@ -32,7 +32,10 @@ pub use debayer::{Method as DebayerMethod, debayer_frame, debayer_frame_with};
 pub use error::ImageProcError;
 pub use frame::{Frame, ValueScale};
 pub use preview::{MAX_DISPLAY_DIM, PreviewImage, decode_preview};
-pub use register::{Background, Candidate, StarfindOptions, detect_candidates};
+pub use register::{
+    Background, Candidate, Profile, PsfStar, StarfindOptions, StarfindReport, detect_candidates,
+    find_stars,
+};
 pub use runtime::{Block, BlockPlan, ImageDims, MemoryLimit, ResourceBudget, Runtime};
 pub use sequence::{FrameInfo, FrameSet};
 pub use stack::{Method, Rejection, StackOptions, StackResult, stack, stack_calibrated};

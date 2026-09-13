@@ -10,5 +10,8 @@
 pub mod psf;
 pub mod starfind;
 
-pub use psf::{Profile, PsfStar};
-pub use starfind::{Background, Candidate, StarfindOptions, detect_candidates};
+pub use psf::{Profile, PsfStar, Rejected};
+pub use starfind::{
+    Background, Candidate, StarfindOptions, StarfindReport, detect_candidates, find_stars,
+    find_stars_reported,
+};
