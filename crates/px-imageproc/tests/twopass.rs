@@ -343,3 +343,81 @@ fn a_tight_budget_changes_concurrency_but_not_the_result() {
         assert_eq!(a.transform, b.transform, "frame {}", a.index);
     }
 }
+
+#[test]
+fn registration_data_round_trips_through_a_sidecar_table() {
+    use px_imageproc::register::persist::{read_registration, write_registration};
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let stars = sky(120, 0x9001);
+    let mut paths = dithered_sequence(dir.path());
+    // Include an excluded frame, so the reason and the "no transform" state are
+    // part of what round-trips.
+    paths.push(write_frame(
+        dir.path(),
+        "clouded",
+        &stars,
+        &Transform::identity(),
+        3.0,
+        0.0,
+    ));
+    let set = FrameSet::open(&paths).expect("open set");
+
+    let options = RegistrationOptions {
+        framing: Framing::Minimum,
+        ..Default::default()
+    };
+    let written = register_sequence(&set, &runtime(), &options).expect("register");
+    assert!(
+        written.frames.iter().any(|f| !f.included()),
+        "need an excluded frame"
+    );
+
+    let sidecar = dir.path().join("registration.fits");
+    write_registration(&sidecar, &written).expect("write sidecar");
+    let read = read_registration(&sidecar).expect("read sidecar");
+
+    assert_eq!(read.reference, written.reference);
+    assert_eq!(read.trials, written.trials);
+    assert_eq!(read.geometry.dims, written.geometry.dims);
+    assert_eq!(
+        (read.geometry.x, read.geometry.y),
+        (written.geometry.x, written.geometry.y)
+    );
+    assert_eq!(read.starfind, written.starfind);
+    assert_eq!(read.frames.len(), written.frames.len());
+
+    for (after, before) in read.frames.iter().zip(written.frames.iter()) {
+        assert_eq!(after.index, before.index);
+        assert_eq!(after.path, before.path);
+        assert_eq!(after.excluded, before.excluded);
+        assert_eq!(after.included(), before.included());
+        assert_eq!(after.stars, before.stars);
+        assert_eq!(after.inliers, before.inliers);
+        // FWHM, roundness and RMSE are stored as `E` (f32), so they come back
+        // to f32 precision. The transform is stored as `D` and must be exact:
+        // a matrix rounded to f32 moves a 9576 px corner by ~0.001 px, which is
+        // a tenth of the Phase 8 parity gate.
+        assert!((after.fwhm - before.fwhm).abs() < 1e-5, "{after:?}");
+        assert!((after.roundness - before.roundness).abs() < 1e-6);
+        assert!((after.rmse - before.rmse).abs() < 1e-6);
+        assert_eq!(after.transform, before.transform, "frame {}", after.index);
+    }
+}
+
+#[test]
+fn a_sidecar_without_registration_cards_is_a_typed_error() {
+    use px_imageproc::register::persist::read_registration;
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let stars = sky(10, 0x1234);
+    let frame = write_frame(
+        dir.path(),
+        "plain",
+        &stars,
+        &Transform::identity(),
+        3.0,
+        1.0,
+    );
+    assert!(read_registration(&frame).is_err());
+}

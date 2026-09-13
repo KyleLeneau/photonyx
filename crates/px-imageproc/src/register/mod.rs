@@ -8,6 +8,7 @@
 //! also where the budget scheduler needs to be able to cut.
 
 pub mod framing;
+pub mod persist;
 pub mod psf;
 pub mod starfind;
 pub mod starmatch;
@@ -17,6 +18,7 @@ pub mod twopass;
 pub use framing::{
     FrameQuality, Framing, OutputGeometry, frame_qualities, output_geometry, select_reference,
 };
+pub use persist::{read_registration, write_registration};
 pub use psf::{
     FwhmStats, Profile, PsfStar, Rejected, amplitude_threshold_for, filter_stars_by_amplitude,
     fwhm_stats,
