@@ -189,3 +189,65 @@ cargo test --release -p px-imageproc --test starmatch_parity -- --nocapture
 ```
 
 Per-frame cost on 2,000-star lists: 3.5 ms to match, 4.5 ms to match and fit.
+
+## The native engine end to end (ADR 007 Phase 11)
+
+`px --engine native project stack` runs the whole master-light path natively:
+two-pass registration, warping, per-frame photometric normalization, and a rejection stack.
+
+Measured on an M4 Max (16 cores, 128 GB) against Siril 1.4.4, over 100 lights of an ASI6200MM Pro
+(9576×6388, 300 s subs). Both engines registered the same 95 frames onto the same reference.
+
+### Quality
+
+| | Native | Siril | |
+|---|---|---|---|
+| background noise | 1.5272 ADU | 1.5637 ADU | **2.3% quieter** |
+| median FWHM | 2.431 px | 2.436 px | **0.2% sharper** |
+| stars detected | 2000 | 2000 | both at the cap |
+
+Difference between the two masters, after removing the global `-output_norm` factor (see below):
+
+| Region | RMS difference |
+|---|---|
+| sky (lowest 9 brightness deciles) | **0.33 σ_bg** |
+| signal (top decile) | 5.42 σ_bg |
+| whole frame | 1.74 σ_bg |
+
+Raw, without removing that factor: 2.73 σ_bg RMS, 2855 σ_bg max — on a saturated star core.
+
+Two things make a flat per-pixel bound the wrong measure here, and both are measured rather than
+asserted. Both pipelines finish with `-output_norm`, a min–max rescale keyed to the single darkest
+and single brightest pixel, so two masters that agreed everywhere would still differ by a global
+affine factor — 1.005× plus a small pedestal, here. And what remains is concentrated on stars: a
+0.06 px difference in one frame's homography, well inside the Phase 8 gate, moves a star core by
+percent of its value and the sky by nothing.
+
+### Speed and memory
+
+| | Native | Siril |
+|---|---|---|
+| 100 frames, register + warp + stack | **68.9 s** | 73.6 s |
+
+Per phase: registration 20 s, warping 29 s, combining 11 s.
+
+| Budget (`--max-memory`) | Peak footprint | Wall clock | Warped frames |
+|---|---|---|---|
+| default (90% of RAM) | 53.2 GB | 68.9 s | held in memory |
+| 8 GB | **4.88 GB** | 89.3 s | spilled to disk |
+
+The budget is partitioned across phases rather than lent to each of them in turn. Sizing every
+phase against the whole budget put a run configured for 8 GB at 19.9 GB of resident memory — each
+phase was individually inside its budget, but memory is not returned to the operating system when
+it is dropped, so the later phases allocated on top of the earlier ones.
+
+```
+cargo xtask siril-reference --master-light     # 100-frame master light from Siril
+cargo test --release -p px-pipeline --test master_light_parity -- --nocapture
+```
+
+### What the native engine does not do
+
+`CreateMasterLight` with background extraction returns `UnsupportedByEngine`, and mosaic projects
+are refused before any work starts — the grid and spiral pipelines and cross-layer registration are
+still Siril-only. Both are reported rather than silently skipped.
