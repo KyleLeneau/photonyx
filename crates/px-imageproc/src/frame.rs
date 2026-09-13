@@ -268,6 +268,30 @@ impl Frame {
         self.data[(channel * self.dims.height + y) * self.dims.width + x] = value;
     }
 
+    /// Reverses the row order of every channel in place.
+    ///
+    /// This is the orientation step a stacked master needs. FITS numbers its
+    /// rows from the bottom of the image and most display paths number them from
+    /// the top, so a stack assembled in read order comes out upside down
+    /// relative to how the camera's own software and the rest of this project
+    /// present it. Siril's pipeline applies `mirrorx` for the same reason, and
+    /// the native path has to agree with it or the two engines produce masters
+    /// that differ by a flip.
+    pub fn mirror_x(&mut self) {
+        let (width, height, channels) = (self.dims.width, self.dims.height, self.dims.channels);
+        let plane = width * height;
+        for channel in 0..channels {
+            let base = channel * plane;
+            for y in 0..height / 2 {
+                let (top, bottom) = (base + y * width, base + (height - 1 - y) * width);
+                // Split so both halves can be borrowed mutably at once, which
+                // avoids a row-sized scratch buffer per swap.
+                let (left, right) = self.data.split_at_mut(bottom);
+                left[top..top + width].swap_with_slice(&mut right[..width]);
+            }
+        }
+    }
+
     /// Whether the source declared a Bayer pattern.
     pub fn bayer_pattern(&self) -> Option<String> {
         self.header
@@ -412,5 +436,69 @@ pub(crate) fn apply_scale(data: &mut [f32], scale: ValueScale) {
     }
     for v in data.iter_mut() {
         *v = scale.apply(*v);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn header_for(width: usize, height: usize, channels: usize) -> Header {
+        let mut axes = vec![width as u64, height as u64];
+        if channels > 1 {
+            axes.push(channels as u64);
+        }
+        // Built through a file, because `Header` is only constructed by reading
+        // one — which is also what every real frame's header is.
+        let dir = std::env::temp_dir().join("px-imageproc-frame-tests");
+        std::fs::create_dir_all(&dir).expect("dir");
+        let path = dir.join(format!("h{width}x{height}x{channels}.fits"));
+        let builder = HeaderBuilder::primary_image(BitPix::F32, &axes).expect("header");
+        let mut writer = FitsWriter::create(&path).expect("create");
+        writer
+            .write_image(&builder, &vec![0.0f32; width * height * channels])
+            .expect("write");
+        writer.finish().expect("finish");
+        Frame::open(&path).expect("open").header().clone()
+    }
+
+    #[test]
+    fn mirror_x_reverses_every_channels_rows() {
+        let dims = ImageDims::new(3, 4, 3);
+        // Each sample encodes its channel and row, so a flip is visible and a
+        // channel bleeding into another one would be too.
+        let data: Vec<f32> = (0..dims.pixel_count())
+            .map(|i| {
+                let channel = i / 12;
+                let row = (i % 12) / 3;
+                (channel * 100 + row) as f32
+            })
+            .collect();
+        let mut frame = Frame::new(dims, data, header_for(3, 4, 3)).expect("frame");
+
+        frame.mirror_x();
+
+        for channel in 0..3 {
+            for row in 0..4 {
+                let expected = (channel * 100 + (3 - row)) as f32;
+                for x in 0..3 {
+                    assert_eq!(
+                        frame.get(channel, x, row),
+                        expected,
+                        "channel {channel} row {row}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn mirror_x_twice_is_the_identity() {
+        let dims = ImageDims::new(5, 7, 1);
+        let data: Vec<f32> = (0..dims.pixel_count()).map(|i| i as f32).collect();
+        let mut frame = Frame::new(dims, data.clone(), header_for(5, 7, 1)).expect("frame");
+        frame.mirror_x();
+        frame.mirror_x();
+        assert_eq!(frame.data(), data.as_slice());
     }
 }

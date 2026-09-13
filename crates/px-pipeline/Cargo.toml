@@ -15,6 +15,9 @@ px-static = { workspace = true }
 
 rayon = { workspace = true }
 siril-sys = { workspace = true }
+# The native master light spills warped frames to a temporary sequence when the
+# budget cannot hold them (ADR 007 P11-T3).
+tempfile = { workspace = true }
 
 bon = { workspace = true }
 chrono = { workspace = true }
