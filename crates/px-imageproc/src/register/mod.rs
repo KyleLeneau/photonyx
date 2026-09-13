@@ -12,6 +12,7 @@ pub mod psf;
 pub mod starfind;
 pub mod starmatch;
 pub mod transform;
+pub mod twopass;
 
 pub use framing::{
     FrameQuality, Framing, OutputGeometry, frame_qualities, output_geometry, select_reference,
@@ -23,6 +24,9 @@ pub use psf::{
 pub use starmatch::{MatchOptions, match_stars, pair_by_proximity, register_pair};
 pub use transform::{
     Correspondence, Fit, Point, RansacOptions, Transform, TransformKind, estimate, ransac, refine,
+};
+pub use twopass::{
+    Excluded, FrameRegistration, Registration, RegistrationOptions, register_sequence,
 };
 
 pub use starfind::{
