@@ -1141,47 +1141,125 @@ cost on 2,000-star lists: **3.5 ms** to match, **4.5 ms** to match and fit.
 
 ### Phase 9 — Two-pass registration and framing
 
-- [ ] **P9-T1** `register/framing.rs`: reference selection by Siril's score —
-      `2·FWHMx·(maxstars − nbstars)/maxstars + FWHMx`, only ranking frames with at least half the
-      maximum star count, and the amplitude-threshold re-filter when the star count caps at
-      `max_stars_fitted`. Port of `global.c` l. 895–990.
-- [ ] **P9-T2** The two-pass loop: detect stars in every frame (budget-bounded concurrency),
-      pick the reference, compute every transform to it, verify enough frames registered, and
-      re-trial up to `MAX_TRIALS_2PASS = 5` when they did not.
-- [ ] **P9-T3** Output geometry for `FRAMING_CURRENT` and `FRAMING_MIN` (`compute_roi`). Reject
-      `FRAMING_MAX` / `FRAMING_COG` with a typed error (out of scope).
-- [ ] **P9-T4** Frame exclusion: frames that fail detection or matching are dropped with a
-      reported reason, mirroring Siril's `incl` flag, and surfaced through `PipelineReporter`.
-- [ ] **P9-T5** Persist registration data as a sidecar FITS binary table (D6) and read it back.
-      Roundtrip test.
+- [x] **P9-T1** `register/framing.rs`: reference selection at
+      `2·FWHM·(cap − stars)/cap + FWHM`, frames below half the best star count ineligible, and the
+      amplitude re-filter when counts cap.
+- [x] **P9-T2** `register/twopass.rs`: the loop — detect every frame (budget-bounded), choose,
+      register, re-trial up to `MAX_TRIALS_2PASS = 5`.
+- [x] **P9-T3** `FRAMING_CURRENT` and `FRAMING_MIN`; `FRAMING_MAX` / `FRAMING_COG` return a typed
+      `Unsupported`.
+- [x] **P9-T4** Frame exclusion with a typed reason per frame (no stars, too few stars,
+      unmatched, unreadable), carried on the result for the reporter to surface.
+- [x] **P9-T5** The registration sidecar as a FITS binary table (D6), with a round-trip test.
 
-**Gate:** on the 100-frame corpus, the native reference frame matches Siril's choice, and the
-same set of frames is included.
+**Gate: met exactly.** On the 100-frame corpus the native engine chooses reference frame **#44**,
+the one Siril chose, and includes the same **95** frames — no frame kept by one and dropped by the
+other, in either direction. The whole two-pass loop takes **23.0 s** against Siril's 16.6 s.
+
+#### The capped-count problem
+
+With `max_stars = 2000` every frame of a rich field reports exactly 2,000 stars, so the count term
+of the score carries no information and a frame that could have yielded 8,000 ties with one that
+barely reached the cap. Capped frames are therefore re-counted above one common amplitude — the
+brightest of their individual cut-offs — which makes depth visible again.
+
+#### Reference selection cannot see the sequence, and a test caught it
+
+The score ranks each frame on its *own* quality. A frame that is sharp and star-rich but shows a
+different patch of sky — a pointing slip, a stray frame from another target — wins that ranking
+and leaves every other frame unregistered. Each trial now falls back through up to three reference
+candidates, reusing the star lists it already has, before paying for another detection pass. Siril
+has the same structural blind spot; re-trialling alone does not fix it, because the score is
+deterministic.
+
+#### Retry order matters
+
+Trials lower the detection threshold first and relax the shape checks only later. Relaxing shape
+first would admit cosmic rays and hot pixels as stars while the real ones were still below
+threshold — a sequence short of stars is far more often under-detected than mis-shaped.
+
+#### The sidecar round-trip caught a transposed matrix
+
+`nalgebra`'s element iterator is column-major; the reader was row-major. The failure mode is a
+silently *wrong* transform rather than a malformed file, which is the kind a round-trip test exists
+to find. Coefficients are stored as `D`: rounding a homography to `f32` moves a 9576 px corner by
+~0.001 px.
 
 ### Phase 10 — Warping
 
-- [ ] **P10-T1** `register/warp.rs`: inverse-mapped warp with bilinear, area, bicubic (OpenCV's
-      `INTER_CUBIC` kernel, `a = -0.75`), and Lanczos-4 kernels. Destination is zero-initialized
-      and pixels whose source falls outside the input are left untouched — that is what
-      `cvTransformImage`'s `BORDER_TRANSPARENT` over a `Scalar(0)` destination amounts to
-      (`opencv.cpp` l. 109–137, 531).
-- [ ] **P10-T2** Interpolation clamping (Siril's `clamp`, **on by default**, and visibly
-      different on star cores). It is not a kernel tweak — it is a second pass
-      (`opencv.cpp` l. 532–542): warp the same input again with `INTER_AREA` to build a *guide*,
-      form the mask `out < guide * 0.98` (`CLAMPING_FACTOR`), dilate that mask with a 3×3
-      elliptical structuring element, and copy the guide's values into the masked pixels.
-      Requires a small morphological dilation helper, which this task also adds and tests.
-- [ ] **P10-T3** Parallelize by output row band through the `Runtime`; memory-bounded so only the
-      needed source rows are resident.
-- [ ] **P10-T4** Tests: with clamping off, a warp by an exact-integer shift equals a `memcpy`
-      shift for every kernel; round-trip warp by `H` then `H⁻¹` returns the original within 1e-4
-      in the interior; with clamping on, the clamped pixel *set* matches Siril's within 1% of
-      pixels. Against Siril's `seqapplyreg` output at ≤ 0.5 σ_bg.
-- [ ] **P10-T5** `benches/register.rs` part 2: warp throughput per kernel at 60 MP, with and
-      without clamping (clamping roughly doubles the warp cost — it is a second full warp).
+- [x] **P10-T1** `register/warp.rs`: inverse-mapped warp with bilinear, area, bicubic (`a = −0.75`)
+      and Lanczos-4. Destination zero-initialized; pixels whose source falls outside the input are
+      left untouched.
+- [x] **P10-T2** Interpolation clamping, on by default: warp again with a kernel that cannot
+      undershoot, mask below `CLAMPING_FACTOR = 0.98` of that guide, dilate with the 3×3 elliptical
+      element, copy the guide in. The dilation helper is tested separately.
+- [x] **P10-T3** Parallel over output row bands through the `Runtime`.
+- [x] **P10-T4** Integer-shift identity for every kernel, round-trip warp, clamping localization,
+      and parity against `seqapplyreg`.
+- [x] **P10-T5** `benches/register.rs` part 2: warp throughput per kernel, with and without
+      clamping.
 
-**Gate:** warp parity at ≤ 0.5 σ_bg with clamping on, and the integer-shift identity exact with
-clamping off.
+**Gate: met.** Against Siril's `seqapplyreg` on four 61 MP frames, warping with *Siril's own*
+homography so that only the interpolation is under test:
+
+| Frame | RMS delta | Max delta | RMS with clamping off |
+|---|---|---|---|
+| #44 (reference) | **0.000 σ_bg** | 0.0 ADU | 0.000 σ_bg |
+| #47 | **0.187 σ_bg** | 5489 ADU | 2.962 σ_bg |
+| #51 | **0.175 σ_bg** | 2359 ADU | 3.163 σ_bg |
+| #66 | **0.207 σ_bg** | 5704 ADU | 3.652 σ_bg |
+
+against a gate of 0.5 σ_bg. The reference frame, warped under the identity, is copied exactly. The
+last column is the real evidence that the clamping pass matches Siril's: turning it off moves the
+result **six times further away** from Siril's output. Max per-pixel deltas are large and always on
+saturated cores, where a sub-pixel difference in a near-vertical profile is a large difference in
+value — which is why the gate is an RMS one.
+
+#### Throughput, and the weight table
+
+| Kernel, 16.8 MP | Time | Per 61 MP frame |
+|---|---|---|
+| bilinear | 7.4 ms | 0.027 s |
+| area | 7.7 ms | 0.028 s |
+| bicubic | 31.6 ms | 0.115 s |
+| bicubic + clamp | 52.7 ms | 0.192 s |
+| Lanczos-4 | 63.1 ms | 0.230 s |
+| **Lanczos-4 + clamp** | **81.8 ms** | **0.298 s** |
+
+Siril's `seqapplyreg` runs at 0.48 s per frame on the same machine, so the default native warp is
+1.6× faster.
+
+Getting there needed one optimization. Computing Lanczos weights per pixel costs 32 `sin` calls and
+measured **182 ms** for 16.8 MP. The weights depend only on the fractional part of the position, so
+they are precomputed on a 1024-step grid and looked up — OpenCV's `INTER_BITS` trick at 32× its
+resolution. That is 182 → 63 ms with **no measurable change to the parity numbers** (0.187/0.174/
+0.208 → 0.187/0.175/0.207 σ_bg).
+
+**Clamping does not double the warp cost**, as this document originally expected. The guide is a
+bilinear warp, not a second Lanczos one, so it adds 30% to Lanczos-4 and 67% to bicubic.
+
+#### Three bugs the warp tests found
+
+**The support bound was off by one on its upper edge**, reading one row past the frame. The kernel
+touches `floor(p) − (radius−1) ..= floor(p) + radius`, so the bound on `p` is closed below and
+half-open above.
+
+**Area interpolation had a half-pixel bias.** Averaging the 2×2 block starting at `floor(p)` is the
+obvious reading of "box filter" and is wrong: the footprint is the unit box *centred* on `p`, whose
+overlap weights are `(1 − f, f)` per axis — which is bilinear. At the unit scale registration works
+at, the footprint average *is* bilinear. The shifted guide made the clamping mask flag 11% of a
+frame instead of the 2.7% that actually rang.
+
+**Clamping must not write a pixel the warp left empty.** The guide's support is 2×2 where
+Lanczos-4's is 8×8, so in a four-pixel band at the footprint edge the guide has a value and the real
+warp does not. Filling those from the guide invents a frame of data in exactly the band the stacker
+treats as signal.
+
+One property is worth stating because it looks like a bug and is not: clamping is **not monotone
+per pixel** — 16 of 520 changed pixels in the synthetic test were lowered. The mask is dilated
+before the guide is copied, so the ring around a repaired core includes pixels where the sinc read
+*higher* than the guide. Siril's clamp behaves the same way, and it is why clamping slightly softens
+star cores.
 
 ### Phase 11 — `CreateMasterLight` and the end-to-end report
 
