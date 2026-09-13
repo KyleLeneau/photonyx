@@ -11,6 +11,7 @@ use px_imageproc::register::psf::PsfStar;
 use px_imageproc::register::starfind::{detect_candidates, find_stars, find_stars_reported};
 use px_imageproc::register::starmatch::{MatchOptions, match_stars, register_pair};
 use px_imageproc::register::transform::{RansacOptions, Transform, TransformKind};
+use px_imageproc::register::warp::{Interpolation, WarpOptions, warp};
 use px_imageproc::runtime::{ResourceBudget, Runtime};
 use px_imageproc::{Profile, StarfindOptions};
 
@@ -206,11 +207,96 @@ fn matching(c: &mut Criterion) {
     group.finish();
 }
 
+/// Warp throughput per kernel, with and without clamping.
+///
+/// Measured at 16.8 MP rather than the 61 MP of a full frame, because the work
+/// is exactly linear in pixel count and criterion wants ten samples: multiply by
+/// 3.6 for a 9576x6388 frame. Clamping roughly doubles the cost, because it is
+/// a second full warp plus a mask pass.
+fn warping(c: &mut Criterion) {
+    const SIDE: usize = 4096;
+    let dims = px_imageproc::ImageDims::new(SIDE, SIDE, 1);
+
+    // A star field the size of the bench frame, written and re-read so the
+    // source is a `Frame` with a real header.
+    let dir = std::env::temp_dir().join("px-imageproc-bench-warp");
+    std::fs::create_dir_all(&dir).expect("bench dir");
+    let path = dir.join("field.fits");
+    if !path.exists() {
+        let mut rng = SplitMix64(0x5741_1F7A_0000_0003);
+        let mut data: Vec<f32> = (0..dims.pixel_count())
+            .map(|_| (0.02 + 0.0008 * (rng.next_unit() - 0.5)) as f32)
+            .collect();
+        for _ in 0..4000 {
+            let (x0, y0) = (SIDE as f64 * rng.next_unit(), SIDE as f64 * rng.next_unit());
+            let amplitude = 0.05 + 0.6 * rng.next_unit();
+            let sigma = 1.5 + 0.6 * rng.next_unit();
+            let reach = (4.0 * sigma).ceil() as isize;
+            let (cx, cy) = (x0.round() as isize, y0.round() as isize);
+            for y in (cy - reach).max(0)..(cy + reach + 1).min(SIDE as isize) {
+                for x in (cx - reach).max(0)..(cx + reach + 1).min(SIDE as isize) {
+                    let (dx, dy) = (x as f64 - x0, y as f64 - y0);
+                    let q = (dx * dx + dy * dy) / (2.0 * sigma * sigma);
+                    if q < 16.0 {
+                        data[y as usize * SIDE + x as usize] += (amplitude * (-q).exp()) as f32;
+                    }
+                }
+            }
+        }
+        let header = px_fits::HeaderBuilder::primary_image(
+            px_fits::BitPix::F32,
+            &[SIDE as u64, SIDE as u64],
+        )
+        .expect("header");
+        let mut writer = px_fits::FitsWriter::create(&path).expect("create");
+        writer.write_image(&header, &data).expect("write");
+        writer.finish().expect("finish");
+    }
+    let source = px_imageproc::Frame::open(&path).expect("open");
+    let runtime = Runtime::new(ResourceBudget::new(4 * GB, num_cores())).expect("runtime");
+    // A realistic registration transform: a few tens of pixels of dither and a
+    // fraction of a degree of rotation, so no sample lands on an integer.
+    let transform = Transform::similarity(1.0, 0.004, -23.5, 41.25);
+
+    let mut group = c.benchmark_group("warp");
+    group.throughput(criterion::Throughput::Elements(dims.pixel_count() as u64));
+    group.sample_size(10);
+    for interpolation in [
+        Interpolation::Bilinear,
+        Interpolation::Area,
+        Interpolation::Bicubic,
+        Interpolation::Lanczos4,
+    ] {
+        for clamp in [false, true] {
+            // Clamping is a no-op for the kernels with no negative lobes, so
+            // benchmarking it there would just duplicate a number.
+            if clamp && !interpolation.has_negative_lobes() {
+                continue;
+            }
+            let options = WarpOptions {
+                interpolation,
+                clamp,
+            };
+            let name = format!(
+                "{}{}",
+                format!("{interpolation:?}").to_lowercase(),
+                if clamp { "_clamped" } else { "" }
+            );
+            group.bench_function(name, |b| {
+                b.iter(|| warp(&source, &transform, dims, &runtime, &options).expect("warp"))
+            });
+        }
+    }
+    group.finish();
+}
+
 fn num_cores() -> usize {
     std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4)
 }
 
-criterion_group!(benches, detection, fitting, star_caps, cores, matching);
+criterion_group!(
+    benches, detection, fitting, star_caps, cores, matching, warping
+);
 criterion_main!(benches);

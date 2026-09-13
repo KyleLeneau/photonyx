@@ -144,9 +144,12 @@ impl flags::SirilReference {
         if self.stars {
             build_star_reference(sh, &siril, &corpus, &out, per_kind)?;
         }
-        if self.registration {
+        if self.registration || self.warp {
             let frames = self.reg_frames.unwrap_or(100) as usize;
             build_registration_reference(sh, &siril, &corpus, &out, frames)?;
+        }
+        if self.warp {
+            build_warp_reference(sh, &siril, &out, per_kind)?;
         }
         Ok(())
     }
@@ -683,6 +686,60 @@ fn build_registration_reference(
         let _ = writeln!(manifest, "{}\t{relative}", i + 1);
     }
     std::fs::write(dir.join("frames.txt"), manifest)?;
+    Ok(())
+}
+
+/// Applies the registration Siril computed and keeps its warped frames
+/// (ADR 007 P10-T4).
+///
+/// `seqapplyreg` with a frame filter, because the output is full-size: a hundred
+/// registered 61 MP frames is 12 GB, and the parity test needs a handful.
+fn build_warp_reference(sh: &Shell, siril: &Path, out: &Path, frames: usize) -> Result<()> {
+    let dir = out.join("registration");
+    let work = dir.join("work");
+    if !work.join("reg_.seq").exists() {
+        bail!("two-pass registration must run first (pass --registration)");
+    }
+    // `seqapplyreg` names its output by prefix, in the sequence's directory.
+    if work.join("r_reg_00001.fits").exists() {
+        println!("  warped frames: already present, skipping");
+        return Ok(());
+    }
+
+    let script = work.join("apply.ssf");
+    std::fs::write(
+        &script,
+        format!(
+            "requires 1.2.0\nsetext fits\ncd {}\nseqapplyreg reg_ -filter-included -filter-fwhm={}%\n",
+            quoted(&work),
+            // A percentage filter is how `seqapplyreg` is asked for a subset;
+            // the best few frames by FWHM are as good a sample as any.
+            (100 * frames / 95).max(3),
+        ),
+    )?;
+
+    println!("  applying registration to a few frames with siril...");
+    let started = std::time::Instant::now();
+    let log = cmd!(sh, "{siril} -s {script}").ignore_status().read()?;
+    let produced = std::fs::read_dir(&work)?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("r_reg_") && n.ends_with(".fits"))
+        })
+        .count();
+    if produced == 0 {
+        bail!(
+            "siril produced no registered frames. Log tail:\n{}",
+            log.lines().rev().take(20).collect::<Vec<_>>().join("\n")
+        );
+    }
+    println!(
+        "  warped {produced} frames in {:.1}s",
+        started.elapsed().as_secs_f64()
+    );
+    std::fs::write(dir.join("apply.log"), &log)?;
     Ok(())
 }
 
