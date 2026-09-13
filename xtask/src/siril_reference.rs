@@ -141,6 +141,9 @@ impl flags::SirilReference {
         if self.calibration {
             build_calibration_reference(sh, &siril, &corpus, &out)?;
         }
+        if self.stars {
+            build_star_reference(sh, &siril, &corpus, &out, per_kind)?;
+        }
         Ok(())
     }
 }
@@ -487,6 +490,98 @@ fn build_calibration_reference(sh: &Shell, siril: &Path, corpus: &Path, out: &Pa
     )?;
     std::fs::write(calibrated_dir.join("calibrate.log"), log)?;
     println!("  calibrated light: {}", produced.display());
+    Ok(())
+}
+
+/// Star-detection parameters the reference is generated with.
+///
+/// Set explicitly rather than left at Siril's defaults, so that a future
+/// version changing a default cannot silently move the reference the parity
+/// test compares against.
+const FINDSTAR_RADIUS: u32 = 5;
+const FINDSTAR_SIGMA: &str = "1.0";
+const FINDSTAR_ROUNDNESS: &str = "0.5";
+
+/// Runs Siril's `findstar` over a sample of light frames, recording one star
+/// list per frame for the ADR 007 P7-T6 parity test.
+///
+/// The lists are Siril's own tab-separated format, header comments included —
+/// the test parses them rather than a re-rendered JSON, so there is one fewer
+/// place for a transcription error to hide.
+fn build_star_reference(
+    sh: &Shell,
+    siril: &Path,
+    corpus: &Path,
+    out: &Path,
+    frames: usize,
+) -> Result<()> {
+    let stars = out.join("stars");
+    std::fs::create_dir_all(&stars)?;
+
+    let lights = corpus.join("light");
+    if !lights.is_dir() {
+        bail!("no light directory under {}", corpus.display());
+    }
+
+    let mut manifest = String::new();
+    let _ = writeln!(
+        manifest,
+        "# findstar reference: radius={FINDSTAR_RADIUS} sigma={FINDSTAR_SIGMA} \
+roundness={FINDSTAR_ROUNDNESS}"
+    );
+
+    for frame in sample_frames(&lights, frames)? {
+        let stem = frame.file_stem().unwrap().to_string_lossy().to_string();
+        let list = stars.join(format!("{stem}.lst"));
+        let relative = frame
+            .strip_prefix(corpus)
+            .unwrap_or(&frame)
+            .display()
+            .to_string();
+        let _ = writeln!(manifest, "{relative}\t{stem}.lst");
+
+        if list.exists() {
+            println!("  stars for {stem}: already present, skipping");
+            continue;
+        }
+
+        let work = sh.create_temp_dir()?;
+        let script = work.path().join("stars.ssf");
+        std::fs::write(
+            &script,
+            format!(
+                "requires 1.2.0\nsetext fits\ncd {}\nload {}\n\
+                 setfindstar reset -radius={FINDSTAR_RADIUS} -sigma={FINDSTAR_SIGMA} \
+                 -roundness={FINDSTAR_ROUNDNESS}\nfindstar -out={}\n",
+                quoted(work.path()),
+                quoted(&frame),
+                flag_value(&list)?
+            ),
+        )?;
+
+        println!("  finding stars in {stem}...");
+        let started = std::time::Instant::now();
+        let log = cmd!(sh, "{siril} -s {script}").ignore_status().read()?;
+        if !list.exists() {
+            bail!(
+                "siril did not produce {}. Log tail:\n{}",
+                list.display(),
+                log.lines().rev().take(15).collect::<Vec<_>>().join("\n")
+            );
+        }
+        let found = log
+            .lines()
+            .find(|l| l.contains("stars in image"))
+            .unwrap_or("(no count line)")
+            .trim();
+        println!(
+            "  {stem}: {found} in {:.2}s",
+            started.elapsed().as_secs_f64()
+        );
+        std::fs::write(stars.join(format!("{stem}.log")), &log)?;
+    }
+
+    std::fs::write(stars.join("frames.txt"), manifest)?;
     Ok(())
 }
 

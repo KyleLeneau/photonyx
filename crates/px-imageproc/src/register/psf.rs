@@ -44,12 +44,20 @@ pub const MAX_ITER_ANGLE: usize = 50;
 /// Relative chi-squared improvement below which the fit is converged.
 const CONVERGENCE_TOLERANCE: f64 = 1e-9;
 
-/// Narrowest and widest accepted profile scale, in pixels.
+/// Narrowest accepted profile scale, in pixels.
 ///
-/// A sigma below the lower bound is narrower than one pixel and describes a
-/// hot pixel rather than a star; the upper bound is tied to the fitting box,
-/// since a profile wider than its box is not constrained by the data.
+/// A scale below this is narrower than one pixel and describes a hot pixel
+/// rather than a star. The *upper* bound is the fitting box: a profile wider
+/// than its box is not constrained by the data.
 const MIN_SCALE: f64 = 0.3;
+
+/// Narrowest accepted FWHM, in pixels.
+///
+/// Stated in FWHM rather than in profile scale because the two profiles do not
+/// share a scale parameter: a Moffat alpha means a different width at every
+/// beta, so a bound on alpha would reject wide-beta fits that are perfectly
+/// ordinary stars. The FWHM is the one width both profiles agree on.
+const MIN_FWHM: f64 = FWHM_PER_SIGMA * MIN_SCALE;
 
 /// Largest accepted Moffat beta. Above this the profile is indistinguishable
 /// from a Gaussian and beta is unconstrained, so the fit wanders.
@@ -418,12 +426,16 @@ impl Model for MoffatModel {
 ///
 /// A fit whose centre has left the box is no longer fitting the candidate that
 /// produced it, and letting it run would let two neighbouring candidates
-/// converge on the same bright star.
+/// converge on the same bright star. The scale is bounded by the box *side*
+/// rather than its radius, because a Moffat alpha at a high beta is a couple of
+/// times larger than the Gaussian sigma of the same star and clamping it at the
+/// radius would reject ordinary stars.
 fn clamp_common(p: &mut [f64], radius: f64) {
+    let side = 2.0 * radius + 1.0;
     p[2] = p[2].clamp(-radius, radius);
     p[3] = p[3].clamp(-radius, radius);
-    p[4] = p[4].abs().clamp(MIN_SCALE, radius);
-    p[5] = p[5].abs().clamp(MIN_SCALE, radius);
+    p[4] = p[4].abs().clamp(MIN_SCALE, side);
+    p[5] = p[5].abs().clamp(MIN_SCALE, side);
 }
 
 /// Levenberg-Marquardt least squares, returning the fitted parameters and the
@@ -602,7 +614,13 @@ pub fn accept(
         return Err(Rejected::OffCentre);
     }
 
-    if !(star.sx.is_finite() && star.sy.is_finite()) || star.sy <= MIN_SCALE || star.sx >= radius {
+    // Both bounds are in FWHM, the width the two profiles share: narrower than
+    // `MIN_FWHM` is a hot pixel, wider than the box is a fit the box never
+    // constrained.
+    if !(star.fwhm_x.is_finite() && star.fwhm_y.is_finite())
+        || star.fwhm_y <= MIN_FWHM
+        || star.fwhm_x >= 2.0 * radius + 1.0
+    {
         return Err(Rejected::Width);
     }
 

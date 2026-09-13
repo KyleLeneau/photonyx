@@ -29,6 +29,14 @@ use crate::stats;
 /// at 3 it yields thousands, and every one of them costs a fit.
 const NOISE_SIGMAS: f64 = 5.0;
 
+/// Half-width of the default search box.
+///
+/// Eleven pixels across holds a seeing-limited star and enough surrounding sky
+/// to fit a background against, at the sampling typical of an amateur
+/// refractor; it is also what Siril defaults to, so a native run and an
+/// `--engine siril` run start from the same field.
+pub const DEFAULT_RADIUS: usize = 5;
+
 /// Smallest and largest accepted search radius.
 ///
 /// Below 3 px the box is too small to contain a fittable profile; above 50 px
@@ -81,7 +89,7 @@ pub struct StarfindOptions {
 impl Default for StarfindOptions {
     fn default() -> Self {
         Self {
-            radius: 10,
+            radius: DEFAULT_RADIUS,
             sigma: 1.0,
             roundness: 0.5,
             max_roundness: 1.0,

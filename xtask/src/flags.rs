@@ -49,6 +49,8 @@ xflags::xflags! {
             optional --masters
             /// Also build a master flat and calibrate one light frame with Siril
             optional --calibration
+            /// Also run findstar over light frames and record the star lists
+            optional --stars
         }
     }
 }
@@ -107,6 +109,7 @@ pub struct SirilReference {
     pub frames: Option<u32>,
     pub masters: bool,
     pub calibration: bool,
+    pub stars: bool,
 }
 
 impl Xtask {
