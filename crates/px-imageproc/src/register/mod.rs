@@ -14,6 +14,7 @@ pub mod starfind;
 pub mod starmatch;
 pub mod transform;
 pub mod twopass;
+pub mod warp;
 
 pub use framing::{
     FrameQuality, Framing, OutputGeometry, frame_qualities, output_geometry, select_reference,
@@ -30,6 +31,7 @@ pub use transform::{
 pub use twopass::{
     Excluded, FrameRegistration, Registration, RegistrationOptions, register_sequence,
 };
+pub use warp::{Interpolation, WarpOptions, warp};
 
 pub use starfind::{
     Background, Candidate, StarfindOptions, StarfindReport, detect_candidates, find_stars,
