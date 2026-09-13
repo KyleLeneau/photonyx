@@ -168,9 +168,16 @@ pub struct Background {
 impl Background {
     /// Measures the background of one channel, row-major.
     pub fn measure(channel: &[f32], width: usize, height: usize) -> Self {
+        let _span = crate::profile::scope("starfind.background");
         Self {
-            level: stats::median(channel),
-            noise: stats::background_noise(channel, width, height),
+            level: {
+                let _span = crate::profile::scope("starfind.background.median");
+                stats::median(channel)
+            },
+            noise: {
+                let _span = crate::profile::scope("starfind.background.noise");
+                stats::background_noise(channel, width, height)
+            },
         }
     }
 
@@ -220,6 +227,7 @@ pub fn detect_candidates_with(
     }
     let threshold = background.threshold(options.sigma);
 
+    let scan = crate::profile::scope("starfind.scan");
     let mut candidates: Vec<Candidate> = (radius..height - radius)
         .into_par_iter()
         .flat_map_iter(|y| {
@@ -236,7 +244,9 @@ pub fn detect_candidates_with(
             })
         })
         .collect();
+    drop(scan);
 
+    let _sort = crate::profile::scope("starfind.sort");
     // Brightest first, which is "magnitude-ordered": magnitude runs backwards
     // to flux. Ties broken by position so the list is reproducible regardless
     // of how the parallel scan interleaved.
