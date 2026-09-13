@@ -26,7 +26,7 @@ impl SplitMix64 {
         z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
         z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
         z ^= z >> 31;
-        (z >> 11) as f64 / (1u64 << 52) as f64
+        (z >> 11) as f64 / (1u64 << 53) as f64
     }
 }
 

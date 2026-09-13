@@ -16,6 +16,8 @@ sysinfo = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+# The synthetic registration tests state their truth as a matrix.
+nalgebra = { workspace = true }
 criterion = { workspace = true }
 dhat = { workspace = true }
 serde_json = { workspace = true }

@@ -9,12 +9,14 @@
 
 pub mod psf;
 pub mod starfind;
+pub mod starmatch;
 pub mod transform;
 
 pub use psf::{
     FwhmStats, Profile, PsfStar, Rejected, amplitude_threshold_for, filter_stars_by_amplitude,
     fwhm_stats,
 };
+pub use starmatch::{MatchOptions, match_stars, pair_by_proximity, register_pair};
 pub use transform::{
     Correspondence, Fit, Point, RansacOptions, Transform, TransformKind, estimate, ransac, refine,
 };
