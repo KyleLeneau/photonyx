@@ -55,7 +55,16 @@
 * [x] need a better way to bump versions for a release
 * [x] need to support and test multi pipes on windows now that MR is merged for support
 * [x] would like to drop fitsrs for my own fits library with well known tests, lazy load and performance
-* [ ] native calibration, registration & stacking in px-imageproc (ADR 007) — `--engine native`
+* [x] native calibration, registration & stacking in px-imageproc (ADR 007) — `--engine native`
+  * `px --engine native` runs master bias/dark/flat, light calibration, and project stacking
+    with no Siril install at all. Faster than Siril on every pipeline and measurably no worse:
+    a 95-frame master light is 49 s against 73.6 s, 2.3% quieter and 0.2% sharper.
+  * Still Siril-only, and refused with a clear error rather than silently skipped: background
+    extraction, mosaic projects (grid and spiral), and cross-layer registration.
+  * Siril remains the default engine — see ADR 007 Phase 12 for why, and for what would change it.
+* [ ] close the RCD demosaic gap (ADR 007 Phase 6b) — the native OSC path uses Malvar-He-Cutler,
+      which is the more accurate reconstruction but noisier in the background than Siril's RCD.
+      This is the main thing standing between the native engine and being the default.
 * [ ] implement obs find best to manage calibration links
 * [ ] Add the ability to review all frames for a project stacking and human reject the bad ones (should be part of lock change detection)
 * [ ] Need a way to relink calibration masters to obs - obs command
