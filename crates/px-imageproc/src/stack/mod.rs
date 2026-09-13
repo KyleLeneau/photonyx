@@ -437,18 +437,34 @@ impl std::fmt::Debug for StackResult {
 struct Worker {
     /// `frames × block_pixels`, frame-major.
     band: Vec<f32>,
-    /// One pixel's values across the sequence.
-    pixel_stack: Vec<f32>,
+    /// A tile of the band transposed into pixel-major order: `tile_pixels`
+    /// runs of `frames` values each, which is the layout the reduction wants.
+    tile: Vec<f32>,
+    tile_pixels: usize,
     rejection: Option<rejection::Scratch>,
     map_low: Vec<u16>,
     map_high: Vec<u16>,
 }
 
+/// Bytes one transposed tile should occupy.
+///
+/// The tile is written once and read once per pixel, so what matters is that
+/// it still be resident for the read. Sized for the low end of a per-core L2
+/// rather than for any particular machine's: too small and the per-tile
+/// bookkeeping starts to show, too large and it is the same cache misses as
+/// before with extra copying.
+const TILE_BYTES: usize = 192 * 1024;
+
 impl Worker {
     fn new(frames: usize, block_pixels: usize, method: Method) -> Self {
+        // At least one pixel, so a sequence long enough to fill a tile on its
+        // own still makes progress.
+        let tile_pixels = (TILE_BYTES / (frames.max(1) * std::mem::size_of::<f32>()))
+            .clamp(1, block_pixels.max(1));
         Self {
             band: vec![0.0; frames * block_pixels],
-            pixel_stack: vec![0.0; frames],
+            tile: vec![0.0; frames * tile_pixels],
+            tile_pixels,
             rejection: method
                 .needs_rejection_scratch()
                 .then(|| rejection::Scratch::new(frames)),
@@ -509,29 +525,49 @@ impl Worker {
 
         let _reduce = crate::profile::scope("stack.reduce");
         let mut tally = Rejected::default();
-        for (p, slot) in out.iter_mut().enumerate().take(pixels) {
+
+        // Reducing walks *across* frames for one pixel, and the band is stored
+        // frame-major — so a pixel's values sit one band apart, hundreds of
+        // megabytes for a real block. Gathering them straight out of the band
+        // costs a cache miss and usually a TLB miss per frame per pixel.
+        //
+        // So the band is transposed a tile at a time into pixel-major order,
+        // small enough that the tile stays in L2 while it is written and read.
+        // The reduction then works on a contiguous run per pixel, which is
+        // also what lets it operate on the tile directly instead of copying
+        // each pixel into scratch first.
+        let tile_pixels = self.tile_pixels.min(pixels).max(1);
+        for start in (0..pixels).step_by(tile_pixels) {
+            let len = tile_pixels.min(pixels - start);
+
             for frame in 0..frames {
-                self.pixel_stack[frame] = self.band[frame * pixels + p];
+                let source = &self.band[frame * pixels + start..frame * pixels + start + len];
+                for (local, &v) in source.iter().enumerate() {
+                    self.tile[local * frames + frame] = v;
+                }
             }
 
-            let (value, rejected_here) = reduce(
-                &mut self.pixel_stack,
-                options.method,
-                self.rejection.as_mut(),
-            );
+            for local in 0..len {
+                let p = start + local;
+                let (value, rejected_here) = reduce(
+                    &mut self.tile[local * frames..(local + 1) * frames],
+                    options.method,
+                    self.rejection.as_mut(),
+                );
 
-            tally.low += rejected_here.low;
-            tally.high += rejected_here.high;
-            if options.rejection_maps {
-                self.map_low[p] = rejected_here.low.min(u16::MAX as u32) as u16;
-                self.map_high[p] = rejected_here.high.min(u16::MAX as u32) as u16;
+                tally.low += rejected_here.low;
+                tally.high += rejected_here.high;
+                if options.rejection_maps {
+                    self.map_low[p] = rejected_here.low.min(u16::MAX as u32) as u16;
+                    self.map_high[p] = rejected_here.high.min(u16::MAX as u32) as u16;
+                }
+
+                out[p] = if options.output_norm {
+                    value as f32
+                } else {
+                    (value as f32).clamp(0.0, 1.0)
+                };
             }
-
-            *slot = if options.output_norm {
-                value as f32
-            } else {
-                (value as f32).clamp(0.0, 1.0)
-            };
         }
 
         Ok(tally)
