@@ -513,3 +513,115 @@ fn a_frame_can_be_written_and_read_back_after_stacking() {
     assert!((back.data()[0] * U16 - 200.0).abs() < 0.01);
     assert_eq!(back.header().get_i64("STACKCNT"), Some(3));
 }
+
+/// ADR 007 P11-T3: frames already in memory stack through the same reducers as
+/// frames on disk, and must give the same answer.
+#[test]
+fn stacking_from_memory_matches_stacking_from_disk() {
+    use px_imageproc::stack::{LoadedFrames, stack_normalized};
+
+    let d = dir("memory-vs-disk");
+    let frames: Vec<Vec<u16>> = (0..7)
+        .map(|f| {
+            (0..64 * 48)
+                .map(|i| 1000 + (i % 17) as u16 * 7 + f as u16 * 13)
+                .collect()
+        })
+        .collect();
+    let paths = write_set(&d, &frames, 64, 48);
+    let set = FrameSet::open(&paths).expect("open set");
+    let runtime = runtime(4);
+
+    let loaded: Vec<Frame> = paths
+        .iter()
+        .map(|p| Frame::open(p).expect("load frame"))
+        .collect();
+    let memory = LoadedFrames::new(&loaded).expect("uniform");
+
+    for method in [
+        Method::Median,
+        Method::Mean(Rejection::None),
+        Method::Mean(Rejection::Winsorized(Bounds::symmetric(3.0))),
+    ] {
+        let options = StackOptions::new(method);
+        let from_disk = stack_normalized(&set, &runtime, options, None, None).expect("disk");
+        let from_memory = stack_normalized(&memory, &runtime, options, None, None).expect("memory");
+        assert_eq!(
+            from_disk.frame.data(),
+            from_memory.frame.data(),
+            "{method:?} differs between the disk and memory paths"
+        );
+    }
+}
+
+/// ADR 007 P11-T2: normalization is applied as blocks are read, and brings a
+/// frame with a lifted background back onto the reference's.
+#[test]
+fn normalization_is_applied_to_every_block() {
+    use px_imageproc::stack::normalize::{NormCoefficients, NormMethod, Normalization};
+    use px_imageproc::stack::stack_normalized;
+
+    let d = dir("normalized");
+    let frames: Vec<Vec<u16>> = (0..4)
+        .map(|f| {
+            (0..64 * 48)
+                .map(|i| 2000 + (i % 23) as u16 * 11 + f as u16 * 29)
+                .collect()
+        })
+        .collect();
+    let paths = write_set(&d, &frames, 64, 48);
+    let set = FrameSet::open(&paths).expect("open set");
+    let runtime = runtime(4);
+    let options = StackOptions::new(Method::Mean(Rejection::None));
+
+    let plain = stack_normalized(&set, &runtime, options, None, None).expect("stack");
+
+    // Halve every frame's signal; the stack must halve too.
+    let halved = Normalization {
+        coefficients: vec![
+            vec![NormCoefficients {
+                scale: 0.5,
+                offset: 0.0,
+            }];
+            set.len()
+        ],
+        method: NormMethod::Multiplicative,
+        reference: 0,
+    };
+    let scaled = stack_normalized(&set, &runtime, options, None, Some(&halved)).expect("stack");
+
+    for (before, after) in plain.frame.data().iter().zip(scaled.frame.data()) {
+        assert!(
+            (after - before * 0.5).abs() < 1e-6,
+            "{after} is not half of {before}"
+        );
+    }
+}
+
+/// A normalization whose frame count does not match the sequence is a typed
+/// error rather than a silently partial application.
+#[test]
+fn a_mismatched_normalization_is_rejected() {
+    use px_imageproc::stack::normalize::{NormCoefficients, NormMethod, Normalization};
+    use px_imageproc::stack::stack_normalized;
+
+    let d = dir("mismatched-norm");
+    let frames: Vec<Vec<u16>> = (0..4).map(|f| vec![1000 + f as u16; 32 * 32]).collect();
+    let paths = write_set(&d, &frames, 32, 32);
+    let set = FrameSet::open(&paths).expect("open set");
+    let wrong = Normalization {
+        coefficients: vec![vec![NormCoefficients::IDENTITY]; 3],
+        method: NormMethod::AdditiveScaling,
+        reference: 0,
+    };
+    assert!(
+        stack_normalized(
+            &set,
+            &runtime(2),
+            StackOptions::new(Method::Median),
+            None,
+            Some(&wrong)
+        )
+        .is_err()
+    );
+}

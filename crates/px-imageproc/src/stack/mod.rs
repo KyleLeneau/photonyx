@@ -100,13 +100,129 @@ pub struct StackResult {
     pub block_count: usize,
 }
 
+/// Something a block-scheduled reduction can read bands from.
+///
+/// Two implementations, and the difference between them is where the frames
+/// live: a [`FrameSet`] reads each band off disk as it is needed, and a slice of
+/// loaded [`Frame`]s copies it out of memory. The stacker does not care which —
+/// what it needs is a uniform shape, a count, and a band at a time — and the
+/// caller chooses on the memory budget (ADR 007 P11-T3). For a master light
+/// whose warped frames already fit in the budget, writing them out only to read
+/// them straight back is pure I/O.
+pub trait BlockSource: Sync {
+    fn frame_count(&self) -> usize;
+    fn dims(&self) -> ImageDims;
+    /// Reads one block of one frame into `out`, which holds exactly
+    /// `block.pixel_count(dims)` samples.
+    fn read_block_into(
+        &self,
+        index: usize,
+        block: &Block,
+        out: &mut [f32],
+    ) -> Result<(), ImageProcError>;
+    /// The header the output frame inherits.
+    fn first_header(&self) -> Option<px_fits::header::Header>;
+}
+
+impl BlockSource for FrameSet {
+    fn frame_count(&self) -> usize {
+        self.len()
+    }
+
+    fn dims(&self) -> ImageDims {
+        FrameSet::dims(self)
+    }
+
+    fn read_block_into(
+        &self,
+        index: usize,
+        block: &Block,
+        out: &mut [f32],
+    ) -> Result<(), ImageProcError> {
+        FrameSet::read_block_into(self, index, block, out)
+    }
+
+    fn first_header(&self) -> Option<px_fits::header::Header> {
+        self.get(0).map(|f| f.header.clone())
+    }
+}
+
+/// Frames already in memory, in sequence order.
+///
+/// Uniformity is checked on construction, for the same reason [`FrameSet`] checks
+/// it: finding out halfway through a reduction that frame 40 is a different shape
+/// is the bad outcome.
+pub struct LoadedFrames<'a> {
+    frames: &'a [Frame],
+    dims: ImageDims,
+}
+
+impl<'a> LoadedFrames<'a> {
+    pub fn new(frames: &'a [Frame]) -> Result<Self, ImageProcError> {
+        let first = frames.first().ok_or(ImageProcError::EmptySequence)?;
+        let dims = first.dims();
+        for frame in frames {
+            if frame.dims() != dims {
+                return Err(ImageProcError::Processing(format!(
+                    "in-memory sequence mixes {}x{}x{} with {}x{}x{}",
+                    dims.width,
+                    dims.height,
+                    dims.channels,
+                    frame.width(),
+                    frame.height(),
+                    frame.channels()
+                )));
+            }
+        }
+        Ok(Self { frames, dims })
+    }
+}
+
+impl BlockSource for LoadedFrames<'_> {
+    fn frame_count(&self) -> usize {
+        self.frames.len()
+    }
+
+    fn dims(&self) -> ImageDims {
+        self.dims
+    }
+
+    fn read_block_into(
+        &self,
+        index: usize,
+        block: &Block,
+        out: &mut [f32],
+    ) -> Result<(), ImageProcError> {
+        let frame = self.frames.get(index).ok_or_else(|| {
+            ImageProcError::Processing(format!(
+                "frame index {index} out of range for a {}-frame sequence",
+                self.frames.len()
+            ))
+        })?;
+        let rows = frame.rows(block.channel, block.start_row, block.height());
+        if out.len() != rows.len() {
+            return Err(ImageProcError::Processing(format!(
+                "block buffer holds {} samples, need {}",
+                out.len(),
+                rows.len()
+            )));
+        }
+        out.copy_from_slice(rows);
+        Ok(())
+    }
+
+    fn first_header(&self) -> Option<px_fits::header::Header> {
+        self.frames.first().map(|f| f.header().clone())
+    }
+}
+
 /// Reduces `set` to a single frame.
 ///
 /// Reads every frame once, in bands sized to fit `runtime`'s budget. The
 /// output header is taken from the first frame; callers stamp their own
 /// provenance cards when writing.
-pub fn stack(
-    set: &FrameSet,
+pub fn stack<S: BlockSource>(
+    set: &S,
     runtime: &Runtime,
     options: StackOptions,
 ) -> Result<StackResult, ImageProcError> {
@@ -120,8 +236,8 @@ pub fn stack(
 /// they are combined, and doing it per block means the calibrated frames never
 /// touch the disk. The subtracted master stays resident for the whole run, so
 /// its size is charged against the budget before blocks are planned.
-pub fn stack_calibrated(
-    set: &FrameSet,
+pub fn stack_calibrated<S: BlockSource>(
+    set: &S,
     runtime: &Runtime,
     options: StackOptions,
     subtract: Option<&Frame>,
@@ -137,14 +253,14 @@ pub fn stack_calibrated(
 /// *frame* rather than on the outlier. Coefficients come from
 /// [`normalize::compute`] and are applied per frame and channel, after any
 /// `subtract` and before the reduction.
-pub fn stack_normalized(
-    set: &FrameSet,
+pub fn stack_normalized<S: BlockSource>(
+    set: &S,
     runtime: &Runtime,
     options: StackOptions,
     subtract: Option<&Frame>,
     normalization: Option<&Normalization>,
 ) -> Result<StackResult, ImageProcError> {
-    if set.is_empty() {
+    if set.frame_count() == 0 {
         return Err(ImageProcError::EmptySequence);
     }
     if let Method::Mean(r) = options.method {
@@ -152,7 +268,7 @@ pub fn stack_normalized(
     }
 
     let dims = set.dims();
-    let frames = set.len();
+    let frames = set.frame_count();
     let elem_size = std::mem::size_of::<f32>();
 
     if let Some(master) = subtract
@@ -170,9 +286,10 @@ pub fn stack_normalized(
     }
     let resident = subtract.map_or(0, |m| m.data().len() as u64 * elem_size as u64);
 
-    // A normalization of all-identity coefficients is dropped here rather than
-    // carried through the inner loop.
-    let normalization = normalization.filter(|n| !n.is_identity());
+    // Validated before being simplified away: a caller whose coefficient count
+    // does not match the sequence has a bug whether or not those coefficients
+    // happen to be identities, and silently ignoring it would mean an
+    // unnormalized stack that looks like a normalized one.
     if let Some(n) = normalization
         && n.coefficients.len() != frames
     {
@@ -181,6 +298,9 @@ pub fn stack_normalized(
             n.coefficients.len()
         )));
     }
+    // All-identity coefficients are dropped rather than carried through the
+    // inner loop.
+    let normalization = normalization.filter(|n| !n.is_identity());
 
     let plan = runtime.plan_blocks(
         &dims,
@@ -269,10 +389,7 @@ pub fn stack_normalized(
         normalize_to_unit_range(&mut output);
     }
 
-    let header = set
-        .get(0)
-        .map(|f| f.header.clone())
-        .expect("non-empty set has a first frame");
+    let header = set.first_header().expect("non-empty set has a first frame");
     let frame = Frame::new(dims, output, header)?;
 
     Ok(StackResult {
@@ -331,9 +448,9 @@ impl Worker {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn run(
+    fn run<S: BlockSource>(
         &mut self,
-        set: &FrameSet,
+        set: &S,
         block: &Block,
         dims: &ImageDims,
         options: StackOptions,
@@ -341,7 +458,7 @@ impl Worker {
         normalization: Option<&Normalization>,
         out: &mut [f32],
     ) -> Result<Rejected, ImageProcError> {
-        let frames = set.len();
+        let frames = set.frame_count();
         let pixels = block.pixel_count(dims);
 
         // The master's rows for this block, borrowed once rather than per

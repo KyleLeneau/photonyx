@@ -38,5 +38,8 @@ pub use register::{
 };
 pub use runtime::{Block, BlockPlan, ImageDims, MemoryLimit, ResourceBudget, Runtime};
 pub use sequence::{FrameInfo, FrameSet};
-pub use stack::{Method, Rejection, StackOptions, StackResult, stack, stack_calibrated};
+pub use stack::{
+    BlockSource, LoadedFrames, Method, NormMethod, Normalization, Rejection, StackOptions,
+    StackResult, stack, stack_calibrated, stack_normalized,
+};
 pub use stats::ChannelStats;
