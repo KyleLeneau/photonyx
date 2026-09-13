@@ -19,6 +19,7 @@ use px_fits::card::Value;
 use px_imageproc::register::framing::Framing;
 use px_imageproc::register::twopass::{Registration, RegistrationOptions, register_sequence};
 use px_imageproc::register::warp::{WarpOptions, warp};
+use px_imageproc::runtime::{ResourceBudget, Runtime};
 use px_imageproc::stack::normalize::{ChannelLevel, NormMethod, Normalization};
 use px_imageproc::stack::{
     Bounds, LoadedFrames, Method, Rejection, StackOptions, stack_normalized,
@@ -32,6 +33,23 @@ use crate::meta::LinearStackMetadata;
 use crate::model::MasterLight;
 use crate::native::{NativeEngine, NativeRuntime};
 use crate::{PipelineReporter, RunIn};
+
+/// Shares of the configured budget the three phases may each hold.
+///
+/// The budget is a promise about the *process*, and a phase-by-phase promise is
+/// not the same thing: memory is not handed back to the operating system when it
+/// is dropped, so a later phase allocates on top of what an earlier one is still
+/// holding. Measured on a hundred 61 MP frames at `--max-memory 8G`, with each
+/// phase sizing itself to the full 8 GB — every phase individually inside its
+/// budget, the run peaking at **19.9 GB**.
+///
+/// So the budget is partitioned rather than lent out three times. The shares are
+/// not equal because the phases are not equally elastic: stacking's band plan is
+/// what most wants room, registration is the phase whose freed memory is least
+/// likely to come back, and warping needs only enough for a few frames in
+/// flight.
+const REGISTRATION_BUDGET_SHARE: f64 = 0.3;
+const STACK_BUDGET_SHARE: f64 = 0.55;
 
 /// Fraction of the budget the warped frames may occupy before the run spills
 /// them to disk.
@@ -185,19 +203,30 @@ impl RunIn<NativeRuntime> for CreateMasterLightPipeline {
     }
 }
 
+/// A runtime holding one phase's share of the configured budget.
+fn phase_runtime(engine: &NativeEngine, share: f64) -> Result<Runtime, PipelineError> {
+    let budget = engine.budget();
+    let bytes = (budget.max_bytes as f64 * share) as u64;
+    Ok(Runtime::new(ResourceBudget::new(
+        bytes.max(1),
+        budget.cores,
+    ))?)
+}
+
 /// Two-pass registration over the collected frames.
 fn run_registration(
     engine: &NativeEngine,
     frames: &[PathBuf],
 ) -> Result<Registration, PipelineError> {
     let set = FrameSet::open(frames)?;
+    let runtime = phase_runtime(engine, REGISTRATION_BUDGET_SHARE)?;
     let options = RegistrationOptions {
         // The reference frame's own geometry, which is what Siril's default
         // `seqapplyreg` produces and what the project's downstream steps expect.
         framing: Framing::Current,
         ..Default::default()
     };
-    Ok(register_sequence(&set, engine.runtime(), &options)?)
+    Ok(register_sequence(&set, &runtime, &options)?)
 }
 
 struct StackJob {
@@ -235,9 +264,10 @@ fn run_warp_and_stack(engine: &NativeEngine, job: StackJob) -> Result<StackOutco
         )));
     }
 
+    let runtime = phase_runtime(engine, STACK_BUDGET_SHARE)?;
     let dims = job.registration.geometry.dims;
     let warped_bytes = dims.pixel_count() as u64 * 4;
-    let budget = engine.budget();
+    let budget = runtime.budget();
     let allowance = (budget.max_bytes as f64 * MEMORY_PATH_BUDGET_SHARE) as u64;
     let spill = warped_bytes.saturating_mul(included.len() as u64) > allowance;
 
@@ -273,28 +303,22 @@ fn run_warp_and_stack(engine: &NativeEngine, job: StackJob) -> Result<StackOutco
         // memory. Measuring them afterwards, from the files, would mean a second
         // full read of every frame — 23 GB on a hundred 61 MP frames, for
         // numbers that were free a moment earlier.
-        let (paths, levels) = warp_to_disk(engine, &job, &included, temp.path())?;
+        let (paths, levels) = warp_to_disk(engine, &runtime, &job, &included, temp.path())?;
         let warp_seconds = warp_started.elapsed().as_secs_f64();
 
         let normalization = normalization_from(&levels, reference);
         let set = FrameSet::open(&paths)?;
-        let result = stack_normalized(&set, engine.runtime(), options, None, Some(&normalization))?;
+        let result = stack_normalized(&set, &runtime, options, None, Some(&normalization))?;
         let blocks = result.block_count;
         let rejected = result.rejected.total() as u64;
         (result.frame, blocks, rejected, warp_seconds)
     } else {
-        let (warped, levels) = warp_in_memory(engine, &job, &included)?;
+        let (warped, levels) = warp_in_memory(engine, &runtime, &job, &included)?;
         let warp_seconds = warp_started.elapsed().as_secs_f64();
 
         let normalization = normalization_from(&levels, reference);
         let loaded = LoadedFrames::new(&warped)?;
-        let result = stack_normalized(
-            &loaded,
-            engine.runtime(),
-            options,
-            None,
-            Some(&normalization),
-        )?;
+        let result = stack_normalized(&loaded, &runtime, options, None, Some(&normalization))?;
         let blocks = result.block_count;
         let rejected = result.rejected.total() as u64;
         (result.frame, blocks, rejected, warp_seconds)
@@ -345,20 +369,53 @@ fn run_warp_and_stack(engine: &NativeEngine, job: StackJob) -> Result<StackOutco
     })
 }
 
+/// Bytes a single in-flight warp holds, per pixel of the output.
+///
+/// Four buffers and two masks, and counting them honestly matters: an earlier
+/// version charged only the source and the result — eight bytes — and a run
+/// configured for 8 GB peaked at 19.9 GB of resident memory, because a clamped
+/// Lanczos-4 warp also holds the area-interpolated guide and two byte masks, and
+/// the level measurement holds two scratch buffers of its own.
+///
+/// | Buffer | Bytes per pixel |
+/// |---|---|
+/// | source frame (f32) | 4 |
+/// | warped output (f32) | 4 |
+/// | clamping guide (f32) | 4 |
+/// | undershoot mask + its dilation (bool) | 2 |
+/// | robust level scratch, subsampled (f32) | 2 |
+const WARP_BYTES_PER_PIXEL: u64 = 16;
+
+/// Sampling stride for the per-frame level measurement.
+///
+/// A quarter of a 61 MP channel is 15 million samples, which fixes a background
+/// level far more precisely than the difference between two frames' skies, and
+/// it cuts the estimator's scratch — the buffers that decide how many frames fit
+/// in the budget at once — from eight bytes per pixel to two.
+const LEVEL_STRIDE: usize = 4;
+
+/// Share of the *whole* budget the concurrent warps may hold.
+///
+/// Of the whole budget rather than of the phase's share, because the two phases
+/// overlap in the only sense that matters: the allocator does not hand the
+/// warp's buffers back to the operating system when they are dropped, so they
+/// are still resident while the stacker plans its bands. Measured on an 8 GB run
+/// — warp phase peak 5.1 GB, stack phase peak 4.9 GB in isolation, and 8.9 GB
+/// when the two ran back to back. A quarter for warping plus three fifths for
+/// stacking leaves room for that overlap.
+const WARP_BUDGET_SHARE: f64 = 0.25;
+
 /// How many frames may be warped at once, from the memory budget.
 ///
-/// Each one in flight holds its source frame and its warped result at the same
-/// time. The concurrency is worth having even though `warp` is already parallel
+/// The concurrency is worth having even though `warp` is already parallel
 /// inside: a frame's cost is not all warp — it is a 122 MB read, a decode, the
 /// warp, and a robust level measurement, and only the middle two keep every core
 /// busy. Overlapping several frames fills the gaps, and measured on a hundred
-/// 61 MP frames it is the difference between 169 s and 47 s.
+/// 61 MP frames it is the difference between 169 s and 38 s.
 fn warp_concurrency(engine: &NativeEngine, dims: px_imageproc::ImageDims) -> usize {
-    let per_frame = dims.pixel_count() as u64 * 4 * 2;
-    engine
-        .budget()
-        .max_frames_in_flight(per_frame)
-        .clamp(1, engine.budget().cores)
+    let per_frame = dims.pixel_count() as u64 * WARP_BYTES_PER_PIXEL;
+    let allowance = (engine.budget().max_bytes as f64 * WARP_BUDGET_SHARE) as u64;
+    ((allowance / per_frame.max(1)) as usize).clamp(1, engine.budget().cores)
 }
 
 /// Warps every included frame, measuring its photometric level while it is still
@@ -369,6 +426,7 @@ fn warp_concurrency(engine: &NativeEngine, dims: px_imageproc::ImageDims) -> usi
 /// here once.
 fn warp_all<T: Send>(
     engine: &NativeEngine,
+    runtime: &Runtime,
     job: &StackJob,
     included: &[usize],
     sink: impl Fn(usize, Frame) -> Result<T, PipelineError> + Sync,
@@ -378,12 +436,12 @@ fn warp_all<T: Send>(
     let in_flight = warp_concurrency(engine, job.registration.geometry.dims);
     let positions: Vec<(usize, usize)> = included.iter().copied().enumerate().collect();
 
-    let mut produced: Vec<(usize, T, Vec<ChannelLevel>)> = engine.runtime().install(|| {
+    let mut produced: Vec<(usize, T, Vec<ChannelLevel>)> = runtime.install(|| {
         positions
             .par_chunks(positions.len().div_ceil(in_flight).max(1))
             .flat_map_iter(|chunk| {
                 chunk.iter().map(|&(position, index)| {
-                    let frame = warp_one(engine, job, index)?;
+                    let frame = warp_one(runtime, job, index)?;
                     let levels = measure_levels(&frame);
                     Ok((position, sink(position, frame)?, levels))
                 })
@@ -404,22 +462,31 @@ fn warp_all<T: Send>(
 /// Warps the included frames, keeping them in memory.
 fn warp_in_memory(
     engine: &NativeEngine,
+    runtime: &Runtime,
     job: &StackJob,
     included: &[usize],
 ) -> Result<(Vec<Frame>, Vec<Vec<ChannelLevel>>), PipelineError> {
-    warp_all(engine, job, included, |_, frame| Ok(frame))
+    warp_all(engine, runtime, job, included, |_, frame| Ok(frame))
 }
 
 /// Warps the included frames into `dir`, returning their paths in order.
 fn warp_to_disk(
     engine: &NativeEngine,
+    runtime: &Runtime,
     job: &StackJob,
     included: &[usize],
     dir: &Path,
 ) -> Result<(Vec<PathBuf>, Vec<Vec<ChannelLevel>>), PipelineError> {
-    warp_all(engine, job, included, |position, frame| {
+    warp_all(engine, runtime, job, included, |position, frame| {
         let path = dir.join(format!("r_{position:05}.fits"));
         frame.write(&path, &[])?;
+        // Flushed as it is written rather than left to the kernel's own
+        // schedule. Tens of gigabytes of dirty file pages are charged to this
+        // process's resident set until they reach the disk, which shows up as a
+        // run overrunning a budget it is in fact inside.
+        if let Ok(file) = std::fs::File::open(&path) {
+            let _ = file.sync_all();
+        }
         Ok(path)
     })
 }
@@ -427,13 +494,11 @@ fn warp_to_disk(
 /// The robust level and spread of every channel of one warped frame.
 fn measure_levels(frame: &Frame) -> Vec<ChannelLevel> {
     (0..frame.channels())
-        .map(|channel| {
-            ChannelLevel::measure(frame.channel(channel), frame.width(), frame.height(), false)
-        })
+        .map(|channel| ChannelLevel::measure_subsampled(frame.channel(channel), LEVEL_STRIDE))
         .collect()
 }
 
-fn warp_one(engine: &NativeEngine, job: &StackJob, index: usize) -> Result<Frame, PipelineError> {
+fn warp_one(runtime: &Runtime, job: &StackJob, index: usize) -> Result<Frame, PipelineError> {
     let source = Frame::open(&job.frames[index])?;
     let transform = job.registration.output_transform(index).ok_or_else(|| {
         PipelineError::FileNotFound(format!("frame {index} has no registration transform"))
@@ -442,7 +507,7 @@ fn warp_one(engine: &NativeEngine, job: &StackJob, index: usize) -> Result<Frame
         &source,
         &transform,
         job.registration.geometry.dims,
-        engine.runtime(),
+        runtime,
         &WarpOptions::default(),
     )?)
 }

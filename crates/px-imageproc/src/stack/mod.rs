@@ -122,6 +122,16 @@ pub trait BlockSource: Sync {
     ) -> Result<(), ImageProcError>;
     /// The header the output frame inherits.
     fn first_header(&self) -> Option<px_fits::header::Header>;
+
+    /// Bytes this source itself keeps resident while it is being read.
+    ///
+    /// Zero for frames on disk, which are read a band at a time; the whole
+    /// sequence for frames already in memory. The block planner charges it
+    /// before sizing the bands, so an in-memory stack cannot plan bands that
+    /// only fit if you ignore the frames they are read from.
+    fn resident_bytes(&self) -> u64 {
+        0
+    }
 }
 
 impl BlockSource for FrameSet {
@@ -214,6 +224,12 @@ impl BlockSource for LoadedFrames<'_> {
     fn first_header(&self) -> Option<px_fits::header::Header> {
         self.frames.first().map(|f| f.header().clone())
     }
+
+    fn resident_bytes(&self) -> u64 {
+        self.frames.len() as u64
+            * self.dims.pixel_count() as u64
+            * std::mem::size_of::<f32>() as u64
+    }
 }
 
 /// Reduces `set` to a single frame.
@@ -284,7 +300,8 @@ pub fn stack_normalized<S: BlockSource>(
             dims.channels
         )));
     }
-    let resident = subtract.map_or(0, |m| m.data().len() as u64 * elem_size as u64);
+    let resident =
+        subtract.map_or(0, |m| m.data().len() as u64 * elem_size as u64) + set.resident_bytes();
 
     // Validated before being simplified away: a caller whose coefficient count
     // does not match the sequence has a bug whether or not those coefficients

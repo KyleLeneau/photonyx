@@ -124,6 +124,24 @@ pub struct ChannelLevel {
 }
 
 impl ChannelLevel {
+    /// Measures one channel from every `stride`-th sample.
+    ///
+    /// Neither estimator uses the spatial arrangement of the data — they are
+    /// order statistics of the values — so a regular subsample measures the same
+    /// quantity from fewer samples. At stride 4 a 61 MP channel still yields 15
+    /// million samples, which pins a location to a part in four thousand of the
+    /// spread, far finer than the difference between two frames' sky levels.
+    ///
+    /// What it buys is memory: the robust estimators need scratch buffers the
+    /// size of the data they are given, and in a pipeline that warps several
+    /// frames at once those buffers are what decides how many fit in the budget.
+    pub fn measure_subsampled(channel: &[f32], stride: usize) -> Self {
+        let sampled: Vec<f32> = channel.iter().copied().step_by(stride.max(1)).collect();
+        // Width and height are only used by estimators this does not call; the
+        // sampled data has no meaningful shape.
+        Self::measure(&sampled, sampled.len(), 1, false)
+    }
+
     /// Measures one channel. `lite` uses the median and `1.5 × MAD` instead of
     /// the clipped biweight pair — a few percent less accurate and a great deal
     /// faster, which is the trade Siril exposes and this mirrors.
@@ -434,6 +452,33 @@ mod tests {
             (full.scale - lite.scale).abs() / full.scale < 0.05,
             "full {full:?} vs lite {lite:?}"
         );
+    }
+
+    #[test]
+    fn a_subsample_measures_the_same_levels() {
+        let (width, height) = (400, 300);
+        let mut data = normal_noise(width * height, 0.1, 0.010, 0xDEAD);
+        for i in 0..600 {
+            data[i * 131 % (width * height)] = 0.9;
+        }
+
+        let full = ChannelLevel::measure(&data, width, height, false);
+        for stride in [2usize, 4, 8] {
+            let sampled = ChannelLevel::measure_subsampled(&data, stride);
+            // Stated as a fraction of the spread, not as an absolute: what a
+            // subsample costs is sampling error, which scales with the noise. On
+            // this deliberately noisy fixture (sigma is 40x a real frame's) 2% of
+            // the spread is the bound; on a real frame the same subsample lands
+            // four orders of magnitude closer.
+            assert!(
+                (sampled.location - full.location).abs() < 0.02 * full.scale,
+                "stride {stride}: {sampled:?} vs {full:?}"
+            );
+            assert!(
+                (sampled.scale - full.scale).abs() / full.scale < 0.02,
+                "stride {stride}: {sampled:?} vs {full:?}"
+            );
+        }
     }
 
     #[test]
