@@ -14,6 +14,11 @@ pub enum ImageProcError {
     #[error("memory budget too small to hold {what}")]
     InsufficientMemory { what: String },
 
+    /// A registration step could not produce a transform: too few
+    /// correspondences, a degenerate fit, or a matcher that found nothing.
+    #[error("registration failed: {0}")]
+    Registration(String),
+
     #[error("no frames to process")]
     EmptySequence,
 
