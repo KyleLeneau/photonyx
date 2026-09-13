@@ -36,6 +36,10 @@ harness = false
 name = "stack"
 harness = false
 
+[[bench]]
+name = "register"
+harness = false
+
 [lints]
 workspace = true
 

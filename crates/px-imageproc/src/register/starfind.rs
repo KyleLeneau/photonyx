@@ -112,6 +112,14 @@ impl Default for StarfindOptions {
 /// it.
 pub const MIN_BETA: f64 = 1.5;
 
+/// Bounds on the candidate batch the fitter works through at a time.
+///
+/// Small batches would leave the thread pool idle between them; enormous ones
+/// would defeat the point of batching, which is to stop early once the star cap
+/// is met.
+const MIN_FIT_CHUNK: usize = 1024;
+const MAX_FIT_CHUNK: usize = 65_536;
+
 /// Ceiling on fitted stars per frame.
 ///
 /// Registration converges on far fewer than this, and the triangle matching of
@@ -301,6 +309,10 @@ pub fn suppress_duplicates<T>(
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct StarfindReport {
     pub candidates: usize,
+    /// Candidates actually fitted. Lower than `candidates` when the star cap
+    /// was reached before the list was exhausted; the rejection counts below
+    /// cover these only.
+    pub considered: usize,
     pub fitted: usize,
     pub kept: usize,
     pub duplicates: usize,
@@ -357,32 +369,51 @@ pub fn find_stars_reported(
         ..Default::default()
     };
 
-    // Fitting is the expensive half and every candidate is independent, so
-    // this is where the parallelism belongs. The outcome per candidate is
-    // collected rather than filtered in place, so the rejection counts survive
-    // and the order stays the brightest-first order detection produced —
-    // which is what makes the whole pass reproducible.
-    let outcomes: Vec<Result<PsfStar, Option<Rejected>>> = candidates
-        .par_iter()
-        .map(|candidate| {
-            let Some(mut star) = psf::fit_candidate(channel, width, height, candidate, &options)
-            else {
-                return Err(None);
-            };
-            star.layer = layer;
-            match psf::accept(&star, candidate, &options) {
-                Ok(()) => Ok(star),
-                Err(reason) => Err(Some(reason)),
-            }
-        })
-        .collect();
+    // Candidates are fitted in brightest-first chunks and the pass stops once
+    // the cap is satisfied. On a rich 61 MP frame detection yields well over a
+    // hundred thousand candidates against a default cap of two thousand stars,
+    // and fitting is two orders of magnitude dearer per candidate than
+    // detecting — so fitting all of them would spend most of a frame's budget
+    // producing stars that are then discarded. The order is the deterministic
+    // brightest-first order, so which stars survive does not depend on where
+    // the chunk boundaries fell.
+    let chunk = options
+        .max_stars
+        .saturating_mul(2)
+        .clamp(MIN_FIT_CHUNK, MAX_FIT_CHUNK);
 
-    let mut stars = Vec::with_capacity(outcomes.len());
-    for outcome in outcomes {
-        match outcome {
-            Ok(star) => stars.push(star),
-            Err(None) => report.failed_to_converge += 1,
-            Err(Some(reason)) => report.count(reason),
+    let mut stars: Vec<PsfStar> = Vec::new();
+    for batch in candidates.chunks(chunk) {
+        // Every candidate in a batch is independent, which is where the
+        // parallelism belongs. Outcomes are collected rather than filtered in
+        // place so the rejection counts survive and the order stays the one
+        // detection produced — that is what makes the pass reproducible.
+        let outcomes: Vec<Result<PsfStar, Option<Rejected>>> = batch
+            .par_iter()
+            .map(|candidate| {
+                let Some(mut star) =
+                    psf::fit_candidate(channel, width, height, candidate, &options)
+                else {
+                    return Err(None);
+                };
+                star.layer = layer;
+                match psf::accept(&star, candidate, &options) {
+                    Ok(()) => Ok(star),
+                    Err(reason) => Err(Some(reason)),
+                }
+            })
+            .collect();
+
+        report.considered += batch.len();
+        for outcome in outcomes {
+            match outcome {
+                Ok(star) => stars.push(star),
+                Err(None) => report.failed_to_converge += 1,
+                Err(Some(reason)) => report.count(reason),
+            }
+        }
+        if stars.len() >= options.max_stars {
+            break;
         }
     }
     report.fitted = stars.len();
