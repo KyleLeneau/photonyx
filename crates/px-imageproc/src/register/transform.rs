@@ -432,7 +432,14 @@ fn fit_linear<const P: usize>(pairs: &[Correspondence]) -> Result<Matrix3<f64>, 
 /// constraint matrix, taken as the right singular vector of its smallest
 /// singular value.
 fn fit_homography(pairs: &[Correspondence]) -> Result<Matrix3<f64>, ImageProcError> {
-    let mut a = DMatrix::<f64>::zeros(2 * pairs.len(), 9);
+    // At least 9 rows, so that the SVD's right factor is the full 9x9 and
+    // includes the null direction being solved for. `nalgebra` computes a thin
+    // SVD: the exactly-four-pair case builds an 8x9 matrix whose right factor
+    // is 8x9, and the smallest of those eight singular vectors is *not* the
+    // null vector — the homography that comes back satisfies the four pairs it
+    // was given and nothing else. The padding rows are zero, which leaves AᵗA
+    // and therefore the null space untouched.
+    let mut a = DMatrix::<f64>::zeros((2 * pairs.len()).max(9), 9);
     for (i, pair) in pairs.iter().enumerate() {
         let (x, y) = (pair.from.x, pair.from.y);
         let (u, v) = (pair.to.x, pair.to.y);
@@ -473,17 +480,308 @@ fn fit_homography(pairs: &[Correspondence]) -> Result<Matrix3<f64>, ImageProcErr
     ))
 }
 
+/// Reprojection distance, in pixels, within which a correspondence supports a
+/// transform.
+///
+/// 3.0 px is OpenCV's `defaultRANSACReprojThreshold`, which is also what Siril
+/// registers with. It is deliberately several times the centroid accuracy of a
+/// single star (0.02 px on a good one): the threshold's job is to separate
+/// correct correspondences from wrong ones — a wrong pair is typically tens or
+/// hundreds of pixels out — not to judge how well a correct one was measured.
+/// That second job belongs to the refinement pass, which re-cuts on the
+/// residual distribution the data actually has.
+pub const DEFAULT_REPROJECTION_THRESHOLD: f64 = 3.0;
+
+/// Probability that the sampling loop has drawn at least one all-inlier
+/// minimal set, which is what sets the adaptive iteration count.
+const DEFAULT_CONFIDENCE: f64 = 0.995;
+
+/// Hard ceiling on sampling iterations, for the case where the inlier ratio is
+/// so low that the adaptive count is astronomical.
+const DEFAULT_MAX_ITERATIONS: usize = 2000;
+
+/// Rounds of reject-and-refit the refinement pass performs.
+const MAX_REFINE_ROUNDS: usize = 5;
+
+/// Residual, in multiples of the current RMSE, beyond which refinement drops a
+/// correspondence.
+const REFINE_SIGMAS: f64 = 3.0;
+
+/// How a robust fit is configured.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RansacOptions {
+    pub threshold: f64,
+    pub confidence: f64,
+    pub max_iterations: usize,
+    /// Seed for the sampling sequence. Fixed rather than drawn from the
+    /// environment: a registration that produced a different transform on a
+    /// re-run would make every parity test in this crate meaningless, and
+    /// "which random minimal sets were tried" is not information a user has any
+    /// use for.
+    pub seed: u64,
+    /// Fewest correspondences a fit is allowed to rest on, over and above the
+    /// class minimum. Siril's registration default is 10 (ADR 007 D10).
+    pub min_pairs: usize,
+}
+
+impl Default for RansacOptions {
+    fn default() -> Self {
+        Self {
+            threshold: DEFAULT_REPROJECTION_THRESHOLD,
+            confidence: DEFAULT_CONFIDENCE,
+            max_iterations: DEFAULT_MAX_ITERATIONS,
+            seed: 0x5741_1F7A_0000_0007,
+            min_pairs: 10,
+        }
+    }
+}
+
+/// A fitted transform and the evidence for it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Fit {
+    pub transform: Transform,
+    /// Indices into the input correspondences that support the transform.
+    pub inliers: Vec<usize>,
+    /// RMS reprojection residual over the inliers, in pixels.
+    pub rmse: f64,
+    /// Sampling iterations actually performed.
+    pub iterations: usize,
+}
+
+impl Fit {
+    pub fn inlier_count(&self) -> usize {
+        self.inliers.len()
+    }
+}
+
+/// Deterministic PRNG for the sampling loop.
+///
+/// Splitmix64 rather than a dependency: the loop needs uniform indices and
+/// reproducibility, and nothing about the statistical quality of a minimal-set
+/// sampler justifies pulling `rand` into the algorithm core.
+struct SplitMix64(u64);
+
+impl SplitMix64 {
+    fn next_u64(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// Uniform in `0..n`, via Lemire's multiply-shift. Biased by less than one
+    /// part in 2^64 over an index range, which is immaterial here.
+    fn below(&mut self, n: usize) -> usize {
+        ((self.next_u64() as u128 * n as u128) >> 64) as usize
+    }
+}
+
+/// Fits a transform of class `kind` to `pairs`, rejecting outliers by RANSAC
+/// (Fischler & Bolles, *Random Sample Consensus*, Comm. ACM 24(6), 1981).
+///
+/// Minimal sets are drawn at random, scored by how many correspondences they
+/// reproject within the threshold, and the best consensus set is refitted in
+/// full. The iteration count adapts: every time the best inlier ratio improves,
+/// the number of draws needed to reach `confidence` is recomputed, so a clean
+/// star list costs a handful of iterations and only a contaminated one pays for
+/// thousands.
+pub fn ransac(
+    kind: TransformKind,
+    pairs: &[Correspondence],
+    options: &RansacOptions,
+) -> Result<Fit, ImageProcError> {
+    let minimum = kind.minimum_pairs().max(1);
+    let floor = options.min_pairs.max(minimum);
+    if pairs.len() < floor {
+        return Err(ImageProcError::Registration(format!(
+            "{kind:?} needs at least {floor} correspondences, got {}",
+            pairs.len()
+        )));
+    }
+
+    let mut rng = SplitMix64(options.seed);
+    let mut best: Option<(Vec<usize>, f64)> = None;
+    let mut required = options.max_iterations;
+    let mut iterations = 0usize;
+
+    while iterations < required.min(options.max_iterations) {
+        iterations += 1;
+
+        let sample = draw_sample(&mut rng, pairs.len(), minimum);
+        let subset: Vec<Correspondence> = sample.iter().map(|&i| pairs[i]).collect();
+        let Ok(candidate) = estimate(kind, &subset) else {
+            continue;
+        };
+
+        let (inliers, residual) = consensus(&candidate, pairs, options.threshold);
+        let better = match &best {
+            None => true,
+            // More support wins; equal support is broken on the tighter fit, so
+            // the result does not depend on which equally-sized consensus set
+            // the sampler happened to find first.
+            Some((best_inliers, best_residual)) => {
+                inliers.len() > best_inliers.len()
+                    || (inliers.len() == best_inliers.len() && residual < *best_residual)
+            }
+        };
+        if better {
+            let ratio = inliers.len() as f64 / pairs.len() as f64;
+            best = Some((inliers, residual));
+            required = iterations_for(ratio, minimum, options.confidence);
+        }
+    }
+
+    let (inliers, _) = best.ok_or_else(|| {
+        ImageProcError::Registration("no minimal set produced a usable transform".into())
+    })?;
+    if inliers.len() < floor {
+        return Err(ImageProcError::Registration(format!(
+            "only {} of {} correspondences agree within {} px",
+            inliers.len(),
+            pairs.len(),
+            options.threshold
+        )));
+    }
+
+    // The reported transform is refitted over the whole consensus set, not the
+    // minimal set that found it: the minimal set fixes *which* correspondences
+    // are trusted, and all of them together fix the transform.
+    let subset: Vec<Correspondence> = inliers.iter().map(|&i| pairs[i]).collect();
+    let transform = estimate(kind, &subset)?;
+    Ok(Fit {
+        rmse: transform.rmse(&subset),
+        transform,
+        inliers,
+        iterations,
+    })
+}
+
+/// [`ransac`] followed by reject-and-refit rounds (ADR 007 P8-T5).
+///
+/// RANSAC's threshold is fixed and generous, so its consensus set still holds
+/// correspondences that agree to 2 px when the rest agree to 0.05 px. Each
+/// round recomputes the residual spread of the surviving pairs and drops those
+/// beyond `REFINE_SIGMAS` of it, then refits — the cut tightens with the data
+/// instead of being stated in advance. It stops when a round rejects nothing,
+/// when the next round would leave too few pairs, or when the RMSE stops
+/// improving.
+pub fn refine(
+    kind: TransformKind,
+    pairs: &[Correspondence],
+    options: &RansacOptions,
+) -> Result<Fit, ImageProcError> {
+    let mut fit = ransac(kind, pairs, options)?;
+    let floor = options.min_pairs.max(kind.minimum_pairs().max(1));
+
+    for _ in 0..MAX_REFINE_ROUNDS {
+        let cut = REFINE_SIGMAS * fit.rmse;
+        // A fit with no residual spread at all is already exact; tightening
+        // the cut further would reject every pair on floating-point noise.
+        if cut <= f64::EPSILON {
+            break;
+        }
+
+        let kept: Vec<usize> = fit
+            .inliers
+            .iter()
+            .copied()
+            .filter(|&i| fit.transform.apply(pairs[i].from).distance(&pairs[i].to) <= cut)
+            .collect();
+        if kept.len() == fit.inliers.len() || kept.len() < floor {
+            break;
+        }
+
+        let subset: Vec<Correspondence> = kept.iter().map(|&i| pairs[i]).collect();
+        let Ok(transform) = estimate(kind, &subset) else {
+            break;
+        };
+        let rmse = transform.rmse(&subset);
+        if rmse >= fit.rmse {
+            // Rejecting these pairs did not improve the fit, so they were not
+            // outliers and the previous answer stands.
+            break;
+        }
+        fit = Fit {
+            transform,
+            inliers: kept,
+            rmse,
+            iterations: fit.iterations,
+        };
+    }
+    Ok(fit)
+}
+
+/// Draws `count` distinct indices below `n`.
+///
+/// Rejection sampling against the few already drawn, which is the cheap way
+/// round at these sizes: `count` is 1 to 4 and `n` is hundreds, so a collision
+/// is rare and a shuffle of the whole index range per iteration would cost more
+/// than the fit it feeds.
+fn draw_sample(rng: &mut SplitMix64, n: usize, count: usize) -> Vec<usize> {
+    let mut sample = Vec::with_capacity(count);
+    while sample.len() < count {
+        let candidate = rng.below(n);
+        if !sample.contains(&candidate) {
+            sample.push(candidate);
+        }
+    }
+    sample
+}
+
+/// The correspondences `candidate` reprojects within `threshold`, and their RMS
+/// residual.
+fn consensus(candidate: &Transform, pairs: &[Correspondence], threshold: f64) -> (Vec<usize>, f64) {
+    let mut inliers = Vec::new();
+    let mut sum_squared = 0.0;
+    for (i, pair) in pairs.iter().enumerate() {
+        let distance = candidate.apply(pair.from).distance(&pair.to);
+        if distance <= threshold {
+            inliers.push(i);
+            sum_squared += distance * distance;
+        }
+    }
+    let rmse = if inliers.is_empty() {
+        f64::INFINITY
+    } else {
+        (sum_squared / inliers.len() as f64).sqrt()
+    };
+    (inliers, rmse)
+}
+
+/// Iterations needed for `confidence` that some minimal set of `size` was drawn
+/// entirely from inliers, given an inlier `ratio`.
+///
+/// `log(1 − confidence) / log(1 − ratio^size)`, the standard adaptive-stopping
+/// rule. Returns 1 for a ratio of 1 (the first draw was already clean) and the
+/// caller's ceiling for a ratio of 0.
+fn iterations_for(ratio: f64, size: usize, confidence: f64) -> usize {
+    if ratio <= 0.0 {
+        return usize::MAX;
+    }
+    let all_inliers = ratio.powi(size as i32);
+    if all_inliers >= 1.0 {
+        return 1;
+    }
+    let needed = (1.0 - confidence).ln() / (1.0 - all_inliers).ln();
+    if !needed.is_finite() || needed < 1.0 {
+        return 1;
+    }
+    needed.ceil() as usize
+}
+
+/// Fixtures shared by this module's two test modules.
 #[cfg(test)]
-mod tests {
+mod tests_support {
     use super::*;
 
-    const WIDTH: usize = 4000;
-    const HEIGHT: usize = 3000;
+    pub const WIDTH: usize = 4000;
+    pub const HEIGHT: usize = 3000;
 
     /// A spread of points across a frame, which is what the corner-error and
     /// estimation tests need: correspondences clustered in one corner constrain
     /// a projective term barely at all.
-    fn grid() -> Vec<Point> {
+    pub fn grid() -> Vec<Point> {
         let mut points = Vec::new();
         for row in 0..5 {
             for column in 0..5 {
@@ -496,7 +794,7 @@ mod tests {
         points
     }
 
-    fn pairs_under(t: &Transform) -> Vec<Correspondence> {
+    pub fn pairs_under(t: &Transform) -> Vec<Correspondence> {
         grid()
             .into_iter()
             .map(|from| Correspondence {
@@ -505,6 +803,12 @@ mod tests {
             })
             .collect()
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tests_support::*;
+    use super::*;
 
     #[test]
     fn apply_and_invert_round_trip() {
@@ -641,6 +945,34 @@ mod tests {
     }
 
     #[test]
+    fn a_homography_from_exactly_four_pairs_is_exact() {
+        // The minimum for the class, and the case where a thin SVD silently
+        // returns the wrong singular vector if the constraint matrix is not
+        // padded to nine rows.
+        let truth = Transform::from_matrix(Matrix3::new(
+            1.002, 0.009, 14.0, -0.006, 0.998, -21.0, 2.4e-7, -3.1e-7, 1.0,
+        ))
+        .expect("finite");
+        let corners = [
+            Point::new(40.0, 30.0),
+            Point::new(3900.0, 60.0),
+            Point::new(80.0, 2900.0),
+            Point::new(3950.0, 2950.0),
+        ];
+        let pairs: Vec<Correspondence> = corners
+            .into_iter()
+            .map(|from| Correspondence {
+                from,
+                to: truth.apply(from),
+            })
+            .collect();
+
+        let fitted = estimate(TransformKind::Homography, &pairs).expect("estimate");
+        let error = fitted.corner_error(&truth, WIDTH, HEIGHT);
+        assert!(error < 1e-6, "corner error {error:.3e} px");
+    }
+
+    #[test]
     fn normalization_makes_the_dlt_survive_real_pixel_magnitudes() {
         // Corner-to-corner correspondences on a 9576x6388 frame with a genuine
         // projective term: the unnormalized DLT is measurably wrong on this
@@ -669,5 +1001,131 @@ mod tests {
         let fitted = estimate(TransformKind::Homography, &pairs).expect("estimate");
         let error = fitted.corner_error(&truth, 9576, 6388);
         assert!(error < 1e-6, "corner error {error:.3e} px");
+    }
+}
+
+#[cfg(test)]
+mod robust_tests {
+    use super::tests_support::*;
+    use super::*;
+
+    #[test]
+    fn ransac_ignores_gross_outliers() {
+        let truth = Transform::similarity(1.004, 0.013, 21.5, -8.75);
+        let mut pairs = pairs_under(&truth);
+        // A quarter of the correspondences are wrong by hundreds of pixels,
+        // which is what a mismatched triangle produces.
+        for (i, pair) in pairs.iter_mut().enumerate() {
+            if i % 4 == 0 {
+                pair.to = Point::new(pair.to.x + 400.0 - 13.0 * i as f64, pair.to.y - 250.0);
+            }
+        }
+
+        let fit = ransac(TransformKind::Similarity, &pairs, &RansacOptions::default())
+            .expect("robust fit");
+        assert_eq!(fit.inlier_count(), pairs.len() - pairs.len().div_ceil(4));
+        let error = fit.transform.corner_error(&truth, WIDTH, HEIGHT);
+        assert!(error < 1e-6, "corner error {error:.3e} px");
+    }
+
+    #[test]
+    fn ransac_is_reproducible_and_seed_dependent() {
+        let truth = Transform::shift(31.0, -17.0);
+        let mut pairs = pairs_under(&truth);
+        pairs[3].to = Point::new(0.0, 0.0);
+
+        let options = RansacOptions::default();
+        let first = ransac(TransformKind::Shift, &pairs, &options).expect("fit");
+        let again = ransac(TransformKind::Shift, &pairs, &options).expect("fit");
+        assert_eq!(first, again);
+
+        // A different seed may take a different path, but must land on the
+        // same transform — the consensus set is a property of the data.
+        let other = ransac(
+            TransformKind::Shift,
+            &pairs,
+            &RansacOptions {
+                seed: 0xDEAD_BEEF,
+                ..options
+            },
+        )
+        .expect("fit");
+        assert!(
+            other
+                .transform
+                .corner_error(&first.transform, WIDTH, HEIGHT)
+                < 1e-9
+        );
+    }
+
+    #[test]
+    fn the_adaptive_count_stops_early_on_clean_data() {
+        let truth = Transform::similarity(1.0, 0.01, 5.0, 5.0);
+        let pairs = pairs_under(&truth);
+        let fit =
+            ransac(TransformKind::Similarity, &pairs, &RansacOptions::default()).expect("fit");
+        // Every correspondence is an inlier, so one good draw is enough.
+        assert!(fit.iterations <= 3, "{} iterations", fit.iterations);
+        assert_eq!(fit.inlier_count(), pairs.len());
+    }
+
+    #[test]
+    fn too_few_correspondences_is_an_error_not_a_guess() {
+        let truth = Transform::shift(1.0, 2.0);
+        let pairs = pairs_under(&truth);
+        let options = RansacOptions::default();
+        assert!(ransac(TransformKind::Homography, &pairs[..9], &options).is_err());
+
+        assert!(ransac(TransformKind::Homography, &pairs[..10], &options).is_ok());
+    }
+
+    #[test]
+    fn refinement_tightens_a_fit_ransac_left_loose() {
+        // One correspondence off by 2 px: inside RANSAC's 3 px threshold, but
+        // forty times the spread of the rest.
+        let truth = Transform::similarity(1.002, 0.008, 11.0, -5.0);
+        let mut pairs = pairs_under(&truth);
+        pairs[7].to = Point::new(pairs[7].to.x + 2.0, pairs[7].to.y + 0.5);
+
+        let options = RansacOptions::default();
+        let loose = ransac(TransformKind::Similarity, &pairs, &options).expect("fit");
+        let tight = refine(TransformKind::Similarity, &pairs, &options).expect("fit");
+
+        assert_eq!(
+            loose.inlier_count(),
+            pairs.len(),
+            "the 2 px pair is inside 3 px"
+        );
+        assert_eq!(tight.inlier_count(), pairs.len() - 1, "refinement drops it");
+        assert!(
+            tight.rmse < loose.rmse / 10.0,
+            "{} vs {}",
+            tight.rmse,
+            loose.rmse
+        );
+        assert!(
+            tight.transform.corner_error(&truth, WIDTH, HEIGHT)
+                < loose.transform.corner_error(&truth, WIDTH, HEIGHT)
+        );
+    }
+
+    #[test]
+    fn refinement_leaves_a_clean_fit_alone() {
+        let truth = Transform::similarity(1.0, 0.02, 9.0, 9.0);
+        let pairs = pairs_under(&truth);
+        let options = RansacOptions::default();
+        let fit = refine(TransformKind::Similarity, &pairs, &options).expect("fit");
+        assert_eq!(fit.inlier_count(), pairs.len());
+    }
+
+    #[test]
+    fn the_adaptive_iteration_formula_matches_its_definition() {
+        // Half the pairs are inliers and a shift needs one: 1 - 0.5 per draw,
+        // so reaching 99.5% takes ceil(ln 0.005 / ln 0.5) = 8 draws.
+        assert_eq!(iterations_for(0.5, 1, 0.995), 8);
+        // A homography needs four, so the same ratio costs far more.
+        assert_eq!(iterations_for(0.5, 4, 0.995), 83);
+        assert_eq!(iterations_for(1.0, 4, 0.995), 1);
+        assert_eq!(iterations_for(0.0, 4, 0.995), usize::MAX);
     }
 }

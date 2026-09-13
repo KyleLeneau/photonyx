@@ -15,7 +15,9 @@ pub use psf::{
     FwhmStats, Profile, PsfStar, Rejected, amplitude_threshold_for, filter_stars_by_amplitude,
     fwhm_stats,
 };
-pub use transform::{Correspondence, Point, Transform, TransformKind};
+pub use transform::{
+    Correspondence, Fit, Point, RansacOptions, Transform, TransformKind, estimate, ransac, refine,
+};
 
 pub use starfind::{
     Background, Candidate, StarfindOptions, StarfindReport, detect_candidates, find_stars,
