@@ -164,6 +164,75 @@ fn median_is_linear_on_duplicate_heavy_data() {
     );
 }
 
+/// The counting path and the quickselect path must produce the *same number*,
+/// not merely a close one: the median sets the detection threshold, and a
+/// threshold that moved when a frame crossed a size boundary would make star
+/// lists depend on the frame's dimensions.
+#[test]
+fn parallel_and_serial_medians_agree_exactly() {
+    // Comfortably over the size at which `median` switches to the counting
+    // passes, so both paths are genuinely exercised.
+    let n = 400_000usize;
+    let mut g = Gauss::new(4242);
+
+    let cases: Vec<(&str, Vec<f32>)> = vec![
+        // Continuous values, odd and even counts.
+        ("normal odd", (0..n + 1).map(|_| g.next() as f32).collect()),
+        ("normal even", (0..n).map(|_| g.next() as f32).collect()),
+        // A calibration frame: millions of samples over a few hundred levels,
+        // where most samples share a bucket and the second pass has to resolve
+        // them.
+        (
+            "quantized",
+            (0..n)
+                .map(|_| (302.0 + 6.0 * g.next()).round() as f32)
+                .collect(),
+        ),
+        // Negative values exercise the other branch of the order key, and a
+        // calibrated light frame genuinely contains them.
+        (
+            "signed",
+            (0..n).map(|_| -0.5 + g.next() as f32 * 0.01).collect(),
+        ),
+        // Zero is null, so these samples must be skipped by both paths alike.
+        (
+            "half null",
+            (0..n)
+                .map(|i| if i % 2 == 0 { 0.0 } else { g.next() as f32 })
+                .collect(),
+        ),
+        ("all identical", vec![0.125f32; n]),
+    ];
+
+    for (name, data) in cases {
+        let mut kept = non_null(&data);
+        let expected = median_in_place(&mut kept);
+        let got = median(&data);
+        assert_eq!(
+            got.to_bits(),
+            expected.to_bits(),
+            "{name}: parallel median {got} != serial {expected}"
+        );
+
+        // The MAD shares the counting machinery and adds the case that
+        // separates nullness from the mapped value: a sample sitting exactly
+        // at the centre deviates by zero and is still data.
+        let mut devs: Vec<f32> = data
+            .iter()
+            .copied()
+            .filter(|v| *v != 0.0 && !v.is_nan())
+            .map(|v| (v - expected).abs())
+            .collect();
+        let expected_mad = median_in_place(&mut devs);
+        let got_mad = mad(&data, expected);
+        assert_eq!(
+            got_mad.to_bits(),
+            expected_mad.to_bits(),
+            "{name}: parallel mad {got_mad} != serial {expected_mad}"
+        );
+    }
+}
+
 #[test]
 fn median_of_a_single_repeated_value_is_that_value() {
     // Degenerate version of the same hazard: every sample identical, so every
