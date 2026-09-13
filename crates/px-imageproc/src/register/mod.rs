@@ -10,7 +10,10 @@
 pub mod psf;
 pub mod starfind;
 
-pub use psf::{Profile, PsfStar, Rejected};
+pub use psf::{
+    FwhmStats, Profile, PsfStar, Rejected, amplitude_threshold_for, filter_stars_by_amplitude,
+    fwhm_stats,
+};
 pub use starfind::{
     Background, Candidate, StarfindOptions, StarfindReport, detect_candidates, find_stars,
     find_stars_reported,

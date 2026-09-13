@@ -625,6 +625,86 @@ pub fn accept(
     Ok(())
 }
 
+/// Summary statistics of a frame's star list.
+///
+/// Two-pass registration ranks frames on these (ADR 007 Phase 9): the FWHM is
+/// the frame's seeing and the star count is how much of the field came
+/// through, and the reference is the frame that is best on both at once.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FwhmStats {
+    pub count: usize,
+    /// Mean, median and spread of the major-axis FWHM, in pixels.
+    pub mean: f64,
+    pub median: f64,
+    pub sigma: f64,
+    pub min: f64,
+    pub max: f64,
+    /// Mean roundness, which distinguishes poor seeing from tracking error:
+    /// bad seeing inflates the FWHM isotropically, a drive error only along
+    /// one axis.
+    pub mean_roundness: f64,
+}
+
+/// Summarizes a star list, or `None` when it is empty.
+///
+/// The FWHM quoted is the *major* axis rather than the mean of both, because
+/// it is the one that bounds what registration can recover: a trailed frame
+/// with a 3 px minor axis and a 9 px major axis is a 9 px frame.
+pub fn fwhm_stats(stars: &[PsfStar]) -> Option<FwhmStats> {
+    if stars.is_empty() {
+        return None;
+    }
+    let n = stars.len() as f64;
+    let mut widths: Vec<f64> = stars.iter().map(|s| s.fwhm_x).collect();
+    widths.sort_by(f64::total_cmp);
+
+    let mean = widths.iter().sum::<f64>() / n;
+    let variance = widths.iter().map(|w| (w - mean) * (w - mean)).sum::<f64>() / n;
+    let median = if widths.len().is_multiple_of(2) {
+        0.5 * (widths[widths.len() / 2 - 1] + widths[widths.len() / 2])
+    } else {
+        widths[widths.len() / 2]
+    };
+
+    Some(FwhmStats {
+        count: stars.len(),
+        mean,
+        median,
+        sigma: variance.sqrt(),
+        min: widths[0],
+        max: widths[widths.len() - 1],
+        mean_roundness: stars.iter().map(|s| s.roundness).sum::<f64>() / n,
+    })
+}
+
+/// Keeps the stars whose fitted amplitude is at least `min_amplitude`.
+///
+/// This is the re-filter a frame needs when its star count hits the cap: the
+/// cap truncates an arbitrary field at an arbitrary place, so two frames of the
+/// same field can end up with lists that overlap poorly. Cutting both at an
+/// *amplitude* instead makes the selection a property of the sky rather than of
+/// the detection order.
+pub fn filter_stars_by_amplitude(stars: &[PsfStar], min_amplitude: f64) -> Vec<PsfStar> {
+    stars
+        .iter()
+        .copied()
+        .filter(|s| s.amplitude >= min_amplitude)
+        .collect()
+}
+
+/// The amplitude that keeps the brightest `count` stars.
+///
+/// Returns 0 when the list is already no longer than `count`, which keeps
+/// everything.
+pub fn amplitude_threshold_for(stars: &[PsfStar], count: usize) -> f64 {
+    if stars.len() <= count || count == 0 {
+        return 0.0;
+    }
+    let mut amplitudes: Vec<f64> = stars.iter().map(|s| s.amplitude).collect();
+    amplitudes.sort_by(|a, b| b.total_cmp(a));
+    amplitudes[count - 1]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -661,6 +741,69 @@ mod tests {
         let candidates = detect_candidates(data, width, height, &options);
         assert_eq!(candidates.len(), 1, "{candidates:?}");
         fit_candidate(data, width, height, &candidates[0], &options).expect("fit converges")
+    }
+
+    fn star_with(fwhm_x: f64, roundness: f64, amplitude: f64) -> PsfStar {
+        PsfStar {
+            x0: 0.0,
+            y0: 0.0,
+            sx: fwhm_x / FWHM_PER_SIGMA,
+            sy: fwhm_x * roundness / FWHM_PER_SIGMA,
+            fwhm_x,
+            fwhm_y: fwhm_x * roundness,
+            angle: 0.0,
+            amplitude,
+            background: 0.0,
+            beta: None,
+            roundness,
+            rmse: 0.0,
+            peak: amplitude,
+            layer: 0,
+        }
+    }
+
+    #[test]
+    fn fwhm_stats_summarize_the_list() {
+        let stars = [
+            star_with(3.0, 1.0, 0.5),
+            star_with(4.0, 0.8, 0.4),
+            star_with(5.0, 0.9, 0.3),
+            star_with(8.0, 0.9, 0.2),
+        ];
+        let stats = fwhm_stats(&stars).expect("non-empty");
+
+        assert_eq!(stats.count, 4);
+        assert!((stats.mean - 5.0).abs() < 1e-12);
+        assert!((stats.median - 4.5).abs() < 1e-12);
+        assert!((stats.min - 3.0).abs() < 1e-12);
+        assert!((stats.max - 8.0).abs() < 1e-12);
+        assert!((stats.sigma - 1.870_828_693_386_971).abs() < 1e-9);
+        assert!((stats.mean_roundness - 0.9).abs() < 1e-12);
+    }
+
+    #[test]
+    fn fwhm_stats_of_an_empty_list_is_none() {
+        assert!(fwhm_stats(&[]).is_none());
+    }
+
+    #[test]
+    fn amplitude_filtering_keeps_the_brightest_n() {
+        let stars = [
+            star_with(3.0, 1.0, 0.1),
+            star_with(3.0, 1.0, 0.9),
+            star_with(3.0, 1.0, 0.5),
+            star_with(3.0, 1.0, 0.3),
+        ];
+        let threshold = amplitude_threshold_for(&stars, 2);
+        assert!((threshold - 0.5).abs() < 1e-12);
+
+        let kept = filter_stars_by_amplitude(&stars, threshold);
+        assert_eq!(kept.len(), 2);
+        assert!(kept.iter().all(|s| s.amplitude >= 0.5));
+
+        // A cap no smaller than the list keeps everything.
+        assert_eq!(amplitude_threshold_for(&stars, 4), 0.0);
+        assert_eq!(filter_stars_by_amplitude(&stars, 0.0).len(), 4);
     }
 
     #[test]

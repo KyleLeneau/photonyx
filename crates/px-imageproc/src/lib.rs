@@ -33,8 +33,8 @@ pub use error::ImageProcError;
 pub use frame::{Frame, ValueScale};
 pub use preview::{MAX_DISPLAY_DIM, PreviewImage, decode_preview};
 pub use register::{
-    Background, Candidate, Profile, PsfStar, StarfindOptions, StarfindReport, detect_candidates,
-    find_stars,
+    Background, Candidate, FwhmStats, Profile, PsfStar, StarfindOptions, StarfindReport,
+    detect_candidates, find_stars, fwhm_stats,
 };
 pub use runtime::{Block, BlockPlan, ImageDims, MemoryLimit, ResourceBudget, Runtime};
 pub use sequence::{FrameInfo, FrameSet};
