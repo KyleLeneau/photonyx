@@ -9,7 +9,7 @@
 
 use px_fits::{BitPix, HeaderBuilder};
 use px_imageproc::register::transform::Transform;
-use px_imageproc::register::warp::{Interpolation, WarpOptions, dilate3x3, warp};
+use px_imageproc::register::warp::{Interpolation, WarpOptions, clamp_undershoot, warp};
 use px_imageproc::runtime::{ResourceBudget, Runtime};
 use px_imageproc::{Frame, ImageDims};
 
@@ -406,33 +406,100 @@ fn the_output_may_be_a_different_shape_than_the_source() {
     assert!((warped.get(0, 10, 10) - source.get(0, 30, 25)).abs() < 1e-6);
 }
 
-#[test]
-fn dilation_grows_a_mask_by_one_pixel_in_four_directions() {
-    let dims = ImageDims::new(7, 5, 1);
-    let mut mask = vec![false; dims.pixel_count()];
-    mask[2 * 7 + 3] = true;
+/// Data and guide for the clamping tests.
+///
+/// The background sits *above* its guide, so nothing is flagged until a test
+/// pushes a pixel below it — and because the background differs from the guide,
+/// a repaired pixel is visible as one that has taken the guide's value.
+const BACKGROUND: f32 = 1.5;
+const GUIDE: f32 = 1.0;
 
-    let dilated = dilate3x3(&mask, dims, &runtime());
-    let set: Vec<usize> = dilated
-        .iter()
-        .enumerate()
-        .filter(|&(_, &v)| v)
-        .map(|(i, _)| i)
-        .collect();
-    // The plus shape: the centre and its four edge neighbours, not the corners.
-    assert_eq!(set, vec![7 + 3, 2 * 7 + 2, 2 * 7 + 3, 2 * 7 + 4, 3 * 7 + 3]);
+fn clamp_fixture(dims: ImageDims) -> (Vec<f32>, Vec<f32>) {
+    (
+        vec![BACKGROUND; dims.pixel_count()],
+        vec![GUIDE; dims.pixel_count()],
+    )
 }
 
 #[test]
-fn dilation_does_not_cross_a_channel_boundary() {
-    let dims = ImageDims::new(4, 3, 2);
-    let mut mask = vec![false; dims.pixel_count()];
-    // Bottom row of channel 0.
-    mask[2 * 4 + 1] = true;
+fn a_repair_grows_by_one_pixel_in_four_directions() {
+    let dims = ImageDims::new(7, 5, 1);
+    let (mut data, guide) = clamp_fixture(dims);
+    let centre = 2 * 7 + 3;
+    data[centre] = 0.5;
 
-    let dilated = dilate3x3(&mask, dims, &runtime());
-    // The top row of channel 1 must stay clear.
+    clamp_undershoot(&mut data, &guide, dims, &runtime());
+
+    let repaired: Vec<usize> = data
+        .iter()
+        .enumerate()
+        .filter(|&(_, &v)| v != BACKGROUND)
+        .map(|(i, _)| i)
+        .collect();
+    // The plus shape: the centre and its four edge neighbours, not the corners.
+    assert_eq!(
+        repaired,
+        vec![7 + 3, 2 * 7 + 2, centre, 2 * 7 + 4, 3 * 7 + 3]
+    );
+    assert!(repaired.iter().all(|&i| data[i] == GUIDE));
+}
+
+#[test]
+fn a_repair_does_not_cross_a_channel_boundary() {
+    let dims = ImageDims::new(4, 3, 2);
+    let (mut data, guide) = clamp_fixture(dims);
+    // Bottom row of channel 0.
+    let flagged = 2 * 4 + 1;
+    data[flagged] = 0.5;
+
+    clamp_undershoot(&mut data, &guide, dims, &runtime());
+
+    // The top row of channel 1 must be untouched.
     let plane = 4 * 3;
-    assert!(!dilated[plane + 1], "the mask leaked into the next channel");
-    assert!(dilated[2 * 4 + 1] && dilated[4 + 1]);
+    assert_eq!(
+        data[plane + 1],
+        BACKGROUND,
+        "the repair leaked into the next channel"
+    );
+    assert_eq!(data[flagged], GUIDE);
+    assert_eq!(data[4 + 1], GUIDE, "the neighbour above was not repaired");
+}
+
+#[test]
+fn a_repair_never_writes_a_pixel_the_warp_left_empty() {
+    // The guide's support is wider than Lanczos-4's, so it has values in a band
+    // where the real warp has none. Those pixels are zero and must stay zero:
+    // filling them would invent signal the stacker would treat as real.
+    let dims = ImageDims::new(5, 5, 1);
+    let (mut data, guide) = clamp_fixture(dims);
+    let flagged = 2 * 5 + 2;
+    data[flagged] = 0.5;
+    // The neighbour to the left is outside the warp's footprint.
+    data[flagged - 1] = 0.0;
+
+    clamp_undershoot(&mut data, &guide, dims, &runtime());
+
+    assert_eq!(data[flagged], GUIDE);
+    assert_eq!(data[flagged - 1], 0.0, "an unexposed pixel was filled in");
+}
+
+#[test]
+fn overlapping_repairs_land_on_the_same_result_as_separate_ones() {
+    // Two flagged pixels two apart share a neighbour. The repair is idempotent,
+    // so visiting that neighbour twice must not differ from visiting it once.
+    let dims = ImageDims::new(7, 5, 1);
+    let (mut data, guide) = clamp_fixture(dims);
+    data[2 * 7 + 2] = 0.5;
+    data[2 * 7 + 4] = 0.5;
+
+    let mut once = data.clone();
+    clamp_undershoot(&mut once, &guide, dims, &runtime());
+
+    // The shared neighbour took the guide, exactly once.
+    let shared = 2 * 7 + 3;
+    assert_eq!(once[shared], guide[shared]);
+
+    let mut twice = once.clone();
+    clamp_undershoot(&mut twice, &guide, dims, &runtime());
+    assert_eq!(once, twice, "clamping is not idempotent");
 }

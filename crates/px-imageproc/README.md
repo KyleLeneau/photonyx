@@ -249,14 +249,20 @@ percent of its value and the sky by nothing.
 
 | | Native | Siril | |
 |---|---|---|---|
-| 100 frames, register + warp + stack | **49.0 s** | 73.6 s | **1.50× faster** |
+| 100 frames, register + warp + stack | **37.8 s** | 73.6 s | **1.95× faster** |
 
-Per phase: warping 24.5 s, combining 9.6 s, everything else 14.9 s.
+Per phase: warping 14.7 s, combining 9.1 s, everything else 14.0 s.
+
+Warping was 23.9 s of that until the Phase 13 pass below; the rest of the run is unchanged, and so
+is every pixel of the output.
 
 | Budget (`--max-memory`) | Peak footprint | Wall clock | Warped frames |
 |---|---|---|---|
-| default (90% of RAM) | 53.2 GB | 49.0 s | held in memory |
+| default (90% of RAM) | 53.2 GB | 37.8 s | held in memory |
 | 8 GB | **4.88 GB** | 89.3 s | spilled to disk |
+
+(The 8 GB row is the Phase 11 measurement, taken before Phase 13; its peak footprint is unaffected
+by that work and its wall clock has not been re-measured at that budget.)
 
 The budget is partitioned across phases rather than lent to each of them in turn. Sizing every
 phase against the whole budget put a run configured for 8 GB at 19.9 GB of resident memory — each
@@ -295,6 +301,39 @@ order-preserving integer key instead is exact, parallel, and copies nothing — 
 | the scan that actually finds stars | 22 ms | 22 ms |
 | PSF fitting | 71 ms | 71 ms |
 | **whole pass** | **591 ms** | **117 ms** |
+
+## Warping (ADR 007 Phase 13)
+
+The profile above was read by thread time, and that ranked the targets wrongly for a wall-clock
+question. Frames are warped one at a time by every core, so warping's span total is close to its
+wall-clock cost — it was **0.8× the entire run** — while the reduction's much larger thread total
+is 2.15× wall. Warping was the bigger target and had never been touched.
+
+| | Before | After | |
+|---|---|---|---|
+| `warp/lanczos4_clamped`, 16.8 MP | 80.4 ms | **44.9 ms** | **1.79×** |
+| `warp/lanczos4` | 61.2 ms | 38.2 ms | 1.60× |
+| master light, 122 frames, wall | 83.4 s | **66.5 s** | **1.25×** |
+
+Three changes, none of which moves a pixel:
+
+- **The clamping guide is taken during the resample pass, not by warping the frame a second time.**
+  The guide is a bilinear sample at the point the real kernel is already sampled at, from taps it
+  has already loaded — four multiply-adds against a second full inverse-mapped traversal.
+- **The repair works from the pixels that rang.** Ringing is about 1% of a frame, and the previous
+  mask-dilate-copy form spent three whole-frame passes and two frame-sized `bool` buffers saying so.
+- **The interpolation kernel takes its taps as a sub-slice of each source row.** The support is
+  already known to be inside the frame, so the per-tap index multiply and bounds check — 64 of each
+  per output pixel for Lanczos-4 — are not needed. Worth 1.6× on its own.
+
+The same pass tried two things on the reduction kernel — gathering survivors in the pass that
+counts them, and Winsorizing without materializing the pulled-in stack — and they were worth 1.5%,
+which at the pipeline level is nothing. That is the ADR's D8 finding holding up a second time: the
+reduction is bound by the serial dependency between clipping passes, not by how many times it
+touches the values.
+
+**Everything here is byte-identical.** Verified by building the master light and master bias before
+and after and comparing the files: `cmp` reports no difference, over 244 MB and 61 million pixels.
 
 ### What the native engine does not do
 

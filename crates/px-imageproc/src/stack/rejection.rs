@@ -146,6 +146,8 @@ pub struct Scratch {
     work: Vec<f32>,
     /// Absolute deviations, for the MAD estimator.
     deviations: Vec<f32>,
+    /// Survivors of a clipping pass, gathered before the pass is committed.
+    survivors: Vec<f32>,
 }
 
 impl Scratch {
@@ -153,6 +155,7 @@ impl Scratch {
         Self {
             work: vec![0.0; frames],
             deviations: vec![0.0; frames],
+            survivors: vec![0.0; frames],
         }
     }
 }
@@ -195,7 +198,7 @@ pub fn reject(
         Rejection::None | Rejection::Gesdt(_) => n,
         Rejection::Percentile(b) => percentile(stack, n, b, scratch, counts),
         Rejection::SigmaMedian(b) => sigma_median(stack, n, b, scratch, counts),
-        Rejection::LinearFit(b) => linear_fit(stack, n, b, counts),
+        Rejection::LinearFit(b) => linear_fit(stack, n, b, scratch, counts),
         Rejection::Sigma(b) => clip_until_stable(
             stack,
             n,
@@ -225,7 +228,7 @@ pub fn reject(
             counts,
             |values, scratch| {
                 let centre = median_of(values, scratch);
-                Some((centre, winsorized_deviation(values, centre, scratch)))
+                Some((centre, winsorized_deviation(values, centre)))
             },
             scratch,
         ),
@@ -256,28 +259,34 @@ fn clip_until_stable(
         let lower = centre - bounds.low * spread;
         let upper = centre + bounds.high * spread;
 
-        // Count first, so a pass that would cut too deep can be abandoned
-        // whole rather than leaving the stack half-clipped.
-        let survivors = stack[..n]
-            .iter()
-            .filter(|v| **v >= lower && **v <= upper)
-            .count();
-        if survivors == n || survivors < MIN_KEPT {
-            return n;
-        }
-
+        // A pass that would cut too deep is abandoned whole rather than leaving
+        // the stack half-clipped, so its result has to be known before it is
+        // committed. **The survivors are gathered into scratch rather than
+        // counted in a pass of their own**: the earlier form compared every
+        // value twice, once to count and once to compact, and this reduction
+        // runs per output pixel — 61 million times on a full frame, several
+        // times over as the clipping iterates. One compare per value and a copy
+        // of the survivors is strictly less work, and moves no arithmetic.
         let mut kept = 0;
-        for i in 0..n {
-            let v = stack[i];
+        let mut low = 0;
+        let mut high = 0;
+        for &v in &stack[..n] {
             if v < lower {
-                counts.low += 1;
+                low += 1;
             } else if v > upper {
-                counts.high += 1;
+                high += 1;
             } else {
-                stack[kept] = v;
+                scratch.survivors[kept] = v;
                 kept += 1;
             }
         }
+        if kept == n || kept < MIN_KEPT {
+            return n;
+        }
+
+        counts.low += low;
+        counts.high += high;
+        stack[..kept].copy_from_slice(&scratch.survivors[..kept]);
         n = kept;
     }
 }
@@ -377,7 +386,13 @@ fn sigma_median(
 /// well-behaved stack is close to a straight line, and an outlier shows as a
 /// large residual at one end. Against the original frame order it would be
 /// fitting the sequence's own history instead.
-fn linear_fit(stack: &mut [f32], mut n: usize, bounds: Bounds, counts: &mut Rejected) -> usize {
+fn linear_fit(
+    stack: &mut [f32],
+    mut n: usize,
+    bounds: Bounds,
+    scratch: &mut Scratch,
+    counts: &mut Rejected,
+) -> usize {
     // Sorted once, not once per pass. The compaction at the foot of the loop
     // writes survivors back in the order it met them, so an ascending run stays
     // ascending however many values are dropped from it.
@@ -404,32 +419,30 @@ fn linear_fit(stack: &mut [f32], mut n: usize, bounds: Bounds, counts: &mut Reje
             return n;
         }
 
-        let fitted = |i: usize| slope * i as f32 + intercept;
-        let survivors = stack[..n]
-            .iter()
-            .enumerate()
-            .filter(|(i, v)| {
-                let f = fitted(*i);
-                **v >= f - bounds.low * spread && **v <= f + bounds.high * spread
-            })
-            .count();
-        if survivors == n || survivors < MIN_KEPT {
-            return n;
-        }
-
+        // Gathered, not counted and then gathered: see `clip_until_stable`.
+        // The residual threshold moves with the index here, so the saving is a
+        // fitted value per element as well as a compare.
         let mut kept = 0;
-        for i in 0..n {
-            let v = stack[i];
-            let f = fitted(i);
-            if v < f - bounds.low * spread {
-                counts.low += 1;
-            } else if v > f + bounds.high * spread {
-                counts.high += 1;
+        let mut low = 0;
+        let mut high = 0;
+        for (i, &v) in stack[..n].iter().enumerate() {
+            let fitted = slope * i as f32 + intercept;
+            if v < fitted - bounds.low * spread {
+                low += 1;
+            } else if v > fitted + bounds.high * spread {
+                high += 1;
             } else {
-                stack[kept] = v;
+                scratch.survivors[kept] = v;
                 kept += 1;
             }
         }
+        if kept == n || kept < MIN_KEPT {
+            return n;
+        }
+
+        counts.low += low;
+        counts.high += high;
+        stack[..kept].copy_from_slice(&scratch.survivors[..kept]);
         n = kept;
     }
 }
@@ -482,8 +495,7 @@ fn standard_deviation(values: &[f32]) -> f32 {
 /// of the current estimate and re-measuring converges on a spread that
 /// describes the bulk of the distribution; the 1.134 factor puts that back on
 /// the same scale as an ordinary sigma for normal data.
-fn winsorized_deviation(values: &[f32], centre: f32, scratch: &mut Scratch) -> f32 {
-    let n = values.len();
+fn winsorized_deviation(values: &[f32], centre: f32) -> f32 {
     let mut sigma = standard_deviation(values);
     if sigma <= 0.0 || !sigma.is_finite() {
         return 0.0;
@@ -494,11 +506,15 @@ fn winsorized_deviation(values: &[f32], centre: f32, scratch: &mut Scratch) -> f
     for _ in 0..32 {
         let lower = centre - WINSOR_LIMIT * sigma;
         let upper = centre + WINSOR_LIMIT * sigma;
-        for (slot, v) in scratch.work[..n].iter_mut().zip(values) {
-            *slot = v.clamp(lower, upper);
-        }
 
-        let next = WINSOR_CONSISTENCY * standard_deviation(&scratch.work[..n]);
+        // **The pulled-in stack is never written down.** Clamping is a pure
+        // function of a value and the current bounds, so the two passes that
+        // measure the spread can clamp as they read. The buffer this removes
+        // was written and read once per iteration of a loop that itself runs
+        // inside the clipping iteration, per pixel — and the arithmetic is
+        // unchanged, value for value and in the same order, so the estimate is
+        // bit-identical to the form that materialized it.
+        let next = WINSOR_CONSISTENCY * clamped_standard_deviation(values, lower, upper);
         if next <= 0.0 || !next.is_finite() {
             return 0.0;
         }
@@ -509,6 +525,30 @@ fn winsorized_deviation(values: &[f32], centre: f32, scratch: &mut Scratch) -> f
         }
     }
     sigma
+}
+
+/// Sample standard deviation of `values` with each value pulled into
+/// `[lower, upper]` as it is read.
+///
+/// The same two passes as [`standard_deviation`] — mean, then squared
+/// deviations — in the same order, over the same values.
+fn clamped_standard_deviation(values: &[f32], lower: f32, upper: f32) -> f32 {
+    let n = values.len();
+    if n < 2 {
+        return 0.0;
+    }
+    let mut sum = 0.0f64;
+    for &v in values {
+        sum += v.clamp(lower, upper) as f64;
+    }
+    let mean = sum / n as f64;
+
+    let mut acc = 0.0f64;
+    for &v in values {
+        let d = v.clamp(lower, upper) as f64 - mean;
+        acc += d * d;
+    }
+    (acc / (n - 1) as f64).sqrt() as f32
 }
 
 /// Least-squares fit of `y` against its own index, returning

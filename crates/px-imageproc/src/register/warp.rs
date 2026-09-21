@@ -113,7 +113,17 @@ pub fn warp(
     })?;
 
     let _span = crate::profile::scope("warp.total");
+    let clamping = options.clamp && options.interpolation.has_negative_lobes();
+
     let mut data = vec![0.0f32; dims.pixel_count()];
+    // The clamping guide is produced by the resample pass rather than by a
+    // second warp of its own; see `warp_into`.
+    let mut guide = if clamping {
+        vec![0.0f32; dims.pixel_count()]
+    } else {
+        Vec::new()
+    };
+
     {
         let _span = crate::profile::scope("warp.resample");
         warp_into(
@@ -123,22 +133,13 @@ pub fn warp(
             runtime,
             options.interpolation,
             &mut data,
+            clamping.then_some(guide.as_mut_slice()),
         );
     }
 
-    if options.clamp && options.interpolation.has_negative_lobes() {
+    if clamping {
         let _span = crate::profile::scope("warp.clamp");
-        // The guide is the same warp with a kernel that cannot undershoot.
-        let mut guide = vec![0.0f32; dims.pixel_count()];
-        warp_into(
-            source,
-            &inverse,
-            dims,
-            runtime,
-            Interpolation::Area,
-            &mut guide,
-        );
-        apply_clamp(&mut data, &guide, dims, runtime);
+        clamp_undershoot(&mut data, &guide, dims, runtime);
     }
 
     Frame::new(dims, data, source.header().clone())
@@ -150,6 +151,21 @@ pub fn warp(
 /// the source rows a band needs are a contiguous run, so a band is also the unit
 /// a memory-bounded reader would fetch (P10-T3). The source is already resident
 /// here, so the budget's role is to size the bands rather than to gate them.
+///
+/// **`guide` is filled in the same pass, not by a second warp.** The clamping
+/// guide is a bilinear sample at exactly the point the real kernel is sampled at
+/// (`area` is `bilinear` at the unit scale registration works at), and bilinear's
+/// 2×2 taps are a subset of the 8×8 Lanczos-4 already reads. Taking it here costs
+/// four multiply-adds against a whole second inverse-mapped pass over the frame,
+/// and gives bit-identical values because it is the same function at the same
+/// point.
+///
+/// The guide is written only where the real kernel produced a value. Its own
+/// support is wider — radius 1 against radius 4 — so a separate guide warp would
+/// also cover a four-pixel band around the footprint's edge where the real warp
+/// has nothing. Nothing reads that band: `clamp_undershoot` never touches a pixel
+/// the warp left at zero, which is the rule that keeps the guide from inventing
+/// an eight-pixel frame of data the output is supposed to leave unexposed.
 fn warp_into(
     source: &Frame,
     inverse: &Transform,
@@ -157,31 +173,61 @@ fn warp_into(
     runtime: &Runtime,
     interpolation: Interpolation,
     out: &mut [f32],
+    guide: Option<&mut [f32]>,
 ) {
     let rows_per_band = dims.height.div_ceil(runtime.cores().max(1)).max(1);
     let row_stride = dims.width;
-    let plane = dims.width * dims.height;
+    let band_len = rows_per_band * row_stride;
 
-    runtime.install(|| {
-        out.par_chunks_mut(rows_per_band * row_stride)
-            .enumerate()
-            .for_each(|(band, chunk)| {
-                let first_row = band * rows_per_band;
-                for (offset, row) in chunk.chunks_mut(row_stride).enumerate() {
-                    let y = first_row + offset;
-                    // The band index and the channel are both folded into the
-                    // flat output index, so a band that straddles a channel
-                    // boundary still writes the right plane.
+    // One closure for both cases, so the guided and unguided warps cannot drift
+    // apart. `guide_row` is `None` when no guide was asked for.
+    let run_band = |band: usize, chunk: &mut [f32], mut guide_chunk: Option<&mut [f32]>| {
+        let first_row = band * rows_per_band;
+        for (offset, row) in chunk.chunks_mut(row_stride).enumerate() {
+            let y = first_row + offset;
+            // A band can straddle a channel boundary, so the channel is derived
+            // from the flat row index — once per row, since every pixel in a row
+            // shares it.
+            let channel = y / dims.height;
+            let local_y = y - channel * dims.height;
+            let guide_row = guide_chunk
+                .as_mut()
+                .map(|g| &mut g[offset * row_stride..(offset + 1) * row_stride]);
+
+            match guide_row {
+                None => {
                     for (x, slot) in row.iter_mut().enumerate() {
-                        let channel = (y * row_stride + x) / plane;
-                        let local_y = y - channel * dims.height;
                         let p = inverse.apply(Point::new(x as f64, local_y as f64));
                         if let Some(value) = sample(source, channel, p, interpolation) {
                             *slot = value;
                         }
                     }
                 }
-            });
+                Some(guide_row) => {
+                    for (x, (slot, guide_slot)) in
+                        row.iter_mut().zip(guide_row.iter_mut()).enumerate()
+                    {
+                        let p = inverse.apply(Point::new(x as f64, local_y as f64));
+                        if let Some(value) = sample(source, channel, p, interpolation) {
+                            *slot = value;
+                            *guide_slot = bilinear(source, channel, p);
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    runtime.install(|| match guide {
+        None => out
+            .par_chunks_mut(band_len)
+            .enumerate()
+            .for_each(|(band, chunk)| run_band(band, chunk, None)),
+        Some(guide) => out
+            .par_chunks_mut(band_len)
+            .zip(guide.par_chunks_mut(band_len))
+            .enumerate()
+            .for_each(|(band, (chunk, guide_chunk))| run_band(band, chunk, Some(guide_chunk))),
     });
 }
 
@@ -312,20 +358,38 @@ fn lanczos4_table() -> &'static WeightTable {
 
 /// A separable kernel of half-width `radius`, evaluated as the outer product of
 /// its row and column weights.
+/// Separable interpolation: the row weights applied across each source row, the
+/// column weights applied down the results.
+///
+/// **The tap window is taken as a sub-slice, not sampled point by point.**
+/// `sample` has already established that the kernel's whole support lies inside
+/// the frame, so each of the `2·radius` source rows contributes a contiguous run
+/// of `2·radius` values — which lifts an index multiply and a bounds check out of
+/// a loop that runs 64 times per output pixel for Lanczos-4, and leaves an inner
+/// loop that is a dot product over two contiguous slices.
+///
+/// The accumulation order is deliberately unchanged: taps left to right, rows top
+/// to bottom, into an `f64`. Floating-point addition is not associative, so
+/// reassociating here — which is what would let the inner loop use several
+/// accumulators — would move every warped pixel in its last bits and with it
+/// every registration parity number in this project. That trade is measured and
+/// declined under D8.
 fn separable(source: &Frame, channel: usize, p: Point, radius: usize, table: &WeightTable) -> f32 {
     let x0 = p.x.floor();
     let y0 = p.y.floor();
     let wx = table.row(p.x - x0);
     let wy = table.row(p.y - y0);
-    let (x0, y0) = (x0 as isize, y0 as isize);
+
+    debug_assert!(x0 >= radius as f64 - 1.0 && y0 >= radius as f64 - 1.0);
+    let first_x = x0 as usize + 1 - radius;
+    let first_y = y0 as usize + 1 - radius;
 
     let mut total = 0.0f64;
     for (j, &weight_y) in wy.iter().enumerate() {
-        let y = y0 + j as isize - (radius as isize - 1);
+        let taps = &source.rows(channel, first_y + j, 1)[first_x..first_x + wx.len()];
         let mut row = 0.0f64;
-        for (i, &weight_x) in wx.iter().enumerate() {
-            let x = x0 + i as isize - (radius as isize - 1);
-            row += weight_x * source.get(channel, x as usize, y as usize) as f64;
+        for (&weight_x, &value) in wx.iter().zip(taps) {
+            row += weight_x * value as f64;
         }
         total += weight_y * row;
     }
@@ -358,67 +422,95 @@ fn lanczos4_weight(t: f64) -> f64 {
     SUPPORT * pt.sin() * (pt / SUPPORT).sin() / (pt * pt)
 }
 
-/// Replaces undershot pixels with the guide's value (ADR 007 P10-T2).
+/// Replaces undershot pixels, and their immediate neighbours, with the guide's
+/// value (ADR 007 P10-T2).
 ///
-/// Three steps, and the middle one is the reason this is not just a per-pixel
-/// `max`: mark the pixels that fell below `CLAMPING_FACTOR` of the guide, dilate
-/// that mask by one pixel, then copy the guide in. The dilation matters because
-/// ringing is a *ring* — the deepest undershoot is flanked by pixels that dipped
-/// less than 2% and would otherwise be left as a faint residual edge around a
-/// repaired core.
-/// A fourth step is needed that is easy to miss: the repair must not write a
-/// pixel the warp itself left empty. The guide's kernel has a 2×2 support where
-/// Lanczos-4 has 8×8, so in a four-pixel band around the footprint's edge the
-/// guide has a value and the real warp does not — and filling those from the
-/// guide would invent an eight-pixel frame of data the output is supposed to
-/// leave unexposed, in a band the stacker would then treat as real signal.
-fn apply_clamp(data: &mut [f32], guide: &[f32], dims: ImageDims, runtime: &Runtime) {
-    let mask = undershoot_mask(data, guide);
-    let dilated = dilate3x3(&mask, dims, runtime);
-    for (i, flagged) in dilated.iter().enumerate() {
-        if *flagged && data[i] != 0.0 {
-            data[i] = guide[i];
+/// Not a per-pixel `max` against the guide, for two reasons.
+///
+/// **Ringing is a ring.** The deepest undershoot is flanked by pixels that
+/// dipped by less than `CLAMPING_FACTOR` and would otherwise be left as a faint
+/// residual edge around a repaired core — so the repair grows by one pixel, in
+/// the four edge directions. That is the plus-shaped 3×3 structuring element,
+/// which is what an ellipse inscribed in a 3×3 box comes to: it does not reach
+/// the corners.
+///
+/// **The repair must not write a pixel the warp itself left empty.** The guide's
+/// kernel has a 2×2 support where Lanczos-4 has 8×8, so around the footprint's
+/// edge there are pixels a guide could speak for and the real warp cannot —
+/// filling those would invent a frame of data the output is supposed to leave
+/// unexposed, in a band the stacker would then treat as real signal. Every write
+/// here is therefore conditional on the destination being non-zero.
+///
+/// **It works from the pixels that rang, not from a mask of every pixel.**
+/// Ringing is around 1% of a frame. The earlier mask-and-dilate form cost three
+/// whole-frame passes and two frame-sized `bool` buffers to express that: build
+/// a mask, read five neighbours of *every* pixel to dilate it, walk the frame
+/// again to copy. Collecting the flagged offsets makes the dilation and the copy
+/// proportional to the ringing instead.
+///
+/// The result is unchanged where two flagged neighbourhoods overlap: the repair
+/// is `data[i] = guide[i]`, which is idempotent, and the only pixel a second
+/// visit skips is one an earlier visit set to zero — by writing the very value
+/// it would write again.
+pub fn clamp_undershoot(data: &mut [f32], guide: &[f32], dims: ImageDims, runtime: &Runtime) {
+    let flagged = undershot_pixels(data, guide, runtime);
+
+    let (width, height) = (dims.width, dims.height);
+    let plane = width * height;
+    for index in flagged {
+        // Neighbours are taken within the pixel's own channel: a repair that
+        // leaked across a channel boundary would patch the top row of green
+        // from the bottom row of red.
+        let channel = index / plane;
+        let local = index - channel * plane;
+        let (x, y) = (local % width, local / width);
+
+        let mut repair = |i: usize| {
+            if data[i] != 0.0 {
+                data[i] = guide[i];
+            }
+        };
+
+        repair(index);
+        if x > 0 {
+            repair(index - 1);
+        }
+        if x + 1 < width {
+            repair(index + 1);
+        }
+        if y > 0 {
+            repair(index - width);
+        }
+        if y + 1 < height {
+            repair(index + width);
         }
     }
 }
 
-fn undershoot_mask(data: &[f32], guide: &[f32]) -> Vec<bool> {
-    data.iter()
-        .zip(guide)
-        .map(|(&value, &guide)| value != 0.0 && guide > 0.0 && value < guide * CLAMPING_FACTOR)
-        .collect()
-}
-
-/// Dilates a mask with a 3×3 elliptical structuring element — which on a 3×3
-/// grid is the plus-shaped one, since an ellipse inscribed in a 3×3 box does not
-/// reach its corners.
+/// Offsets of the pixels that undershot their guide, in ascending order.
 ///
-/// Channels are dilated independently: a mask that leaked across a channel
-/// boundary would repair the top row of green from the bottom row of red.
-pub fn dilate3x3(mask: &[bool], dims: ImageDims, runtime: &Runtime) -> Vec<bool> {
-    let (width, height) = (dims.width, dims.height);
-    let plane = width * height;
-    let mut out = vec![false; mask.len()];
+/// Parallel over bands, each collecting its own offsets, because the test is one
+/// compare over two frame-sized buffers and the frames are large. The order is
+/// the frame's own, which keeps the repair deterministic.
+fn undershot_pixels(data: &[f32], guide: &[f32], runtime: &Runtime) -> Vec<usize> {
+    let band = data.len().div_ceil(runtime.cores().max(1)).max(1);
 
-    runtime.install(|| {
-        out.par_chunks_mut(width)
-            .enumerate()
-            .for_each(|(flat_row, row)| {
-                let channel = flat_row / height;
-                let y = flat_row % height;
-                let base = channel * plane;
-                for (x, slot) in row.iter_mut().enumerate() {
-                    let at = |dx: isize, dy: isize| -> bool {
-                        let nx = x as isize + dx;
-                        let ny = y as isize + dy;
-                        if nx < 0 || ny < 0 || nx >= width as isize || ny >= height as isize {
-                            return false;
+    runtime
+        .install(|| {
+            data.par_chunks(band)
+                .zip(guide.par_chunks(band))
+                .enumerate()
+                .map(|(chunk, (data, guide))| {
+                    let base = chunk * band;
+                    let mut flagged = Vec::new();
+                    for (offset, (&value, &guide)) in data.iter().zip(guide).enumerate() {
+                        if value != 0.0 && guide > 0.0 && value < guide * CLAMPING_FACTOR {
+                            flagged.push(base + offset);
                         }
-                        mask[base + ny as usize * width + nx as usize]
-                    };
-                    *slot = at(0, 0) || at(-1, 0) || at(1, 0) || at(0, -1) || at(0, 1);
-                }
-            });
-    });
-    out
+                    }
+                    flagged
+                })
+                .collect::<Vec<_>>()
+        })
+        .concat()
 }

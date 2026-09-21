@@ -2,9 +2,13 @@
 
 ## Status
 
-Proposed. Supersedes nothing. Depends on [ADR 006](006-native-fits-implementation.md), whose
-Phases 0–8 are complete: `px-fits` is a native reader/writer with region reads, streaming rows,
-and `rayon`-parallelized full-frame decode.
+Accepted, and implemented. Phases 1–13 are complete; Phase 0 was superseded by what replaced it
+and is marked accordingly. `--engine native` runs all five pipelines and is opt-in — the default
+engine stays Siril, for the reasons in the P12-T4 amendment.
+
+Supersedes nothing. Depends on [ADR 006](006-native-fits-implementation.md), whose Phases 0–8 are
+complete: `px-fits` is a native reader/writer with region reads, streaming rows, and
+`rayon`-parallelized full-frame decode.
 
 ---
 
@@ -210,6 +214,14 @@ selects between them.
 
 ### Architecture
 
+**This is the layout as proposed, kept as the record of the intent. The crate as built differs in
+three places**, each noted where it happened: `stack/` landed as `mod.rs` + `rejection.rs` +
+`normalize.rs` rather than the seven files sketched here (Phase 3 — the finer split would have
+spread ~200 lines over six files); `debayer/` gained `mhc.rs`, `bilinear.rs`, `ahd.rs` and
+`rcd.rs` as that decision was worked through (Phases 6, 6b, 6c) and folded `equalize.rs` into
+the calibration path; and `register/` gained `twopass.rs` and `persist.rs`, which the
+orchestration-in-`mod.rs` sketch did not anticipate. Read the crate for what exists.
+
 ```
 crates/px-imageproc/
   src/
@@ -294,9 +306,18 @@ accumulation and parallel reductions that are more accurate than what Siril does
 native result is expected to be *better* than Siril's, the test asserts the direction of the
 difference rather than just its magnitude.
 
-Every fixture also has analytic ground truth (Phase 0 generates frames from a known bias level,
-known dark current, known flat field, known star field, and known dither offsets), so a
-disagreement with Siril can be adjudicated instead of assumed.
+Disagreements with Siril are adjudicated against analytic ground truth rather than assumed, so
+that "Siril did something else" and "we are wrong" stay distinguishable.
+
+**How that ground truth is actually supplied was not what this ADR first planned, and the change
+is recorded under Phase 0.** The plan was a committed synthetic corpus with a JSON truth manifest.
+What shipped instead is per-test synthetic generation — each test states the truth it needs, in
+the test, next to the assertion that uses it — plus black-box comparison against Siril over a
+real, uncommitted corpus. The consequence to be aware of when reading the parity tables below:
+the analytic bounds (injected sigma recovered to 5%, centroids placed and recovered, warps under a
+known homography) run everywhere, but **every number quoted against *Siril* comes from a corpus
+that is not in this repository**, reachable only via `PX_IMAGEPROC_CORPUS` and `PX_SIRIL_REF`.
+Those tests skip, loudly, without it.
 
 **D3 — The block scheduler is designed from the memory constraint, not ported.**
 
@@ -543,30 +564,69 @@ These apply to every task below and are non-negotiable for delegated work.
 
 *Goal: make both quality and speed measurable before any algorithm is written.*
 
-- [ ] **P0-T1** Workspace deps: `nalgebra`, `sysinfo`; dev-only `approx`. Add `[[bench]]` entries
-      (`harness = false`) for `stack`, `calibrate`, `register`, `budget` in `px-imageproc`.
-- [ ] **P0-T2** `cargo xtask imageproc-fixtures`: seeded, idempotent generator producing a
-      committed corpus under `crates/px-imageproc/tests/fixtures/` — bias, dark (with a known hot
-      pixel map), flat (known vignette), and light sets (known star field via analytic Gaussian
-      PSFs, known dither offsets and field rotation), in 16-bit and 32-bit float, mono and RGGB.
-      Small enough to commit (≤ 512×512), plus a manifest of the ground truth as JSON.
-- [~] **P0-T3** `cargo xtask siril-reference [--corpus DIR] [--out DIR] [--frames N]`: runs Siril
-      over the corpus and writes reference outputs plus a manifest recording the Siril version.
-      Errors with a clear message if Siril is not installed; consuming tests skip.
-      *`stat` reference landed for Phase 2. Extending it to the five pipeline outputs is Phase 3+
-      work, done as each pipeline needs its reference.*
-- [ ] **P0-T4** Parity harness in `tests/support.rs`: load two FITS frames, report max abs diff,
-      RMS diff, background noise of each, and a per-pixel diff histogram; an `assert_parity!`
-      macro taking explicit named tolerances; a `siril_ref()` helper that skips the test when
-      `PX_SIRIL_REF` is unset.
-- [ ] **P0-T5** Large-corpus hook: `PX_IMAGEPROC_CORPUS` pointing at real frames for the
-      benchmarks (the committed fixtures are too small to time meaningfully).
-- [ ] **P0-T6** Measure and record the Siril baseline — wall time and peak RSS for all five
-      pipelines on the large corpus — in a "Baseline" section of
-      `crates/px-imageproc/README.md`, with machine, OS, and Siril version.
+**This phase was not executed as written, and is closed as superseded rather than left
+unchecked.** The goal was met — quality and speed are measurable, and were measured at every
+phase gate — but by a different arrangement than the one planned here. What changed, and why, is
+recorded below the task list. The original tasks are kept, struck where they were not built, so
+that a reader who finds no `imageproc-fixtures` command knows it was decided against rather than
+forgotten.
 
-**Gate:** `cargo xtask imageproc-fixtures` is byte-idempotent; the README has real Siril numbers;
-the parity harness compiles and skips cleanly without `PX_SIRIL_REF`.
+- [x] **P0-T1** Workspace deps: `nalgebra`, `sysinfo`. `[[bench]]` entries (`harness = false`)
+      for `stack`, `register`, `budget` and — added in Phase 12 — `reduce`.
+      ~~dev-only `approx`~~: never needed. The tolerances here are named, asymmetric and
+      per-measurement (0.05 ADU on a printed statistic, 0.1 px on a centroid, a ratio against
+      σ_bg), so every assertion states its own bound; a generic approximate-equality macro would
+      have hidden exactly the number each test exists to pin.
+      ~~`calibrate` bench~~: calibration is one pass of arithmetic over a frame, is never the
+      stage a profile points at (`calibrate.apply` is 0.58 s against a 1.44 s write), and a
+      microbenchmark of it would have measured `px-fits`.
+- [ ] ~~**P0-T2** `cargo xtask imageproc-fixtures`: a committed ≤ 512×512 corpus with a JSON
+      ground-truth manifest.~~ **Not built.** See below.
+- [x] **P0-T3** `cargo xtask siril-reference`: runs Siril over the corpus and writes reference
+      outputs plus a manifest recording the Siril version. Errors with a clear message if Siril
+      is not installed; consuming tests skip. Grown one subcommand at a time as each phase needed
+      its reference (`stat` in Phase 2, through `--master-light` in Phase 11) rather than built
+      up front for outputs no test yet consumed.
+- [x] **P0-T4** Parity harness. Landed as one `support.rs` per consuming crate plus a written
+      report per comparison under `data/output/*-parity.txt`, rather than one macro: each phase's
+      parity question has a different shape (a printed statistic, a star list, a homography, a
+      frame), and the reports are what the README's tables are quoted from.
+- [x] **P0-T5** `PX_IMAGEPROC_CORPUS`, pointing at real frames. This became the *primary*
+      corpus rather than the large-corpus hook it was planned as.
+- [x] **P0-T6** Siril baselines measured and recorded — wall time for all five pipelines, with
+      machine, OS and Siril version. They live in the README's Phase 11 and 12 sections beside
+      the native numbers they are the baseline for, rather than in a separate "Baseline" section
+      that would have to be read in two places.
+
+**Gate: met, on the goal rather than on the letter.** Every phase gate in this document is
+backed by a measurement against Siril or against analytic truth, and the parity tests skip
+cleanly without `PX_SIRIL_REF`.
+
+#### Why the committed fixture corpus was not built
+
+The premise was that a small committed corpus would make parity reproducible for anyone with the
+repository. Three things went against it, in order of when they were found:
+
+1. **The bugs were not reachable at 512×512.** The two worst defects this work produced were a
+   quadratic median on duplicate-heavy data (Phase 2) and a memory-budget breach in the master
+   light (Phase 11). Both were invisible on a small frame — the first *finished* on a 20k-element
+   synthetic test and hung on a 61 MP bias frame, and the second is definitionally about a frame
+   set that does not fit. A corpus small enough to commit is a corpus too small to find them.
+2. **Truth next to the assertion beat truth in a manifest.** Tests generate what they need —
+   a known sigma, a placed centroid, a known homography — in the test body. The tolerance and
+   the truth it is measured against are then one screen apart, and neither can drift from the
+   other. A JSON manifest would have put a test's truth in a file the test does not name.
+3. **The Siril half was never committable anyway.** Reference outputs are large and
+   Siril-version-dependent, which this ADR already says under Consequences. Committing the
+   *inputs* alone would have produced a corpus that reproduces nothing without a local Siril run
+   — which is what `PX_SIRIL_REF` already handles.
+
+**What this costs, stated plainly.** Every figure in this document quoted against Siril was
+measured on a corpus that is not in this repository: `data/corpus-mono` (ASI6200MM Pro, 9576×6388)
+and an OSC set. A contributor without those frames can run the full unit and analytic suite and
+gets the parity tests skipped, not failed. That is a real reproducibility gap, and closing it —
+a downloadable corpus, or a generator large enough to be worth timing — is follow-up work, not
+something this phase delivered.
 
 ### Phase 1 — Frame model, frame sets, resource budget, block scheduler
 
@@ -897,8 +957,9 @@ gradient-corrected was chosen, and remains the argument for the default it set.)
       with no declared pattern is an error, not a guess — guessing wrong swaps red and blue,
       which looks plausible enough to ship.
 - [x] **P6-T4** Quality measured three ways (below).
-- [ ] **P6-T2, P6-T5, P6-T6, P6-T7** CFA equalization wiring, `calibrate_light/native.rs`, CLI
-      dispatch, and the 100-frame parity run — **blocked on the demosaic decision below.**
+- [x] **P6-T2, P6-T5, P6-T6, P6-T7** CFA equalization wiring, `calibrate_light/native.rs`, CLI
+      dispatch, and the 100-frame parity run — were blocked on the demosaic decision below, which
+      unblocked them. Each is listed with its result after that decision.
 
 #### What the substitution costs
 
@@ -1758,51 +1819,213 @@ one.
 
 On speed and on measured quality the native engine wins outright — every pipeline is faster, the
 master light is 1.50x faster than Siril's and simultaneously 2.3% quieter and 0.2% sharper, and it
-needs no Siril install at all. That is not sufficient, for two reasons that have nothing to do
-with either number.
+needs no Siril install at all. That was not sufficient when this amendment was written, for two
+reasons that had nothing to do with either number. **Phase 6c has since removed one of them, and
+the decision stands on the other alone.** Both are kept here, because a decision that survives its
+main argument being withdrawn should say so rather than quietly re-derive itself.
 
-**It would silently change every OSC user's demosaic.** RCD cannot be implemented clean-room
-(Phase 6) and the native path substitutes Malvar-He-Cutler, which is the more accurate
-reconstruction against known truth and *measurably noisier in the background* — 1.23x to 1.45x
-RCD's, per channel. Both effects are real. A user who has been stacking colour data and suddenly
-finds the background noisier has had a decision made for them by a default change, and would have
-no reason to suspect it.
+**~~It would silently change every OSC user's demosaic.~~ Withdrawn — Phase 6c.** The argument was
+that RCD could not be implemented clean-room, so the native path substituted Malvar-He-Cutler:
+more accurate against known truth, and *measurably noisier in the background*, 1.23x to 1.45x
+RCD's per channel. A colour stacker who suddenly found their background noisier would have had
+that decided for them with no reason to suspect it. The clean-room-specification route then made
+RCD available, it is the default `--debayer`, and its background noise is at or below Siril's
+(0.95x/0.95x/0.93x per channel). **A native default would no longer change an OSC user's
+demosaic in any way they could measure.**
 
 **It would turn working commands into errors.** Background extraction and mosaic projects — grid
 and spiral — are Siril-only and refuse up front. That refusal is correct behaviour for a user who
-asked for the native engine and wrong for a user who asked for nothing.
+asked for the native engine and wrong for a user who asked for nothing. This reason is unaffected
+by Phase 6c and is now the whole of the case.
 
-The default therefore stays Siril, and `--engine native` stays opt-in and documented. What would
-change this decision, in order:
+**So the decision is now a narrower one than it was**, and worth stating in its narrowed form: the
+default stays Siril because flipping it would break three commands that work today, not because
+the native engine produces worse pictures. It does not. What would change the decision:
 
 1. ~~**The RCD gap closes** — a demosaic lands with measured background noise at parity.~~
    **Met in Phase 6c.** AHD did not close it (Phase 6b, 1.20×/1.55×/1.32×); native RCD does, at
    0.95×/0.95×/0.93×, for 13% end-to-end. The diagnosis that AHD's failure suggested turned out
    to be right: the fix was an *averaging* directional method, not another selecting one.
-2. Background extraction and the mosaic pipelines gain native implementations, or the engine
-   selection becomes per-pipeline so a native default falls back for the ones it cannot do —
-   which is a change to D5's "report rather than silently skip" rule and needs its own argument.
+2. **The live one.** Background extraction and the mosaic pipelines gain native implementations,
+   or the engine selection becomes per-pipeline so a native default falls back for the ones it
+   cannot do — which is a change to D5's "report rather than silently skip" rule and needs its
+   own argument.
 3. A release's worth of `--engine native` use on real projects without a correctness report.
 
 Until then the honest recommendation, and what the ROADMAP now says, is that the native engine is
-the better path for mono stacking today and should be chosen deliberately.
+the better path today — for colour as well as mono, since Phase 6c — and should be chosen
+deliberately.
+
+### Phase 13 — Warping, and the passes that were not needed
+
+*Goal: act on what the Phase 12 profile pointed at rather than at what Phase 12 chose to look at.*
+
+Phase 12 ranked its targets by **thread** time and went after `stack.reduce`, which is the largest
+number in the profile by a wide margin. That was the wrong ordering for a wall-clock question.
+Warping is nearly serial *between* frames — a frame is warped by all sixteen cores, then the next
+one is — so its span total is close to its wall-clock cost, and `warp.total` was **0.80–0.82× the
+whole run's wall clock**. `stack.reduce`'s 174 s of thread time is 2.15× wall, which is to say
+about 11 s of it. Warping was the larger target the whole time and had never been optimized.
+
+- [x] **P13-T1** The clamping guide is produced by the resample pass instead of by a second warp.
+- [x] **P13-T2** `clamp_undershoot` works from the list of pixels that rang rather than from a
+      frame-sized mask, which removes the dilation and copy passes and two `bool` buffers.
+- [x] **P13-T3** `separable` takes its tap window as a sub-slice of each source row.
+- [x] **P13-T4** `clip_until_stable` and `linear_fit` gather survivors in the pass that counts
+      them, instead of comparing every value twice.
+- [x] **P13-T5** `winsorized_deviation` clamps as it reads instead of materializing the pulled-in
+      stack once per iteration.
+- [x] **P13-T6** Output proved unchanged, byte for byte. See the gate.
+
+**Gate: met, and the output is byte-identical.** This is the property the whole phase is
+conditional on — every change here is a restatement of the same arithmetic in the same order, so
+none of them is allowed to move a pixel. Verified by building the 95-frame master light and the
+40-frame master bias before and after and comparing the files: **`cmp` reports no difference on
+either**, across 244 MB and 61,171,488 pixels. Every parity figure is therefore unchanged in every
+digit — sky 0.333 σ_bg, noise ratio 0.9766, FWHM ratio 0.9978 — which is the same evidence stated
+the other way round.
+
+#### What each change was worth
+
+Kernel-level, `benches/register.rs` and `benches/reduce.rs`, A/B against a saved baseline of the
+previous code on the same machine:
+
+| Benchmark | Before | After | |
+|---|---|---|---|
+| `warp/lanczos4_clamped` | 80.4 ms | **44.9 ms** | **1.79×** |
+| `warp/lanczos4` | 61.2 ms | **38.2 ms** | 1.60× |
+| `warp/bicubic_clamped` | 51.2 ms | **25.7 ms** | 1.99× |
+| `warp/bicubic` | 31.3 ms | **20.1 ms** | 1.56× |
+| `warp/bilinear` | 7.03 ms | 7.16 ms | **0.98×, slower** |
+| `reduce_kernel/reject/95_frames` (linear fit) | 4.105 ms | 4.049 ms | 1.014× |
+| `reduce_kernel/reject/25_frames` (Winsorized) | 4.286 ms | 4.221 ms | 1.015× |
+| `reduce_kernel/reject/5_frames` (percentile) | 90.1 µs | 90.2 µs | — |
+
+End to end, from `tests/profile.rs` on the 122-frame master light (8 GB budget, 16 cores; median
+of three runs before, two after):
+
+| Stage | Before | After | |
+|---|---|---|---|
+| **wall clock** | **83.4 s** | **66.5 s** | **1.25×** |
+| `warp.total` | 68.5 s | **33.6 s** | **2.04×** |
+| — `warp.resample` | 47.3 s | 29.4 s | 1.61× |
+| — `warp.clamp` | 21.2 s | **3.7 s** | **5.7×** |
+| `stack.reduce` | 174.3 s | 168.0 s | 1.04× |
+
+And through the pipeline the README quotes, the 95-frame master light: **47.1 s to 37.8 s**, against
+Siril's 73.6 s — from 1.56× to **1.95×**.
+
+#### The guide was a second warp of the whole frame
+
+Clamping needs a reference the kernel cannot undershoot, and it got one by warping the frame again
+with the area kernel. That kernel *is* bilinear at the scale registration works at — `area` called
+`bilinear` and said so — and bilinear's 2×2 taps are a subset of the 8×8 Lanczos-4 has already
+loaded, sampled at a point the resample loop has already inverse-mapped. Producing it in the same
+pass costs four multiply-adds; producing it separately cost a second inverse-map, a second support
+check and a second traversal of a 244 MB output, for every frame.
+
+Two things made this safe to state as bit-identical rather than merely close. It is the same
+function at the same point, so the values are the same values. And the guide's support is *wider*
+than Lanczos-4's, so the separate warp also covered a band around the footprint's edge where the
+real warp has nothing — a band nothing reads, because the repair never writes a pixel the warp
+left at zero. Dropping it loses no information the clamp could have used.
+
+#### Ringing is 1% of a frame and was being paid for at 100%
+
+The repair itself was three whole-frame passes: build a `bool` mask over every pixel, dilate it by
+reading five neighbours of every pixel, then walk the frame again to copy the guide in. Two of
+those passes exist only to express "and also the neighbours of the pixels that rang" — which, for
+the ~1% of pixels that do ring, is better said by walking that 1% and touching their neighbours
+directly. The dilation and the copy become proportional to the ringing instead of to the frame,
+and two frame-sized `bool` buffers go away with them.
+
+The result is identical where two repaired neighbourhoods overlap, and the reason is worth
+recording because it is the sort of thing that looks like a difference and is not: the repair is
+`data[i] = guide[i]`, which is idempotent, and the only pixel a second visit declines to write is
+one an earlier visit set to zero — by writing the very value it would write again.
+
+#### The kernel was paying an index multiply and a bounds check per tap
+
+`separable` fetched each of its 64 taps with `Frame::get`, which recomputes
+`(channel · height + y) · width + x` and bounds-checks the result. But `sample` has *already*
+established that the whole support is inside the frame — that is the check that keeps the edge
+honest — so each source row contributes a contiguous run of `2·radius` values that can be taken as
+a sub-slice. The multiply and the check come out of the inner loop, and what remains is a dot
+product over two contiguous slices, which the compiler can do something with.
+
+Worth 1.6× on both kernels that use it, with the accumulation order deliberately untouched.
+**This is the optimization D8 asked for and did not find in Phase 12.** Phase 12 looked for
+vectorization of the *arithmetic* and correctly refused it, because reassociating floating-point
+addition would move every pixel in its last bits. Removing address arithmetic changes no
+arithmetic at all, and required no `unsafe` to do it.
+
+The one number that went the wrong way is `warp/bilinear`, 2% slower and reproducibly so. Bilinear
+does not use `separable` and gains nothing from the change; what it sees is the restructured band
+loop. It is 7 ms on a 16.8 MP frame, it is not the registration kernel — Lanczos-4 is, by D10 —
+and it is recorded here rather than dropped from the table.
+
+#### D8 was right about the reduction, and the measurement says so again
+
+P13-T4 and P13-T5 were expected to matter and did not, and that is the useful finding. Removing a
+whole comparison pass per clipping iteration, and a buffer written and read once per Winsorizing
+iteration, is worth **1.4–1.5% of the rejection kernel** — statistically solid (p < 0.01) and
+practically nothing. At the pipeline level it is invisible: master flat, which is 59 frames of
+Winsorized rejection and the most rejection-bound pipeline there is, measured 7.38 s before and
+7.38 s after.
+
+This is exactly what D8 predicted. The reduce loop is bound by the *serial dependency chain* of
+its estimators — each clipping pass needs the previous pass's centre and spread, and each
+Winsorizing iteration needs the previous iteration's sigma — not by how many times it touches the
+values. Taking work out of a latency-bound loop buys close to nothing, which Phase 12 established
+by removing `sxx` from the least-squares fit and watching the total not move. Two more attempts
+now agree.
+
+The changes are kept, because they are smaller and clearer than what they replace — one pass that
+gathers instead of two that count and then gather, and an estimator that does not need a buffer —
+and because being free is a good enough reason to prefer the simpler form. They are not kept for
+their speed, and the table says so.
+
+**What is left, in order of what the profile now says.** `stack.reduce` is once again the largest
+thread-time figure and is now also a fair share of wall clock; the iterated clipping that makes it
+slow is algorithmic and unaddressed. `master_light.levels` is ~15 s of serial per-channel work on
+a frame the warp had in cache moments earlier. `starfind.background` traverses the same 244 MB
+twice, once for the counting median and once for the row-difference noise. And `stack.read` (53 s
+of thread time) is strictly serialized ahead of the reduction inside each worker, where one block
+of read-ahead would hide it at the cost of a second band buffer per worker — which is the memory
+the scheduler exists to bound, so it is a budget trade rather than a free win and wants measuring
+before it is taken.
 
 ---
 
 ## Open questions
 
-- **Interpolation parity ceiling.** OpenCV's `remap` uses fixed-point weight tables for Lanczos-4;
-  a straightforward `f32` implementation will differ by small amounts everywhere. The 0.5 σ_bg
-  bound in P10-T4 is an estimate. If it proves unreachable, the right move is to measure whether
-  the difference is *worse* (ringing, softness) or merely different, and adjust the assertion to
-  test that — not to widen the number quietly.
-- **GESDT needs the inverse Student's t CDF**, which Siril gets from GSL. `statrs` provides it;
-  whether that dependency is worth carrying for one rejection method the project's
-  `BestRejection` helper never selects is a Phase 3 call. Deferring GESDT with a typed error is
-  an acceptable outcome.
-- **Frame-count ceiling for in-memory registration data.** Star lists for 2000 stars × 500 frames
-  is on the order of 100 MB. It should be charged against the budget; P9-T2 will confirm whether
-  that is material.
+Three of the five questions this ADR opened were answered by the work and are recorded here with
+their answers rather than deleted, since the answer is the useful part.
+
+**Settled**
+
+- ~~**Interpolation parity ceiling.**~~ **Reachable, with room.** The concern was that OpenCV's
+  fixed-point Lanczos-4 weight tables would put a floor under any `f32` implementation. P10-T4
+  measures it: the warp agrees with `seqapplyreg` well inside the estimated 0.5 σ_bg
+  (`data/output/warp-parity.txt`), and the quantized weight table this implementation uses is
+  1024-step against OpenCV's 32, so the quantization is the finer of the two. The bound did not
+  need widening and the fallback plan — assert the direction of the difference instead of its
+  magnitude — was not needed.
+- ~~**GESDT needs the inverse Student's t CDF.**~~ **Deferred with a typed error, and `statrs`
+  not taken** — the outcome the question named as acceptable. `Rejection::Gesdt` fails
+  `check_supported()` before a frame is read, so it is a clear refusal rather than a silent
+  fallback to a method the caller did not ask for. Nothing selects it: `BestRejection` covers
+  every frame count with percentile, Winsorized or linear fit. Carrying a statistics crate for a
+  method with no caller was not worth it.
+- ~~**Frame-count ceiling for in-memory registration data.**~~ **Not material at any frame count
+  the pipelines accept.** The estimate in the question was roughly right — a capped 2000-star
+  list is ~100 KB a frame, so 500 frames is ~50 MB — but it is the wrong thing to worry about
+  next to what shares the budget with it: a *single* 61 MP frame is 244 MB, and the warped-frame
+  residency P11-T3 manages is measured in gigabytes. Star lists are charged against the budget
+  and have never been the term that decided anything.
+
+**Still open**
+
 - **Which high-pass does the RCD specification mean?** §3.2 says "five-tap" and "distances 1, 2
   and 3", which are different filters. Phase 6c implements the five-tap fourth difference and
   deliberately did not try the alternative against Siril's output, since fitting a coefficient to
@@ -1811,3 +2034,11 @@ the better path for mono stacking today and should be chosen deliberately.
   expected place for it to show up.
 - **`FitsExt` living in `siril-sys`** (D5) is an accepted wart. Moving it to `px-fits` is the
   obvious cleanup and is blocked only by this ADR's "no changes to Siril crates" constraint.
+- **The memory budget is the one bound this ADR calls non-negotiable, and only the stacker has a
+  test that enforces it.** `tests/memory.rs` asserts peak heap against the budget for stacking;
+  the end-to-end figure that matters most — an 8 GB run peaking at 4.88 GB — is a measurement in
+  the README, not an assertion. The bug it replaced (a master light at 19.9 GB under an 8 GB
+  budget, each phase individually inside it) would not be caught again by the suite. A
+  pipeline-level peak-RSS assertion is the missing guard.
+- **Reproducing the Siril-relative numbers needs a corpus that is not in this repository.** See
+  the Phase 0 note.

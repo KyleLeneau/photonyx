@@ -61,10 +61,14 @@
     a 95-frame master light is 49 s against 73.6 s, 2.3% quieter and 0.2% sharper.
   * Still Siril-only, and refused with a clear error rather than silently skipped: background
     extraction, mosaic projects (grid and spiral), and cross-layer registration.
-  * Siril remains the default engine — see ADR 007 Phase 12 for why, and for what would change it.
-* [ ] close the RCD demosaic gap (ADR 007 Phase 6b) — the native OSC path uses Malvar-He-Cutler,
-      which is the more accurate reconstruction but noisier in the background than Siril's RCD.
-      This is the main thing standing between the native engine and being the default.
+  * OSC is covered too: the native RCD demosaic (ADR 007 Phase 6c) is the default `--debayer`
+    and its background noise is at or below Siril's, per channel.
+  * Siril remains the default engine — see ADR 007 Phase 12 for why, and for what would change
+    it. The reason is now only that background extraction and mosaic projects would turn from
+    working commands into errors, not that the native output is worse. It is not.
+* [x] close the RCD demosaic gap (ADR 007 Phase 6c) — reached by the clean-room-specification
+      route after Malvar-He-Cutler and AHD both fell short on background noise. Native RCD
+      measures 0.95×/0.95×/0.93× Siril's per channel, and is 13% faster end to end.
 * [ ] implement obs find best to manage calibration links
 * [ ] Add the ability to review all frames for a project stacking and human reject the bad ones (should be part of lock change detection)
 * [ ] Need a way to relink calibration masters to obs - obs command
