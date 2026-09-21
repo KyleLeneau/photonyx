@@ -218,12 +218,12 @@ pub struct GlobalArgs {
     /// `native` runs inside `px` with no Siril process — faster and bounded by
     /// `--max-memory`, but only implemented for some pipelines, which report
     /// an error rather than silently falling back.
-    #[arg(global = true, long, env = "PX_ENGINE", default_value = "siril")]
+    #[arg(global = true, long, env = EnvVars::PX_ENGINE, default_value = "siril")]
     pub engine: Engine,
 
     /// Maximum CPU cores to use. Defaults to all of them, or to the
     /// container's quota when running under one.
-    #[arg(global = true, long, env = "PX_MAX_CORES", value_name = "N")]
+    #[arg(global = true, long, env = EnvVars::PX_MAX_CORES, value_name = "N")]
     pub max_cores: Option<usize>,
 
     /// Maximum memory to use: `8G`, `512M`, or `75%` of what is available.
@@ -233,7 +233,7 @@ pub struct GlobalArgs {
     #[arg(
         global = true,
         long,
-        env = "PX_MAX_MEMORY",
+        env = EnvVars::PX_MAX_MEMORY,
         value_name = "SIZE",
         value_parser = parse_memory_limit
     )]
@@ -246,7 +246,7 @@ pub struct GlobalArgs {
     /// sharper but noisier; `bilinear` is softer and quieter; `ahd` is
     /// adaptive but costs the most. Applies to the native engine only — the
     /// Siril engine uses its own setting.
-    #[arg(global = true, long, env = "PX_DEBAYER", default_value = "rcd")]
+    #[arg(global = true, long, env = EnvVars::PX_DEBAYER, default_value = "rcd")]
     pub debayer: DebayerMethod,
 }
 

@@ -42,4 +42,16 @@ impl EnvVars {
 
     /// Optional Temp directory location that must exist. Otherwise uses the default system location.
     pub const PX_PIPELINE_TEMP_DIR: &'static str = "PX_PIPELINE_TEMP_DIR";
+
+    /// px-pipeline engine to use (either 'siril' or 'native')
+    pub const PX_ENGINE: &'static str = "PX_ENGINE";
+
+    /// The maximum CPU cores to use for the pipeline (default is max)
+    pub const PX_MAX_CORES: &'static str = "PX_MAX_CORES";
+
+    /// The maximum memory to use (8GB, 512M or 75%) for the native pipeline (default is 90%)
+    pub const PX_MAX_MEMORY: &'static str = "PX_MAX_MEMORY";
+
+    /// Default debayer pattern to use for OSC images (default is rcd)
+    pub const PX_DEBAYER: &'static str = "PX_DEBAYER";
 }
