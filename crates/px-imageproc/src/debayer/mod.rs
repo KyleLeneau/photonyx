@@ -6,13 +6,20 @@
 //!
 //! - [`Method::GradientCorrected`] reconstructs at full resolution and is what
 //!   a calibration pipeline should use. Malvar-He-Cutler; see [`mhc`].
+//! - [`Method::Rcd`] blends two directional estimates per pixel using a
+//!   ratio-corrected model. Quiet and adaptive; see [`rcd`].
+//! - [`Method::Ahd`] reconstructs twice, horizontally and vertically, and
+//!   picks between them per pixel on which one left the more homogeneous
+//!   neighbourhood. Slower and adaptive; see [`ahd`].
 //! - [`Method::SuperPixel`] collapses each 2×2 tile to one RGB pixel, halving
 //!   both dimensions. It interpolates nothing, so it cannot produce colour
 //!   artifacts, and it is cheap — which is what a preview wants and why it was
 //!   written first.
 
+pub mod ahd;
 pub mod bilinear;
 pub mod mhc;
+pub mod rcd;
 pub mod superpixel;
 
 use crate::bayer::BayerPattern;
@@ -25,9 +32,8 @@ pub use superpixel::{super_pixel_debayer, super_pixel_debayer_u16};
 /// How a CFA frame is turned into colour.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Method {
-    /// Full-resolution gradient-corrected linear interpolation. The default
-    /// for anything that will be stacked or measured.
-    #[default]
+    /// Full-resolution gradient-corrected linear interpolation. Cheap and
+    /// sharp; the default before [`Method::Rcd`] existed.
     GradientCorrected,
     /// Half-resolution 2×2 averaging. For previews.
     SuperPixel,
@@ -35,6 +41,18 @@ pub enum Method {
     /// than [`Method::GradientCorrected`] but quieter, because averaging
     /// suppresses noise where a sharpening correction amplifies it.
     Bilinear,
+    /// Full-resolution adaptive homogeneity-directed reconstruction
+    /// (Hirakawa-Parks). Interpolates along edges rather than across them,
+    /// at several times the cost of the linear methods.
+    Ahd,
+    /// Full-resolution ratio-corrected reconstruction with soft directional
+    /// blending. Adaptive like [`Method::Ahd`] but blends rather than
+    /// selects, which is what keeps its background quiet.
+    ///
+    /// The default: the most accurate of these against known truth, and the
+    /// only one whose background noise matches Siril's own reconstruction.
+    #[default]
+    Rcd,
 }
 
 /// Demosaics `frame` in place, replacing its single CFA channel with three
@@ -71,6 +89,14 @@ pub fn debayer_frame_with(
     match method {
         Method::GradientCorrected => {
             let rgb = mhc::demosaic(frame.channel(0), width, height, pattern)?;
+            frame.replace(ImageDims::new(width, height, 3), rgb)?;
+        }
+        Method::Rcd => {
+            let rgb = rcd::demosaic(frame.channel(0), width, height, pattern)?;
+            frame.replace(ImageDims::new(width, height, 3), rgb)?;
+        }
+        Method::Ahd => {
+            let rgb = ahd::demosaic(frame.channel(0), width, height, pattern)?;
             frame.replace(ImageDims::new(width, height, 3), rgb)?;
         }
         Method::Bilinear => {

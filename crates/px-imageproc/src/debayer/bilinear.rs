@@ -15,18 +15,6 @@ use rayon::prelude::*;
 use crate::bayer::BayerPattern;
 use crate::error::ImageProcError;
 
-#[inline]
-fn colour_at(pattern: BayerPattern, x: usize, y: usize) -> usize {
-    let tile = match pattern {
-        BayerPattern::Rggb => [[0u8, 1], [1, 2]],
-        BayerPattern::Bggr => [[2, 1], [1, 0]],
-        BayerPattern::Gbrg => [[1, 2], [0, 1]],
-        BayerPattern::Grbg => [[1, 0], [2, 1]],
-        BayerPattern::None => [[1, 1], [1, 1]],
-    };
-    tile[y % 2][x % 2] as usize
-}
-
 /// Demosaics a single-channel CFA frame into planar RGB at full resolution.
 pub fn demosaic(
     cfa: &[f32],
@@ -67,7 +55,7 @@ pub fn demosaic(
                             continue;
                         }
                         let (nx, ny) = (nx as usize, ny as usize);
-                        let c = colour_at(pattern, nx, ny);
+                        let c = pattern.colour_at(nx, ny);
                         sums[c] += cfa[ny * width + nx];
                         counts[c] += 1;
                     }
@@ -82,7 +70,7 @@ pub fn demosaic(
                     };
                 }
                 // The measured channel is known exactly; never average it away.
-                rgb[colour_at(pattern, x, y)] = cfa[y * width + x];
+                rgb[pattern.colour_at(x, y)] = cfa[y * width + x];
 
                 r_row[x] = rgb[0];
                 g_row[x] = rgb[1];

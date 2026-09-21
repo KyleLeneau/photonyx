@@ -39,14 +39,24 @@ impl std::fmt::Display for Engine {
 /// Which reconstruction turns a colour-filter-array frame into full colour.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
 pub enum DebayerMethod {
-    /// Gradient-corrected linear interpolation (Malvar-He-Cutler). Sharper and
-    /// measurably more accurate; amplifies high-frequency noise a little.
-    #[default]
+    /// Gradient-corrected linear interpolation (Malvar-He-Cutler). The
+    /// cheapest full-resolution option; amplifies high-frequency noise a
+    /// little.
     GradientCorrected,
     /// Averaging of nearest same-colour neighbours. Softer, and quieter in the
     /// background because averaging suppresses noise rather than sharpening
     /// it.
     Bilinear,
+    /// Adaptive homogeneity-directed (Hirakawa-Parks). Reconstructs the frame
+    /// both horizontally and vertically and picks per pixel, so it
+    /// interpolates along edges rather than across them. Several times the
+    /// cost of the other two.
+    Ahd,
+    /// Ratio-corrected demosaicing. Adaptive like `ahd`, but blends the two
+    /// directional estimates instead of choosing between them, which keeps
+    /// the background quieter. The default, and the most accurate of these.
+    #[default]
+    Rcd,
 }
 
 impl std::fmt::Display for DebayerMethod {
@@ -54,6 +64,8 @@ impl std::fmt::Display for DebayerMethod {
         match self {
             DebayerMethod::GradientCorrected => write!(f, "gradient-corrected"),
             DebayerMethod::Bilinear => write!(f, "bilinear"),
+            DebayerMethod::Ahd => write!(f, "ahd"),
+            DebayerMethod::Rcd => write!(f, "rcd"),
         }
     }
 }
@@ -229,15 +241,12 @@ pub struct GlobalArgs {
 
     /// How colour-filter-array frames are reconstructed into colour.
     ///
-    /// `gradient-corrected` is sharper and more accurate against known truth;
-    /// `bilinear` is softer but quieter in the background. Applies to the
-    /// native engine only — the Siril engine uses its own setting.
-    #[arg(
-        global = true,
-        long,
-        env = "PX_DEBAYER",
-        default_value = "gradient-corrected"
-    )]
+    /// `rcd` is the most accurate against known truth and the only one whose
+    /// background noise matches Siril's; `gradient-corrected` is cheaper and
+    /// sharper but noisier; `bilinear` is softer and quieter; `ahd` is
+    /// adaptive but costs the most. Applies to the native engine only — the
+    /// Siril engine uses its own setting.
+    #[arg(global = true, long, env = "PX_DEBAYER", default_value = "rcd")]
     pub debayer: DebayerMethod,
 }
 

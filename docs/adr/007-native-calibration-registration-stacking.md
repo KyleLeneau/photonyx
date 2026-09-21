@@ -28,6 +28,26 @@ So every algorithm here is implemented from published descriptions and validated
 as a **black box** — comparing outputs, which is ordinary interoperability testing. See handoff
 rule 7 for the working rule.
 
+**The clean-room-specification route (added Phase 6c).** There is a second admissible route, and
+it is what finally made RCD available. Where an algorithm has no published description, one
+person reads the reference implementation and writes an *implementation-independent functional
+specification* — behaviour, data flow, constants and rationale, with no code, no identifiers and
+no control flow — and a second person implements from that document alone, never having seen the
+original. This is the established clean-room method, and it rests on the same distinction as the
+rest of this section: the specification carries only the unprotectable functional content, and
+what the implementer produces is an independent expression of it.
+
+Two disciplines make it hold, and both are recorded per module:
+
+1. **The wall is real and stated.** `debayer/rcd.rs` names the specification, its date, and the
+   fact that its author has never opened `rcd.cc`. A file that cannot say this cannot use this
+   route.
+2. **Validation stays black-box, and coefficients are never fitted.** Comparing output against
+   Siril is interoperability testing. *Searching* a parameter until the output matches is
+   deriving the original's expression by another path, and is not permitted — where the
+   specification is ambiguous, the ambiguity is resolved by its author, not by the reference's
+   behaviour. Phase 6c has a worked example of exactly this, left open rather than fitted.
+
 This was caught partway through Phase 6, after Phases 1–5 had landed. `runtime/blocks.rs` and
 `stack/rejection.rs` were structure-preserving ports and have been rewritten from their
 specifications; what that cost, and what it improved, is recorded under those phases.
@@ -860,10 +880,12 @@ than Siril's own two rejection methods are to each other.
 
 ### Phase 6 — Debayer and `CalibrateLight`
 
-**RCD cannot be implemented clean-room, and has been substituted.** Siril gets RCD from
-librtprocess, which is GPL-3.0, and RCD has no published specification independent of that
-implementation — no paper states its filters. Under the licensing rule it is therefore
-unavailable, and this phase's original task list is rewritten around what *is* available.
+**RCD has no *published* specification, and was substituted at this phase.** Siril gets RCD from
+librtprocess, which is GPL-3.0, and no paper states its filters. Under the licensing rule as it
+stood it was therefore unavailable, and this phase's task list is rewritten around what *is*
+available. (Phase 6c later reached RCD by the clean-room-specification route, which did not exist
+as an option when this phase ran. The substitution reasoning below stands as the record of why
+gradient-corrected was chosen, and remains the argument for the default it set.)
 
 - [x] **P6-T1** `debayer/mhc.rs`: Malvar-He-Cutler gradient-corrected linear interpolation
       (ICASSP 2004 / MSR-TR-2004-92), whose four 5×5 filters the paper states outright. The
@@ -905,10 +927,12 @@ So the honest summary is that MHC is the more accurate reconstruction and genuin
 the background than RCD, because its correction term amplifies high spatial frequencies — noise
 included. RCD averages along the local edge direction and avoids that. Both effects are real.
 
-#### Decision: ship both, default to gradient-corrected
+#### Decision: ship both, default to gradient-corrected *(default superseded in Phase 6c)*
 
 Both reconstructions ship. `--debayer <gradient-corrected|bilinear>` selects between them,
-`PX_DEBAYER` overrides, and the default is gradient-corrected.
+`PX_DEBAYER` overrides, and the default is gradient-corrected. (Phase 6b adds a third, `ahd`,
+without changing the default. Phase 6c adds `rcd` and **does** take the default, on the reasoning
+below inverting once RCD became available.)
 
 The default follows from what the pipeline is *for*. Stacking averages background noise down and
 cannot recover resolution that a blurrier reconstruction threw away, so on a stacking pipeline
@@ -916,7 +940,8 @@ the accuracy is the part worth keeping and the extra background noise is the par
 dealt with anyway. Bilinear stays available for anyone working with few frames, or who prefers
 the smoother rendition.
 
-Neither is RCD, and the ADR does not claim they are. Closing that gap is Phase 6b.
+Neither is RCD, and the ADR does not claim they are. Closing that gap was Phase 6b's job; it
+narrowed it without closing it, and the default did not move.
 
 - [x] **P6-T2** CFA equalization wired into the native calibration path: the master flat's red
       and blue are levelled to green before the division, so dividing by it corrects the optics
@@ -943,23 +968,221 @@ master dark and flat, through the `px` binary:
 Metadata round-trips correctly — target, filter, exposure, RA/Dec, site — and the output is
 `pp_`-prefixed where the observation index and every downstream command expect it.
 
-### Phase 6b — AHD demosaicing (deferred)
+### Phase 6b — AHD demosaicing
 
-Closing the remaining gap to RCD, should the measured 1.23×/1.45×/1.24× background-noise penalty
-of gradient-corrected interpolation prove to matter in practice.
+Closing the remaining gap to RCD, given the measured 1.23×/1.45×/1.24× background-noise penalty
+of gradient-corrected interpolation.
 
-- [ ] **P6b-T1** Implement AHD (Hirakawa & Parks, *Adaptive Homogeneity-Directed Demosaicing
-      Algorithm*, IEEE Trans. Image Processing 14(3), 2005). Published in full, so it is
-      available clean-room. Interpolate horizontally and vertically, convert both candidates to
-      a perceptually uniform space, build a homogeneity map, and pick per pixel from the more
-      homogeneous direction. Several hundred lines.
-- [ ] **P6b-T2** Add it to the `--debayer` choices and measure it the same three ways: against
-      RCD on a real frame, against known truth on a synthetic field, and for speed.
-- [ ] **P6b-T3** Decide whether it becomes the default, on the numbers.
+- [x] **P6b-T1** `debayer/ahd.rs`: AHD (Hirakawa & Parks, *Adaptive Homogeneity-Directed
+      Demosaicing Algorithm*, IEEE Trans. Image Processing 14(3):360–369, 2005). Published in
+      full, so it is available clean-room. Green is interpolated horizontally and vertically by
+      the five-tap `[-1/4, 1/2, 1/2, 1/2, -1/4]` filter; red and blue follow for each candidate
+      from bilinear interpolation of the R−G and B−G differences; both candidates go to CIELAB
+      through the Rec. 709 matrix with no gamma step, since the frame is linear; a homogeneity
+      map with per-pixel adaptive thresholds is summed over a 3×3 window and the larger wins,
+      an exact tie averaging the two.
+- [x] **P6b-T2** Added to `--debayer` as `ahd` and measured the same three ways.
+- [x] **P6b-T3** Decided on the numbers: **it does not become the default.**
 
-**Trigger:** a stacked master light where the colour reconstruction is visibly the limiting
-factor, or a measured noise penalty that survives stacking. Until one of those exists this is
-speculative work, which is why it is deferred rather than scheduled.
+#### Two things run in bands, and one of them is why
+
+AHD holds eight intermediate planes per pixel — two directional greens, two candidate RGBs, two
+CIELABs, two homogeneity maps. Held whole, a 61 MP frame would want close to 4 GB of them, which
+is more than the frame. So it runs in row bands sized by pixel count rather than by the frame
+(~15 MB each), with a five-pixel halo, in parallel. The halo is what `MARGIN` is: the 3×3
+homogeneity window reads homogeneity at ±1, which reads CIELAB at ±2, which reads directional
+green at ±3, which reads the CFA at ±5. Get it wrong and the seam between two bands is a line of
+pixels reconstructed from truncated support — a handful of rows out of hundreds, which no
+whole-frame error bound would notice. `band_seams_are_not_visible` measures the error *per row*
+for that reason.
+
+The paper's optional artifact-reduction pass — a few iterations of 3×3 median filtering on the
+colour-difference planes — is **not** implemented. It exists because in a natural image an
+isolated pixel that disagrees with its neighbours in colour is an artifact. On a star field it is
+frequently a star.
+
+#### The numbers, three ways
+
+Against known truth on a synthetic star field (`tests/debayer.rs`, 256×256, 40 stars):
+
+| | max error | RMS error |
+|---|---|---|
+| bilinear | 0.2243 | 0.003434 |
+| Malvar-He-Cutler | 0.2060 | **0.002216** |
+| **AHD** | **0.1805** | 0.002276 |
+
+(The RMS figures differ in the third digit from Phase 6's table above because the shared test now
+excludes a five-pixel border rather than three — the widest any of the three falls back to
+bilinear on, so all are compared only where all three reconstructed properly.)
+
+AHD wins on the worst pixel by 12% and loses on RMS by 2.7%. That split is the algorithm showing
+its hand: it is better where there is an edge to interpolate along, and where there is not — most
+of a background-dominated frame — the per-pixel direction choice is made on noise, and choosing
+adds a little variance of its own.
+
+The clean version of the same point, on a sharp vertical edge
+(`an_adaptive_method_beats_a_linear_one_across_a_sharp_edge`): AHD reconstructs it **exactly**,
+max error 0.00000, against Malvar-He-Cutler's 0.18750. There is a direction along which the edge
+is smooth, and AHD finds it.
+
+Against Siril's RCD on the real OSC frame (ASI6200MC Pro, 9576×6388, same calibrated CFA input
+for all three, so calibration cannot contaminate it):
+
+| | time | bgnoise vs RCD (R/G/B) | rms delta vs RCD, ADU (R/G/B) |
+|---|---|---|---|
+| bilinear | 0.07 s | 0.93 / 0.92 / 0.75 | 89.4 / 34.3 / 82.0 |
+| Malvar-He-Cutler | 0.07 s | 1.23 / 1.45 / 1.24 | 61.0 / 41.2 / 59.3 |
+| **AHD** | **0.50 s** | **1.20 / 1.55 / 1.32** | **45.2 / 37.2 / 39.7** |
+
+Channel medians match RCD to better than 0.01% for all three, so none of them carries a colour
+cast; that is now asserted per method rather than for gradient-corrected alone.
+
+End-to-end through the `px` binary, four raw CFA lights against a Siril master dark and flat:
+gradient-corrected 0.99–1.06 s, bilinear 1.06 s, **AHD 2.73–2.94 s**. Siril's baseline on the
+same four frames is 2.61 s, so on this machine `--debayer ahd` is the one native configuration
+that is *slower* end-to-end than the engine it replaces.
+
+#### P6b-T3: AHD does not become the default
+
+**The trigger condition was not met.** Phase 6b was scheduled against the background-noise
+penalty, and AHD does not close it: 1.20/1.55/1.32 against gradient-corrected's 1.23/1.45/1.24 is
+no better overall and distinctly worse in green.
+
+That is not a surprise once measured, and the reason is worth recording, because it is the sort of
+thing an argument from reputation gets wrong. AHD's directional green carries the *same*
+second-derivative sharpening term Malvar-He-Cutler does — Hamilton-Adams is the horizontal half of
+it — so it amplifies high frequencies identically. In flat background there is no edge for the
+homogeneity test to find, so it picks between two candidates that are equally noisy, and the
+picking itself is a source of variance. RCD is quiet because it *averages along* the local edge
+direction; AHD *selects between* two non-averaging reconstructions. They are adaptive in
+different places.
+
+What AHD does buy is real and is the reason it ships rather than being reverted: it is markedly
+closer to RCD overall (rms delta down 26%, 10% and 33%), it is the most accurate of the three on
+the worst pixels, and it reconstructs a directional edge exactly. (Phase 6c has since beaten it on
+every one of those measures with RCD itself, at half the cost. AHD stays for its distinct artefact
+signature, not because it is anyone's best option.) On a frame where the colour
+reconstruction is the limiting factor — few subs, bright structured target, visible zippering —
+that is what one would reach for. It costs 7× the demosaic time and 3× the end-to-end
+calibration time to reach for it.
+
+So: three methods, `--debayer <gradient-corrected|bilinear|ahd>`, `PX_DEBAYER` overrides, default
+unchanged at gradient-corrected. The default follows the same reasoning Phase 6 gave — a stacking
+pipeline averages background noise down and cannot recover resolution — and now has a third data
+point supporting it: the adaptive method that was supposed to fix the noise did not, at 3× the
+cost.
+
+### Phase 6c — RCD, by clean-room specification
+
+Phase 6 recorded that RCD was unavailable, and Phase 6b tried to close the gap to it with AHD and
+failed. This phase closes it with RCD itself, reached by the route described under *Licensing and
+provenance*: the project owner wrote a functional specification from the librtprocess reference,
+and `debayer/rcd.rs` was implemented from that document by an author who has never seen `rcd.cc`.
+
+- [x] **P6c-T1** `debayer/rcd.rs`: ratio-corrected demosaicing. Tiled 194×194 with a 9-pixel
+      overlap, seven passes per tile in dependency order.
+- [x] **P6c-T2** Added to `--debayer` as `rcd` and measured the same three ways.
+- [x] **P6c-T3** `rcd` becomes the default `--debayer`.
+
+#### What RCD actually does differently
+
+Two ideas, and between them they explain every measurement in Phases 6 and 6b.
+
+**Ratio correction.** Green at a red site is normally estimated as
+`neighbour_green + (centre_red − neighbour_red)` — a *difference* model, which assumes chroma is
+locally constant. RCD instead scales the green neighbour by the ratio of local *panchromatic*
+levels, assuming relative chroma is locally constant. The level is a deliberately mixed-colour
+low-pass (centre, plus half each cardinal neighbour, plus a quarter each diagonal), so it behaves
+identically in all three channels. Chroma stays on a difference model; only green is ratio-corrected.
+
+**Soft directional blending.** For each axis pair a discrimination ratio in `[0, 1]` is formed
+from directional high-pass energies, refined by keeping whichever of the pixel's own ratio and its
+four diagonal neighbours' mean is further from the neutral half, and then used to *interpolate*
+between the two directional estimates. Never a hard switch.
+
+That last point is the answer to Phase 6b. AHD **selects** between two non-averaging
+reconstructions and so cannot be quieter than either; RCD **blends**, and blending averages. Two
+comparisons do the job AHD needs a 3×3 homogeneity pool for, and do it better.
+
+#### The numbers
+
+Against known truth on the synthetic star field, all four methods, interiors only:
+
+| | RMS error | max error |
+|---|---|---|
+| bilinear | 0.003537 | 0.2243 |
+| gradient-corrected | 0.002266 | 0.2060 |
+| AHD | 0.002326 | 0.1805 |
+| **RCD** | **0.001636** | **0.1110** |
+
+RCD is best on both, by 28% on RMS over the next best and by 39% on the worst pixel. It also
+reconstructs a sharp vertical edge *exactly*, as AHD does, and a uniform field and a linear ramp
+exactly, which AHD and gradient-corrected also do.
+
+Against Siril's own RCD on the real 61 MP OSC frame — the same calibrated CFA input for all four:
+
+| | time | bgnoise vs RCD (R/G/B) | rms delta vs RCD, ADU (R/G/B) |
+|---|---|---|---|
+| bilinear | 0.07 s | 0.93 / 0.92 / 0.75 | 89.4 / 34.3 / 82.0 |
+| gradient-corrected | 0.07 s | 1.23 / 1.45 / 1.24 | 61.0 / 41.2 / 59.3 |
+| AHD | 0.46 s | 1.20 / 1.55 / 1.32 | 45.2 / 37.2 / 39.7 |
+| **RCD** | **0.21 s** | **0.95 / 0.95 / 0.93** | **32.4 / 20.6 / 25.5** |
+
+**The background-noise gap is closed.** 0.95/0.95/0.93 against a target of 1.0, where the best
+prior method sat at 1.23/1.45/1.24. RMS delta roughly halves again, to 2.7–3.5 σ_bg. Medians match
+to better than 0.01%, as they do for every method here.
+
+End-to-end through the `px` binary on four raw CFA lights, machine idle: gradient-corrected
+0.90–0.98 s, **RCD 1.43–1.50 s**, AHD 2.31–2.58 s, against Siril's 2.61 s baseline. RCD costs
+about **55%** over gradient-corrected end-to-end — less than the 3× the demosaic alone costs,
+since the demosaic is not the whole of a calibration pass, but not the near-free change a first
+measurement under load suggested. Native RCD remains ~1.8× faster end-to-end than Siril.
+
+This is now gated rather than merely recorded. `debayer_parity.rs` asserts the native RCD's
+background noise stays within 15% of Siril's and its difference under 6 σ_bg — bounds set well
+outside the measured values, so they catch a regression without pinning the build.
+
+#### P6c-T3: `rcd` becomes the default
+
+Phase 6's default rested on an explicit premise: gradient-corrected was *the best available given
+RCD is not*. That premise is gone, and the reasoning inverts cleanly rather than needing a new
+argument. RCD is the most accurate of the four against known truth on both RMS and worst pixel, it
+is the only one whose background noise matches Siril's own reconstruction, and the frames it
+produces are the ones the rest of the pipeline was tuned against — the reference corpus is RCD
+output.
+
+It costs ~55% end-to-end over gradient-corrected. That is a real cost and it is worth paying here,
+because the thing being bought is the reconstruction every downstream measurement runs on:
+registration detects stars in it, stacking averages it, and neither can recover what the demosaic
+threw away. Calibration is also the once-per-frame stage, not the inner loop.
+
+The other three stay available and none of their behaviour changes. `--debayer gradient-corrected`
+restores the old default exactly, and `PX_DEBAYER` still overrides.
+
+**`--engine` is unaffected and stays Siril.** That default is governed by the P12-T4 blocker list,
+where only blocker #1 has been met; the owner wants field testing before it moves.
+
+#### One ambiguity, left open rather than fitted
+
+The specification describes the discrimination high-pass as "a **five-tap** symmetric high-pass
+filter" that "combines the samples at **distances 1, 2 and 3** with alternating signs". Those name
+different filters: five-tap symmetric reaches 2 (the fourth difference, `[1, −4, 6, −4, 1]`);
+distances 1–3 reach 3 (the sixth difference, `[1, −6, 15, −20, 15, −6, 1]`). Both alternate sign,
+annihilate smooth gradients, and peak at the CFA sampling rate, so the prose fits either.
+
+The implementation uses the fourth difference, isolated to one constant. It was **not** selected
+by trying both against Siril's output — that would be deriving a coefficient from the reference's
+behaviour, which is the one thing the clean-room route cannot survive. The measured 0.93–0.95
+noise ratio and 2.7–3.5 σ_bg residual are consistent with this being the wrong one of the two, and
+the right way to settle it is for the specification's author to say which was meant.
+
+#### Consequence for P12-T4
+
+The P12-T4 blocker list gives "the RCD gap closes" as blocker #1 to `--engine native` becoming the
+default. **That blocker is now met.** The remaining two — native background extraction and mosaic
+projects, and a release's worth of field use — are unchanged, so the default does not move yet,
+but the stated reason it could not has gone. Blocker #3 is the live one: the owner is field-testing
+`--engine native` before it becomes the default.
 
 ### Phase 7 — Star detection and PSF fitting
 
@@ -1552,8 +1775,10 @@ asked for the native engine and wrong for a user who asked for nothing.
 The default therefore stays Siril, and `--engine native` stays opt-in and documented. What would
 change this decision, in order:
 
-1. **Phase 6b closes the RCD gap**, or an equivalent edge-directed demosaic lands with measured
-   background noise at parity. This is the blocker; the rest is smaller.
+1. ~~**The RCD gap closes** — a demosaic lands with measured background noise at parity.~~
+   **Met in Phase 6c.** AHD did not close it (Phase 6b, 1.20×/1.55×/1.32×); native RCD does, at
+   0.95×/0.95×/0.93×, for 13% end-to-end. The diagnosis that AHD's failure suggested turned out
+   to be right: the fix was an *averaging* directional method, not another selecting one.
 2. Background extraction and the mosaic pipelines gain native implementations, or the engine
    selection becomes per-pipeline so a native default falls back for the ones it cannot do —
    which is a change to D5's "report rather than silently skip" rule and needs its own argument.
@@ -1578,5 +1803,11 @@ the better path for mono stacking today and should be chosen deliberately.
 - **Frame-count ceiling for in-memory registration data.** Star lists for 2000 stars × 500 frames
   is on the order of 100 MB. It should be charged against the budget; P9-T2 will confirm whether
   that is material.
+- **Which high-pass does the RCD specification mean?** §3.2 says "five-tap" and "distances 1, 2
+  and 3", which are different filters. Phase 6c implements the five-tap fourth difference and
+  deliberately did not try the alternative against Siril's output, since fitting a coefficient to
+  the reference is the one move the clean-room route cannot survive. The specification's author
+  should settle it; if it is the sixth difference, the remaining 2.7–3.5 σ_bg residual is the
+  expected place for it to show up.
 - **`FitsExt` living in `siril-sys`** (D5) is an accepted wart. Moving it to `px-fits` is the
   obvious cleanup and is blocked only by this ADR's "no changes to Siril crates" constraint.

@@ -113,27 +113,46 @@ cosmetic correction patches anyway.
 Outputs land in `data/output/calibrated/` for comparison against `data/reference/calibrated/`
 and `data/reference-osc/calibrated/`.
 
-### Demosaicing (ADR 007 Phase 6)
+### Demosaicing (ADR 007 Phases 6, 6b and 6c)
 
-Two reconstructions ship. `--debayer` / `PX_DEBAYER` selects; the default is
-`gradient-corrected`.
+Four reconstructions ship. `--debayer` / `PX_DEBAYER` selects; the default is `rcd`.
+`--debayer gradient-corrected` restores the pre-Phase-6c default.
 
-| | vs RCD background noise (R/G/B) | RMS error vs known truth |
-|---|---|---|
-| `gradient-corrected` (Malvar-He-Cutler) | 1.23× / 1.45× / 1.24× | **0.002192** |
-| `bilinear` | 0.93× / 0.92× / 0.75× | 0.003385 |
+| | 61 MP | vs RCD background noise (R/G/B) | RMS vs known truth | max error vs known truth |
+|---|---|---|---|---|
+| `gradient-corrected` (Malvar-He-Cutler) | 0.07 s | 1.23× / 1.45× / 1.24× | 0.002266 | 0.2060 |
+| `bilinear` | 0.07 s | 0.93× / 0.92× / 0.75× | 0.003537 | 0.2243 |
+| `ahd` (Hirakawa-Parks) | 0.46 s | 1.20× / 1.55× / 1.32× | 0.002326 | 0.1805 |
+| `rcd` (ratio-corrected) | 0.21 s | **0.95× / 0.95× / 0.93×** | **0.001636** | **0.1110** |
 
 Read on noise alone, bilinear wins; it does not. A blurrier reconstruction *measures* as
 quieter, because smoothing correlates neighbouring pixels and a background-noise estimator reads
 that as less noise — ranking demosaics that way rewards the blurriest one. Against a synthetic
 star field with known truth the ranking inverts, and gradient-corrected is 35% more accurate.
 
-Channel levels match RCD to better than 0.01% either way, so there is no colour cast. A 61 MP
-frame demosaics in 0.07 s.
+`ahd` reconstructs the frame both horizontally and vertically and picks per pixel from whichever
+left the more homogeneous neighbourhood in CIELAB. It is the most accurate of the three on the
+hardest pixels — on a sharp vertical edge it is *exact*, where gradient-corrected has 0.1875 max
+error — and it is closest to RCD overall (rms delta 45/37/40 ADU against 61/41/59). It does not
+reduce background noise, because its directional green carries the same sharpening term
+gradient-corrected does; in flat background there is no edge for the homogeneity test to find.
+Reach for it when the colour reconstruction is the limiting factor, and pay 7× the demosaic time
+and 3× the end-to-end calibration time for it.
 
-Neither is RCD, which Siril uses: RCD has no published specification independent of its GPL
-implementation, so it cannot be written clean-room. ADR 007 Phase 6b tables AHD as the way to
-close the remaining gap.
+Channel levels match RCD to better than 0.01% for all three, so none carries a colour cast.
+
+`rcd` is the same algorithm Siril uses, and is the most accurate of the four on both measures as
+well as the only one at background-noise parity with Siril's own output. It reaches that by
+*blending* two directional estimates rather than selecting one — blending averages, which is why
+it is quiet where `ahd` is not — and by estimating green through a ratio of local panchromatic
+levels rather than a colour difference. It costs 3× the demosaic time of `gradient-corrected` and
+about **55%** end-to-end on a four-frame calibration run — still ~1.8× faster end-to-end than
+Siril.
+
+RCD has no algorithm paper, so it is implemented under a **clean-room separation** from a
+functional specification written by the project owner; the implementer has never read the GPL
+reference. See the provenance note at the top of `src/debayer/rcd.rs` and the *Licensing and
+provenance* section of ADR 007.
 
 ### Star detection (ADR 007 Phase 7)
 

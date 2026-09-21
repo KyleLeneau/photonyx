@@ -128,19 +128,6 @@ const RB_AT_OPPOSITE: [Tap; 9] = [
     (0, 2, -1.5),
 ];
 
-/// Colour a CFA site carries: 0 red, 1 green, 2 blue.
-#[inline]
-fn colour_at(pattern: BayerPattern, x: usize, y: usize) -> usize {
-    let tile = match pattern {
-        BayerPattern::Rggb => [[0u8, 1], [1, 2]],
-        BayerPattern::Bggr => [[2, 1], [1, 0]],
-        BayerPattern::Gbrg => [[1, 2], [0, 1]],
-        BayerPattern::Grbg => [[1, 0], [2, 1]],
-        BayerPattern::None => [[1, 1], [1, 1]],
-    };
-    tile[y % 2][x % 2] as usize
-}
-
 #[inline]
 fn apply(cfa: &[f32], width: usize, x: usize, y: usize, taps: &[Tap]) -> f32 {
     let mut sum = 0.0f32;
@@ -225,7 +212,7 @@ fn interior_pixel(
 ) -> (f32, f32, f32) {
     let centre = cfa[y * width + x];
 
-    match colour_at(pattern, x, y) {
+    match pattern.colour_at(x, y) {
         // Red site: red measured, green from the cross filter, blue from the
         // opposite-colour filter.
         0 => (
@@ -242,7 +229,7 @@ fn interior_pixel(
         // Green site. One axis through this pixel carries red and the other
         // blue; which is which decides the filter each colour gets.
         _ => {
-            let red_is_along_row = colour_at(pattern, x + 1, y) == 0;
+            let red_is_along_row = pattern.colour_at(x + 1, y) == 0;
             let (r, b) = if red_is_along_row {
                 (
                     apply(cfa, width, x, y, &RB_AT_GREEN_ALONG_ROW),
@@ -278,7 +265,7 @@ fn border_pixel(
                 continue;
             }
             let (nx, ny) = (nx as usize, ny as usize);
-            let c = colour_at(pattern, nx, ny);
+            let c = pattern.colour_at(nx, ny);
             sums[c] += cfa[ny * width + nx];
             counts[c] += 1;
         }
@@ -292,7 +279,7 @@ fn border_pixel(
         }
     };
 
-    let measured = colour_at(pattern, x, y);
+    let measured = pattern.colour_at(x, y);
     let mut rgb = [mean(0), mean(1), mean(2)];
     // The measured channel is known exactly; never average it away.
     rgb[measured] = cfa[y * width + x];

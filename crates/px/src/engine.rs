@@ -78,6 +78,8 @@ impl EngineConfig {
         runtime.use_debayer(match self.debayer {
             CliDebayer::GradientCorrected => px_imageproc::debayer::Method::GradientCorrected,
             CliDebayer::Bilinear => px_imageproc::debayer::Method::Bilinear,
+            CliDebayer::Ahd => px_imageproc::debayer::Method::Ahd,
+            CliDebayer::Rcd => px_imageproc::debayer::Method::Rcd,
         })
     }
 }

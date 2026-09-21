@@ -1,9 +1,10 @@
 //! Demosaic quality against Siril's RCD, on a real OSC frame
-//! (ADR 007, Phase 6).
+//! (ADR 007, Phases 6 and 6b).
 //!
 //! The native engine cannot implement RCD — it has no published specification
 //! independent of its GPL implementation — so it uses Malvar-He-Cutler
-//! instead. This measures what that substitution costs.
+//! instead, with Hirakawa-Parks AHD as the adaptive alternative. This measures
+//! what that substitution costs.
 //!
 //! The comparison is isolated to the demosaic: both sides start from the *same*
 //! calibrated CFA frame, the one Siril produced, so calibration differences
@@ -69,7 +70,12 @@ fn gradient_corrected_demosaic_compared_against_rcd() {
 
     // Both candidates, measured the same way, so the choice between them is
     // made on numbers rather than on reputation.
-    for method in [Method::Bilinear, Method::GradientCorrected] {
+    for method in [
+        Method::Bilinear,
+        Method::GradientCorrected,
+        Method::Ahd,
+        Method::Rcd,
+    ] {
         let mut ours = Frame::open(&cfa_path).expect("calibrated CFA frame");
         assert_eq!(
             ours.channels(),
@@ -80,7 +86,7 @@ fn gradient_corrected_demosaic_compared_against_rcd() {
         debayer_frame(&mut ours, method).expect("demosaic");
         let elapsed = started.elapsed();
         println!("--- {method:?}, {:.2}s ---", elapsed.as_secs_f64());
-        for c in 0..3 {
+        for (c, name) in ["red", "green", "blue"].iter().enumerate() {
             let a = ours.channel(c);
             let b = theirs.channel(c);
             let ours_stats = ChannelStats::compute(a, ours.width(), ours.height());
@@ -99,6 +105,40 @@ fn gradient_corrected_demosaic_compared_against_rcd() {
                 ours_stats.median as f64 * ADU,
                 theirs_stats.median as f64 * ADU,
             );
+
+            // The gate, for every method on offer: no colour cast. If a
+            // channel's level shifted, every frame stacked from it would carry
+            // that shift. Everything else here is recorded, not gated — see the
+            // note at the foot of this test.
+            let shift = (ours_stats.median as f64 - theirs_stats.median as f64).abs()
+                / theirs_stats.median as f64;
+            assert!(
+                shift < 0.01,
+                "{method:?}: {name} channel level differs from RCD by {:.3}% \
+                 — that is a colour cast",
+                shift * 100.0
+            );
+
+            // The native RCD is the one method that *is* gated on closeness,
+            // because it is the same algorithm as the reference rather than a
+            // substitute for it. These bounds are set well outside the measured
+            // values (0.93-0.95 and 2.7-3.5 sigma) so they catch a regression
+            // rather than pinning the current build; they are deliberately not
+            // tight enough to be a fit to Siril's output.
+            if method == Method::Rcd {
+                let ratio = ours_stats.background_noise / theirs_stats.background_noise;
+                assert!(
+                    (0.85..=1.15).contains(&ratio),
+                    "native RCD {name} background noise is {ratio:.4}x Siril's RCD; \
+                     the point of this method is that it matches"
+                );
+                let sigma =
+                    (sum_sq / a.len() as f64).sqrt() / (theirs_stats.background_noise * ADU);
+                assert!(
+                    sigma < 6.0,
+                    "native RCD {name} differs from Siril's RCD by {sigma:.2} sigma_bg"
+                );
+            }
         }
     }
 
@@ -196,21 +236,19 @@ fn gradient_corrected_demosaic_compared_against_rcd() {
     // more accurate than bilinear in RMS. Ranking demosaics by their measured
     // background noise rewards the blurriest one.
     //
-    // So what is gated here is the property that would actually break a
-    // pipeline: a colour cast. If a channel's level shifted, every frame
-    // stacked from it would carry that shift.
-    for (c, name) in ["red", "green", "blue"].iter().enumerate() {
-        let ours_stats = ChannelStats::compute(ours.channel(c), ours.width(), ours.height());
-        let theirs_stats =
-            ChannelStats::compute(theirs.channel(c), theirs.width(), theirs.height());
-        let shift = (ours_stats.median as f64 - theirs_stats.median as f64).abs()
-            / theirs_stats.median as f64;
-        assert!(
-            shift < 0.01,
-            "{name} channel level differs from RCD by {:.3}% — that is a colour cast",
-            shift * 100.0
-        );
-    }
+    // Phase 6b added AHD to find out whether an adaptive method closes that
+    // noise gap, since RCD is adaptive and quiet. On this frame it does not:
+    // AHD reads 1.20x, 1.55x and 1.32x RCD's background, which is no better
+    // than Malvar-He-Cutler and slightly worse in green. It is however
+    // markedly *closer* to RCD overall — rms delta 45.2 / 37.2 / 39.7 ADU
+    // against MHC's 61.0 / 41.2 / 59.3 — at 7x the time. The reason both sit
+    // above RCD is that their directional green carries the same
+    // second-derivative sharpening term, and in flat background there is no
+    // edge for the homogeneity test to find: it picks between two candidates
+    // that are equally noisy.
+    //
+    // So what is gated is the property that would actually break a pipeline: a
+    // colour cast, asserted per method in the loop above.
 
     // And that the reconstruction is bounded: no channel may run away at a
     // star core, which is what an unstable filter looks like.

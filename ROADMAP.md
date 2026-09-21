@@ -68,6 +68,9 @@
 * [ ] implement obs find best to manage calibration links
 * [ ] Add the ability to review all frames for a project stacking and human reject the bad ones (should be part of lock change detection)
 * [ ] Need a way to relink calibration masters to obs - obs command
+* [ ] px-imageproc - grid mosiac support for stacking and registration
+* [ ] px-imageproc - spiral mosiac support for stacking and registration
+* [ ] px-imageproc - color samples with pixel math support
 
 ### Bugs
 
