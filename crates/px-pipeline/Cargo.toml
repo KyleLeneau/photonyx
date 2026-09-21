@@ -9,9 +9,15 @@ repository.workspace = true
 
 [dependencies]
 px-fits = { workspace = true}
+px-imageproc = { workspace = true }
 px-fs = { workspace = true}
 px-static = { workspace = true }
+
+rayon = { workspace = true }
 siril-sys = { workspace = true }
+# The native master light spills warped frames to a temporary sequence when the
+# budget cannot hold them (ADR 007 P11-T3).
+tempfile = { workspace = true }
 
 bon = { workspace = true }
 chrono = { workspace = true }
@@ -20,6 +26,9 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

@@ -36,6 +36,30 @@ xflags::xflags! {
             /// Directory to scan for .fits/.fit files (default: crates/px-fits/tests/fixtures)
             optional --dir dir: String
         }
+
+        /// Generate Siril reference outputs for the px-imageproc parity tests (ADR 007)
+        cmd siril-reference {
+            /// Corpus directory (default: data/corpus-mono)
+            optional --corpus corpus: String
+            /// Output directory (default: data/reference)
+            optional --out out: String
+            /// Frames to sample per calibration kind (default: 3)
+            optional --frames frames: u32
+            /// Also median-stack master bias and dark frames with Siril
+            optional --masters
+            /// Also build a master flat and calibrate one light frame with Siril
+            optional --calibration
+            /// Also run findstar over light frames and record the star lists
+            optional --stars
+            /// Also two-pass register the light frames and record Siril's homographies
+            optional --registration
+            /// Light frames to register (default: 100)
+            optional --reg-frames reg_frames: u32
+            /// Also apply the registration to a few frames, keeping Siril's warped output
+            optional --warp
+            /// Also build a master light from the registered frames, as the px pipeline does
+            optional --master-light
+        }
     }
 }
 
@@ -55,6 +79,7 @@ pub enum XtaskCmd {
     Bump(Bump),
     FitsFixtures(FitsFixtures),
     FitsVerify(FitsVerify),
+    SirilReference(SirilReference),
 }
 
 #[derive(Debug)]
@@ -83,6 +108,20 @@ pub struct FitsFixtures;
 #[derive(Debug)]
 pub struct FitsVerify {
     pub dir: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct SirilReference {
+    pub corpus: Option<String>,
+    pub out: Option<String>,
+    pub frames: Option<u32>,
+    pub masters: bool,
+    pub calibration: bool,
+    pub stars: bool,
+    pub registration: bool,
+    pub reg_frames: Option<u32>,
+    pub warp: bool,
+    pub master_light: bool,
 }
 
 impl Xtask {

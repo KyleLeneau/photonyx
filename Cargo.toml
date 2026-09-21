@@ -87,6 +87,13 @@ strum_macros = "0.28"
 # Parallelism
 rayon = "1.10"
 
+# Dense linear algebra for the Levenberg-Marquardt PSF solver and the
+# registration transforms (ADR 007 Phases 7-8)
+nalgebra = { version = "0.34", default-features = false, features = ["std"] }
+
+# System memory / CPU probing for the native processing budget (ADR 007)
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+
 # Testing
 insta = { version = "1.46.0", features = ["json", "filters", "redactions"] }
 criterion = "0.5"

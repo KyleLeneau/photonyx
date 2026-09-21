@@ -21,6 +21,22 @@ pub enum BayerPattern {
 }
 
 impl BayerPattern {
+    /// Which colour the CFA site at `(x, y)` carries: 0 red, 1 green, 2 blue.
+    ///
+    /// Defined for [`BayerPattern::None`] as green everywhere, which keeps
+    /// callers total; they reject `None` before demosaicing anyway.
+    #[inline]
+    pub fn colour_at(self, x: usize, y: usize) -> usize {
+        let tile = match self {
+            BayerPattern::Rggb => [[0u8, 1], [1, 2]],
+            BayerPattern::Bggr => [[2, 1], [1, 0]],
+            BayerPattern::Gbrg => [[1, 2], [0, 1]],
+            BayerPattern::Grbg => [[1, 0], [2, 1]],
+            BayerPattern::None => [[1, 1], [1, 1]],
+        };
+        tile[y % 2][x % 2] as usize
+    }
+
     /// Rotates the pattern by an odd pixel offset in one axis: shifting the
     /// CFA tile by one pixel swaps R and B rows or columns depending on
     /// axis, which is equivalent to swapping R<->G's partner and G<->B's

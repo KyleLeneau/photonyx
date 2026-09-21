@@ -1,28 +1,15 @@
-//! Pipeline for creating a linear stack (master light) from a set of calibrated light frames.
-//! Outputs new linear stack to output folder.
-//!
+//! Execution in a local Siril process.
 
+use super::{CreateMasterLightPipeline, master_light_path};
 use crate::model::MasterLight;
 use crate::{PipelineReporter, error::PipelineError};
 use crate::{RunIn, meta::LinearStackMetadata};
 use px_fs::Glob;
 use siril_sys::{
-    BestRejection, FitsExt,
+    BestRejection,
     commands::{Convert, Load, Register, SeqApplyReg, SeqSubSky, Stack},
     siril_ext::{CdExt, MirrorxExt, SaveExt},
 };
-use std::path::{Path, PathBuf};
-
-#[derive(bon::Builder)]
-pub struct CreateMasterLightPipeline {
-    pub ext: FitsExt,
-    pub light_folders: Vec<PathBuf>,
-    pub name: String,
-    pub filter: Option<String>,
-    #[builder(default = false)]
-    pub background_extract: bool,
-    pub out_folder: PathBuf,
-}
 
 impl RunIn<siril_sys::Builder> for CreateMasterLightPipeline {
     type Output = MasterLight;
@@ -139,12 +126,4 @@ impl RunIn<siril_sys::Builder> for CreateMasterLightPipeline {
 
         Ok(master)
     }
-}
-
-pub fn master_light_path(folder: &Path, name: &String) -> PathBuf {
-    folder.join(format!("{}_LIGHT_master", name))
-}
-
-pub fn registered_master_light_path(folder: &Path, name: &String) -> PathBuf {
-    folder.join(format!("r_{}_LIGHT_master", name))
 }

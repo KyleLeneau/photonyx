@@ -16,3 +16,10 @@ docs/book/src/diagnostics_generated.md
 docs/book/src/features_generated.md
 # dhat heap-profile output (ADR 006 memory tests)
 dhat-heap.json
+
+data/corpus*
+# Siril reference outputs and native-engine outputs for ADR 007 parity work.
+# Regenerate with `cargo xtask siril-reference`; too large and too
+# Siril-version-specific to commit.
+data/reference*/
+data/output/

@@ -1,15 +1,16 @@
+use crate::engine::EngineConfig;
 use crate::{ExitStatus, printer::Printer, utils::to_fits_ext};
 use anyhow::Result;
 use px_cli::CreateBiasMasterArgs;
 use px_index::ProfileIndex;
 use px_pipeline::{RunIn, calibration::master_bias::CreateMasterBiasPipeline};
-use siril_sys::Builder;
 use std::time::Instant;
 
 pub(crate) async fn create_master_bias(
     args: CreateBiasMasterArgs,
     printer: Printer,
     index: ProfileIndex,
+    engine: EngineConfig,
 ) -> Result<ExitStatus> {
     let start = Instant::now();
 
@@ -29,13 +30,19 @@ pub(crate) async fn create_master_bias(
         None => index.profile.bias.clone(),
     };
 
-    let master = CreateMasterBiasPipeline::builder()
+    // The same pipeline, run in whichever environment was selected.
+    // Both implement `RunIn`, so only the environment differs here.
+    let pipeline = CreateMasterBiasPipeline::builder()
         .ext(to_fits_ext(args.ext))
         .raw_folder(args.raw_folder)
         .out_folder(out_folder)
-        .build()
-        .run(printer.reporter(), Builder::default())
-        .await?;
+        .build();
+
+    let master = if engine.is_native() {
+        pipeline.run(printer.reporter(), engine.native()).await?
+    } else {
+        pipeline.run(printer.reporter(), engine.siril()).await?
+    };
 
     // Pretty print the result
     printer.success(format!("Master BIAS stacking completed: {:?}", master))?;

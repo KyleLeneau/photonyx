@@ -1,25 +1,16 @@
-//! Pipeline for creating a master bias from an array of raw bias frames
-//!
+//! Execution in a local Siril process.
 
+use super::CreateMasterFlatPipeline;
 use crate::model::MasterFlat;
 use crate::{PipelineReporter, error::PipelineError};
 use crate::{RunIn, meta::CalibrationMetadata};
 use px_fits::all_fits_files;
 use siril_sys::{
-    FitsExt, UpdateKeyMethod,
+    UpdateKeyMethod,
     commands::{Calibrate, Convert, SequpdateKey, Stack},
     siril_ext::CdExt,
 };
 use std::path::PathBuf;
-
-#[derive(bon::Builder)]
-pub struct CreateMasterFlatPipeline {
-    pub ext: FitsExt,
-    pub raw_folder: PathBuf,
-    pub bias: PathBuf,
-    pub filter: String,
-    pub out_folder: PathBuf,
-}
 
 // master flat pipeline that uses siril
 //

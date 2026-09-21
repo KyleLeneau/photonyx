@@ -8,4 +8,28 @@ pub enum ImageProcError {
 
     #[error("image processing error: {0}")]
     Processing(String),
+
+    /// The configured memory budget cannot hold what the stage needs. Raised
+    /// rather than overrunning the budget (ADR 007 performance targets).
+    #[error("memory budget too small to hold {what}")]
+    InsufficientMemory { what: String },
+
+    /// A registration step could not produce a transform: too few
+    /// correspondences, a degenerate fit, or a matcher that found nothing.
+    #[error("registration failed: {0}")]
+    Registration(String),
+
+    #[error("no frames to process")]
+    EmptySequence,
+
+    #[error("unsupported: {0}")]
+    Unsupported(String),
+
+    /// A frame whose geometry does not match the rest of the set. Pixel-wise
+    /// reduction has no meaning across mismatched frames.
+    #[error("{path} does not match the rest of the sequence: {detail}")]
+    NonUniformSequence {
+        path: std::path::PathBuf,
+        detail: String,
+    },
 }

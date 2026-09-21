@@ -20,12 +20,14 @@ use px_pipeline::{
 };
 use siril_sys::{Builder, FitsExt};
 
+use crate::engine::EngineConfig;
 use crate::{ExitStatus, printer::Printer, reporters::DefaultPipelineReporter};
 
 pub(crate) async fn stack_project_observations(
     project_path: Option<PathBuf>,
     args: StackProjectArgs,
     printer: Printer,
+    engine: EngineConfig,
 ) -> Result<ExitStatus> {
     let project = match ProjectPath::find(project_path) {
         Ok(path) => path,
@@ -42,9 +44,21 @@ pub(crate) async fn stack_project_observations(
         config.framing
     ))?;
 
+    // The native engine stacks master lights; the mosaic pipelines and the
+    // cross-layer registration are still Siril-only, so a project that needs
+    // them is refused up front rather than half-done (ADR 007 P11-T5).
+    if engine.is_native() && !matches!(config.framing, Framing::Single(_)) {
+        printer.error(
+            "the native engine does not implement mosaic projects yet; \
+             re-run without --engine native",
+        )?;
+        return Ok(ExitStatus::Error);
+    }
+
     match config.framing {
         Framing::Single(single_framing) => {
-            stack_single_framing(single_framing, &project.root, printer, args.clean).await?;
+            stack_single_framing(single_framing, &project.root, printer, args.clean, &engine)
+                .await?;
         }
         Framing::SpiralMosiac(spiral_framing) => {
             stack_spiral_mosiac_framing(spiral_framing, &project.root, printer, args.clean).await?;
@@ -64,6 +78,7 @@ async fn stack_single_framing(
     project_dir: &Path,
     printer: Printer,
     clean: bool,
+    engine: &EngineConfig,
 ) -> Result<()> {
     let ext = FitsExt::FIT;
 
@@ -97,9 +112,8 @@ async fn stack_single_framing(
             cached
         } else {
             any_restacked = true;
-            let builder = Builder::default().use_extension(ext.clone());
             printer.info(format!("stacking single framing layer: {:?}", stack.name))?;
-            run_master_light(builder, stack, project_dir, printer).await?
+            run_master_light(engine, ext.clone(), stack, project_dir, printer).await?
         };
 
         new_single.master_lights.push(LayerLock {
@@ -281,7 +295,17 @@ async fn stack_grid_mosiac_framing(
             } else {
                 any_panel_restacked = true;
                 printer.info(format!("stacking grid panel: {:?}", panel.name))?;
-                run_master_light(builder.clone(), panel, project_dir, printer).await?
+                // Mosaic projects are Siril-only (guarded in
+                // `stack_project_observations`), so this path always runs in
+                // Siril regardless of the flag.
+                run_master_light(
+                    &EngineConfig::siril_only(),
+                    ext.clone(),
+                    panel,
+                    project_dir,
+                    printer,
+                )
+                .await?
             };
 
             panel_locks.push(PanelLock {
@@ -381,31 +405,42 @@ async fn stack_grid_mosiac_framing(
     Ok(())
 }
 
-/// Run `CreateMasterLightPipeline` for a single `ProjectLinearStack`.
+/// Run `CreateMasterLightPipeline` for a single `ProjectLinearStack`, in
+/// whichever engine was selected.
 async fn run_master_light(
-    siril_builder: Builder,
+    engine: &EngineConfig,
+    ext: FitsExt,
     stack: &ProjectLinearStack,
     project_dir: &Path,
     printer: Printer,
 ) -> Result<PathBuf> {
-    let ext = siril_builder.clone().ext();
-
     let light_folders = stack
         .observations
         .iter()
         .map(|o| ObservationPath::single(&o.path).map(|op| op.pp_path().to_path_buf()))
         .collect::<Result<Vec<_>, _>>()?;
 
-    let master = CreateMasterLightPipeline::builder()
-        .ext(ext)
+    let pipeline = CreateMasterLightPipeline::builder()
+        .ext(ext.clone())
         .light_folders(light_folders)
         .name(stack.name.clone())
         .maybe_filter(stack.filter.clone())
         .background_extract(stack.extract_background)
         .out_folder(project_dir.to_path_buf())
-        .build()
-        .run(DefaultPipelineReporter::from(printer), siril_builder)
-        .await?;
+        .build();
+
+    // The same pipeline, run in whichever environment was selected; both
+    // implement `RunIn`, so only the environment differs.
+    let reporter = DefaultPipelineReporter::from(printer);
+    let master = if engine.is_native() {
+        pipeline
+            .run(reporter, engine.native().use_extension(ext))
+            .await?
+    } else {
+        pipeline
+            .run(reporter, engine.siril().use_extension(ext))
+            .await?
+    };
 
     printer.success(format!(
         "Master LIGHT stacking completed: {:?}\n",

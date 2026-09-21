@@ -12,6 +12,7 @@ mod codegen;
 mod fits_fixtures;
 mod fits_verify;
 mod flags;
+mod siril_reference;
 
 use std::{env, path::PathBuf};
 use xshell::Shell;
@@ -29,6 +30,7 @@ fn main() -> anyhow::Result<()> {
         flags::XtaskCmd::Bump(cmd) => cmd.run(sh),
         flags::XtaskCmd::FitsFixtures(cmd) => cmd.run(sh),
         flags::XtaskCmd::FitsVerify(cmd) => cmd.run(sh),
+        flags::XtaskCmd::SirilReference(cmd) => cmd.run(sh),
     }
 }
 

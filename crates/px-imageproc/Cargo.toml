@@ -10,11 +10,17 @@ repository.workspace = true
 [dependencies]
 px-fits = { workspace = true }
 
+nalgebra = { workspace = true }
 rayon = { workspace = true }
+sysinfo = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+# The synthetic registration tests state their truth as a matrix.
+nalgebra = { workspace = true }
 criterion = { workspace = true }
+dhat = { workspace = true }
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 # Oracle for the ADR 006 P9-T9 visual-regression test only — never a runtime
 # dependency. Once that test is retired this can go too.
@@ -24,5 +30,25 @@ rustafits = { git = "https://github.com/KyleLeneau/rustafits", branch = "jpg-fea
 name = "preview"
 harness = false
 
+[[bench]]
+name = "budget"
+harness = false
+
+[[bench]]
+name = "stack"
+harness = false
+
+[[bench]]
+name = "register"
+harness = false
+
+[[bench]]
+name = "reduce"
+harness = false
+
 [lints]
 workspace = true
+
+[[test]]
+name = "memory"
+harness = true

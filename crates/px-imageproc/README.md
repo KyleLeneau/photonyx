@@ -3,9 +3,340 @@
 Pixel-space image processing for FITS data, built on top of [`px-fits`](../px-fits).
 
 `px-fits` reads and writes FITS bytes and has no opinion on what the pixels mean
-photographically. This crate owns that interpretation: debayering, display
-normalization, autostretch, and — planned — calibration, stacking, and composition.
+photographically. This crate owns that interpretation: calibration, debayering, star detection
+and PSF fitting, registration, warping, stacking, statistics, display normalization and
+autostretch — together with the memory-budgeted block scheduler the large ones run under.
 
-Scaffolded as part of ADR 006 Phase 9. See
-[`docs/adr/006-native-fits-implementation.md`](../../docs/adr/006-native-fits-implementation.md)
-for the phased plan and rationale for the crate split.
+Scaffolded as part of ADR 006 Phase 9 and built out by
+[`docs/adr/007-native-calibration-registration-stacking.md`](../../docs/adr/007-native-calibration-registration-stacking.md),
+which carries the phased plan, the parity gates, and the reasoning behind each algorithm choice.
+Everything here is implemented from published literature rather than translated from Siril, which
+is a licensing requirement and not a style preference — see that ADR's handoff rules.
+
+## Parity against Siril
+
+ADR 007 builds native calibration, registration and stacking alongside the Siril-backed
+pipelines, and holds them to measured tolerances rather than to "looks right". The comparison
+runs against real frames, not synthetic ones — the corpus lives under `data/` and is not
+committed.
+
+```
+cargo xtask siril-reference                     # drive a local Siril over data/corpus-mono
+cargo test --release -p px-imageproc            # run the parity suites
+```
+
+Both are optional: the parity tests skip when the corpus or the reference file is absent, so a
+checkout without them stays green. Reports are written to `data/output/`.
+
+### Statistics (ADR 007 Phase 2)
+
+Every estimator compared against Siril 1.4.4's `stat main` over 12 frames of `data/corpus-mono`
+(ASI6200MM Pro, 9576×6388, 16-bit, Hα 300 s) — 3 each of bias, dark, flat, light.
+
+| Statistic | Agreement | Tolerance |
+|---|---|---|
+| median, min, max, MAD | ≤ 0.002 ADU | 0.01 ADU |
+| mean, sigma, sqrt(BWMV), bgnoise | ≤ 0.049 ADU | 0.06 ADU |
+
+**Worst absolute delta across all 96 comparisons: 0.0494 ADU.** Siril prints `stat` at one
+decimal place, so ±0.05 ADU is the resolution floor of this comparison — the two implementations
+agree to the last digit Siril will show. The looser band on the accumulated statistics is that
+rounding plus the f32 round-trip through the unit range; Siril accumulates over raw 16-bit
+integers.
+
+Analytic bounds, from `tests/stats.rs` (no Siril needed): background noise recovers an injected
+sigma to within 5% and is unmoved by a smooth gradient or by 1% saturated pixels; robust
+location/scale lands within 5% of true sigma with 0.5% of the frame saturated, where classical
+sigma is off by 2.5×; every estimator is bit-identical across 1, 2, 3 and 8 cores.
+
+### Stacking (ADR 007 Phase 3)
+
+Median masters compared against Siril 1.4.4 over 40 frames of `data/corpus-mono`
+(9576×6388, 16-bit), stacked by the same commands `px --engine siril` issues today.
+
+| Master | Max delta | RMS delta | Median | Background noise |
+|---|---|---|---|---|
+| bias | **0.0000 ADU** | 0.00002 ADU | exact | 1.2581 vs 1.2594 |
+| dark | **0.0039 ADU** | 0.00002 ADU | exact | 1.4074 vs 1.4086 |
+
+Roughly 31% of pixels differ, every one by the last bit of an `f32`: with an even frame count
+the median is the mean of the two central values, which Siril forms in `f64` before narrowing.
+
+**Speed:** 2.55 s versus Siril's 2.35 s for a 40 × 61 MP median stack (warm cache, M4 Max,
+16 cores). Scaling across cores is 5.1× from 1 to 16; an 8× tighter memory budget (16 → 125
+blocks) costs 22%.
+
+Reduction cost per method, 20 × 1024² frames:
+
+| Method | Time | Throughput |
+|---|---|---|
+| sum | 21.9 ms | 959 Melem/s |
+| mean | 23.2 ms | 904 Melem/s |
+| median | 44.3 ms | 473 Melem/s |
+| mean + percentile | 48.1 ms | 436 Melem/s |
+| mean + sigma | 50.0 ms | 420 Melem/s |
+| mean + linear fit | 55.1 ms | 380 Melem/s |
+| mean + Winsorized | 62.1 ms | 338 Melem/s |
+| mean + MAD | 68.2 ms | 308 Melem/s |
+
+Outputs land in `data/output/masters/` for side-by-side inspection against the Siril masters in
+`data/reference/masters/`.
+
+### Calibration (ADR 007 Phase 4)
+
+Masters are composed the way the workflow intends: bias and dark each stacked from raw frames on
+their own, the flat built from bias-calibrated flats, and lights calibrated with the **dark and
+flat only** — the raw-stacked dark already carries the bias pedestal.
+
+| Corpus | max abs delta | RMS delta | median (ours / Siril) | background noise |
+|---|---|---|---|---|
+| mono (ASI6200MM, Hα) | 0.0195 ADU = **0.0011 σ_bg** | 0.00004 ADU | +60.8723 / +60.8725 | 17.7558 / 17.7549 |
+| OSC (ASI6200MC, Dual) | 1.6054 ADU = **0.0079 σ_bg** | 0.01571 ADU | +633.1835 / +633.1990 | 203.5618 / 203.5668 |
+
+Bound is 0.05 σ_bg max and 0.01 σ_bg RMS; both are met by 6–45×.
+
+#### What the clamp actually destroys
+
+Calibration keeps values between −1.0 and 0.0 negative — a calibrated sky straddles zero, and
+clipping its low half would bias every downstream statistic upward. Only values past ±1.0 are
+destroyed, and `OpReport` counts those:
+
+| Corpus | negative | deepest negative | floored to zero | saturated |
+|---|---|---|---|---|
+| mono | 0.068% | −50,961 ADU (−0.778 unit) | **0** | 193 |
+| OSC | ~0.000% | −59,999 ADU (−0.916 unit) | **7** | 249 |
+
+Out of 61,171,488 pixels, with Siril matching to three decimals on the negative fraction. The
+deepest negatives are hot pixels in the master dark, which land just inside the floor and which
+cosmetic correction patches anyway.
+
+Outputs land in `data/output/calibrated/` for comparison against `data/reference/calibrated/`
+and `data/reference-osc/calibrated/`.
+
+### Demosaicing (ADR 007 Phases 6, 6b and 6c)
+
+Four reconstructions ship. `--debayer` / `PX_DEBAYER` selects; the default is `rcd`.
+`--debayer gradient-corrected` restores the pre-Phase-6c default.
+
+| | 61 MP | vs RCD background noise (R/G/B) | RMS vs known truth | max error vs known truth |
+|---|---|---|---|---|
+| `gradient-corrected` (Malvar-He-Cutler) | 0.07 s | 1.23× / 1.45× / 1.24× | 0.002266 | 0.2060 |
+| `bilinear` | 0.07 s | 0.93× / 0.92× / 0.75× | 0.003537 | 0.2243 |
+| `ahd` (Hirakawa-Parks) | 0.46 s | 1.20× / 1.55× / 1.32× | 0.002326 | 0.1805 |
+| `rcd` (ratio-corrected) | 0.21 s | **0.95× / 0.95× / 0.93×** | **0.001636** | **0.1110** |
+
+Read on noise alone, bilinear wins; it does not. A blurrier reconstruction *measures* as
+quieter, because smoothing correlates neighbouring pixels and a background-noise estimator reads
+that as less noise — ranking demosaics that way rewards the blurriest one. Against a synthetic
+star field with known truth the ranking inverts, and gradient-corrected is 35% more accurate.
+
+`ahd` reconstructs the frame both horizontally and vertically and picks per pixel from whichever
+left the more homogeneous neighbourhood in CIELAB. It is the most accurate of the three on the
+hardest pixels — on a sharp vertical edge it is *exact*, where gradient-corrected has 0.1875 max
+error — and it is closest to RCD overall (rms delta 45/37/40 ADU against 61/41/59). It does not
+reduce background noise, because its directional green carries the same sharpening term
+gradient-corrected does; in flat background there is no edge for the homogeneity test to find.
+Reach for it when the colour reconstruction is the limiting factor, and pay 7× the demosaic time
+and 3× the end-to-end calibration time for it.
+
+Channel levels match RCD to better than 0.01% for all three, so none carries a colour cast.
+
+`rcd` is the same algorithm Siril uses, and is the most accurate of the four on both measures as
+well as the only one at background-noise parity with Siril's own output. It reaches that by
+*blending* two directional estimates rather than selecting one — blending averages, which is why
+it is quiet where `ahd` is not — and by estimating green through a ratio of local panchromatic
+levels rather than a colour difference. It costs 3× the demosaic time of `gradient-corrected` and
+about **55%** end-to-end on a four-frame calibration run — still ~1.8× faster end-to-end than
+Siril.
+
+RCD has no algorithm paper, so it is implemented under a **clean-room separation** from a
+functional specification written by the project owner; the implementer has never read the GPL
+reference. See the provenance note at the top of `src/debayer/rcd.rs` and the *Licensing and
+provenance* section of ADR 007.
+
+### Star detection (ADR 007 Phase 7)
+
+Candidates are local maxima above `median + 5·sigma·bgnoise`; each is fitted with an elliptical
+Gaussian (default) or a Moffat profile by Levenberg-Marquardt with an analytic Jacobian, then
+filtered on amplitude, width, roundness and residual.
+
+On synthetic fields with analytically placed stars, centroids come back within **0.02 px** and
+FWHM within **1%** of truth. Against Siril 1.4.4's `findstar` on three real 61 MP lights, at the
+same radius, sigma and roundness:
+
+| Frame | Siril stars | Matched within 0.2 px | Centroid RMS | FWHM bias |
+|---|---|---|---|---|
+| `…_0035` | 5,114 | 96.5% | 0.0371 px | −1.09% |
+| `…_0125` | 6,294 | 98.7% | 0.0120 px | −0.15% |
+| `…_0375` | 10,110 | 98.0% | 0.0129 px | −0.11% |
+
+The claim is one-directional: every star Siril found is a star this crate found, in the same
+place. The two do not agree on how many stars a frame *has* — uncapped, this crate keeps 25k–63k
+where Siril keeps 5k–10k, a threshold difference at the faint end.
+
+```
+cargo xtask siril-reference --stars              # generate the reference star lists
+cargo test --release -p px-imageproc --test starfind_parity -- --nocapture
+```
+
+A 61 MP light yields 123k candidates, so the fitter works through them brightest-first and stops
+once `max_stars` is met: **1.13 s** for the default 2,000 stars, against 4.40 s to fit every
+candidate. 2,000 stars on a 2048×2048 frame take 43 ms end to end, 36 ms of that detection.
+
+### Registration (ADR 007 Phase 8)
+
+Star lists are matched by triangle similarity (Groth 1986; Valdes et al. 1995), then a homography
+is fitted by RANSAC with iterative refinement. The triangle match runs on the brightest 40 stars
+and is used as a seed: both full lists are re-paired by proximity under it and the transform
+refitted, which is what makes the result precise to hundredths of a pixel rather than tenths.
+
+Against Siril 1.4.4's own two-pass homographies over 94 real 61 MP lights:
+
+| | Value |
+|---|---|
+| corner error, median | 0.0644 px |
+| corner error, 90th percentile | 0.1065 px |
+| frames where our fit is the better least-squares fit | 92 of 94 |
+| worst corner error as a multiple of that frame's own misfit | 1.46× |
+
+The absolute 0.1 px bound holds on every frame where a homography actually describes the mapping
+(42 of 94, worst 0.091 px). On the rest, our own fit leaves 0.35–0.46 px of *spatially structured*
+residual — unmodelled optical distortion, not noise — so the two implementations land a fraction of
+that misfit apart and neither is wrong. The gate there is scale-free: the disagreement never
+exceeds twice the scatter both are fitting through.
+
+```
+cargo xtask siril-reference --registration          # register 100 lights with Siril
+cargo test --release -p px-imageproc --test starmatch_parity -- --nocapture
+```
+
+Per-frame cost on 2,000-star lists: 3.5 ms to match, 4.5 ms to match and fit.
+
+## The native engine end to end (ADR 007 Phase 11)
+
+`px --engine native project stack` runs the whole master-light path natively:
+two-pass registration, warping, per-frame photometric normalization, and a rejection stack.
+
+Measured on an M4 Max (16 cores, 128 GB) against Siril 1.4.4, over 100 lights of an ASI6200MM Pro
+(9576×6388, 300 s subs). Both engines registered the same 95 frames onto the same reference.
+
+### Quality
+
+| | Native | Siril | |
+|---|---|---|---|
+| background noise | 1.5272 ADU | 1.5637 ADU | **2.3% quieter** |
+| median FWHM | 2.431 px | 2.436 px | **0.2% sharper** |
+| stars detected | 2000 | 2000 | both at the cap |
+
+Difference between the two masters, after removing the global `-output_norm` factor (see below):
+
+| Region | RMS difference |
+|---|---|
+| sky (lowest 9 brightness deciles) | **0.33 σ_bg** |
+| signal (top decile) | 5.42 σ_bg |
+| whole frame | 1.74 σ_bg |
+
+Raw, without removing that factor: 2.73 σ_bg RMS, 2855 σ_bg max — on a saturated star core.
+
+Two things make a flat per-pixel bound the wrong measure here, and both are measured rather than
+asserted. Both pipelines finish with `-output_norm`, a min–max rescale keyed to the single darkest
+and single brightest pixel, so two masters that agreed everywhere would still differ by a global
+affine factor — 1.005× plus a small pedestal, here. And what remains is concentrated on stars: a
+0.06 px difference in one frame's homography, well inside the Phase 8 gate, moves a star core by
+percent of its value and the sky by nothing.
+
+### Speed and memory
+
+| | Native | Siril | |
+|---|---|---|---|
+| 100 frames, register + warp + stack | **37.8 s** | 73.6 s | **1.95× faster** |
+
+Per phase: warping 14.7 s, combining 9.1 s, everything else 14.0 s.
+
+Warping was 23.9 s of that until the Phase 13 pass below; the rest of the run is unchanged, and so
+is every pixel of the output.
+
+| Budget (`--max-memory`) | Peak footprint | Wall clock | Warped frames |
+|---|---|---|---|
+| default (90% of RAM) | 53.2 GB | 37.8 s | held in memory |
+| 8 GB | **4.88 GB** | 89.3 s | spilled to disk |
+
+(The 8 GB row is the Phase 11 measurement, taken before Phase 13; its peak footprint is unaffected
+by that work and its wall clock has not been re-measured at that budget.)
+
+The budget is partitioned across phases rather than lent to each of them in turn. Sizing every
+phase against the whole budget put a run configured for 8 GB at 19.9 GB of resident memory — each
+phase was individually inside its budget, but memory is not returned to the operating system when
+it is dropped, so the later phases allocated on top of the earlier ones.
+
+```
+cargo xtask siril-reference --master-light     # 100-frame master light from Siril
+cargo test --release -p px-pipeline --test master_light_parity -- --nocapture
+```
+
+## Profiling (ADR 007 Phase 12)
+
+Every stage of the native path can time itself. Recording is off unless asked for, and a disabled
+span costs one relaxed atomic load, so the instrumentation lives on the code users run:
+
+```sh
+PX_TIMING=1 px --engine native master flat -f H ./flats     # table to stderr
+cargo test --release -p px-pipeline --test profile -- --nocapture   # all five pipelines
+```
+
+Totals are **inclusive** (a span containing another counts the inner one) and **per-thread** (a
+parallel stage's total exceeds the wall clock by roughly its worker count — a stage that does not
+is one that is not actually running in parallel, which is the finding).
+
+This is what took the master light from 68.9 s to 49.0 s without changing a single output value.
+The largest single win was not where any of the earlier phases would have guessed: 96% of star
+*detection* turned out to be measuring the channel's background, and 82% of a star-finding pass
+was one serial quickselect over a 244 MB copy. Counting the samples into buckets of an
+order-preserving integer key instead is exact, parallel, and copies nothing — 484 ms to 19.5 ms.
+
+| Star finding, per 61 MP frame | Before | After |
+|---|---|---|
+| median of the channel | 484 ms | **19.5 ms** |
+| background noise | 23 ms | 23 ms |
+| the scan that actually finds stars | 22 ms | 22 ms |
+| PSF fitting | 71 ms | 71 ms |
+| **whole pass** | **591 ms** | **117 ms** |
+
+## Warping (ADR 007 Phase 13)
+
+The profile above was read by thread time, and that ranked the targets wrongly for a wall-clock
+question. Frames are warped one at a time by every core, so warping's span total is close to its
+wall-clock cost — it was **0.8× the entire run** — while the reduction's much larger thread total
+is 2.15× wall. Warping was the bigger target and had never been touched.
+
+| | Before | After | |
+|---|---|---|---|
+| `warp/lanczos4_clamped`, 16.8 MP | 80.4 ms | **44.9 ms** | **1.79×** |
+| `warp/lanczos4` | 61.2 ms | 38.2 ms | 1.60× |
+| master light, 122 frames, wall | 83.4 s | **66.5 s** | **1.25×** |
+
+Three changes, none of which moves a pixel:
+
+- **The clamping guide is taken during the resample pass, not by warping the frame a second time.**
+  The guide is a bilinear sample at the point the real kernel is already sampled at, from taps it
+  has already loaded — four multiply-adds against a second full inverse-mapped traversal.
+- **The repair works from the pixels that rang.** Ringing is about 1% of a frame, and the previous
+  mask-dilate-copy form spent three whole-frame passes and two frame-sized `bool` buffers saying so.
+- **The interpolation kernel takes its taps as a sub-slice of each source row.** The support is
+  already known to be inside the frame, so the per-tap index multiply and bounds check — 64 of each
+  per output pixel for Lanczos-4 — are not needed. Worth 1.6× on its own.
+
+The same pass tried two things on the reduction kernel — gathering survivors in the pass that
+counts them, and Winsorizing without materializing the pulled-in stack — and they were worth 1.5%,
+which at the pipeline level is nothing. That is the ADR's D8 finding holding up a second time: the
+reduction is bound by the serial dependency between clipping passes, not by how many times it
+touches the values.
+
+**Everything here is byte-identical.** Verified by building the master light and master bias before
+and after and comparing the files: `cmp` reports no difference, over 244 MB and 61 million pixels.
+
+### What the native engine does not do
+
+`CreateMasterLight` with background extraction returns `UnsupportedByEngine`, and mosaic projects
+are refused before any work starts — the grid and spiral pipelines and cross-layer registration are
+still Siril-only. Both are reported rather than silently skipped.

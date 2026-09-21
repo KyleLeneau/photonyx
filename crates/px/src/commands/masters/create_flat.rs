@@ -1,4 +1,5 @@
-use crate::{ExitStatus, printer::Printer, reporters::DefaultPipelineReporter, utils::to_fits_ext};
+use crate::engine::EngineConfig;
+use crate::{ExitStatus, printer::Printer, utils::to_fits_ext};
 use anyhow::Result;
 use px_cli::CreateFlatMasterArgs;
 use px_fits::all_fits_files;
@@ -6,12 +7,12 @@ use px_index::{MatchCriteria, ProfileIndex};
 use px_pipeline::RunIn;
 use px_pipeline::calibration::master_flat::CreateMasterFlatPipeline;
 use px_pipeline::meta::CalibrationMetadata;
-use siril_sys::Builder;
 
 pub(crate) async fn create_master_flat(
     args: CreateFlatMasterArgs,
     printer: Printer,
     index: ProfileIndex,
+    engine: EngineConfig,
 ) -> Result<ExitStatus> {
     // Guard to make sure the input folder exists first
     if !args.raw_folder.exists() {
@@ -67,15 +68,21 @@ pub(crate) async fn create_master_flat(
 
     printer.info(format!("using master bias: {:?}", bias))?;
 
-    let master = CreateMasterFlatPipeline::builder()
+    // The same pipeline, run in whichever environment was selected.
+    // Both implement `RunIn`, so only the environment differs here.
+    let pipeline = CreateMasterFlatPipeline::builder()
         .ext(to_fits_ext(args.ext))
         .raw_folder(args.raw_folder)
         .out_folder(out_folder)
         .bias(bias)
         .filter(args.filter)
-        .build()
-        .run(DefaultPipelineReporter::from(printer), Builder::default())
-        .await?;
+        .build();
+
+    let master = if engine.is_native() {
+        pipeline.run(printer.reporter(), engine.native()).await?
+    } else {
+        pipeline.run(printer.reporter(), engine.siril()).await?
+    };
 
     // Pretty print the result
     printer.success(format!("Master FLAT stacking completed: {:?}", master))?;

@@ -12,13 +12,35 @@
 
 pub mod bayer;
 pub mod binning;
+pub mod calibrate;
 pub mod color;
 pub mod debayer;
 pub mod downscale;
 pub mod error;
+pub mod frame;
 pub mod preview;
+pub mod profile;
+pub mod register;
+pub mod runtime;
+pub mod sequence;
+pub mod stack;
+pub mod stats;
 pub mod stretch;
 
 pub use bayer::BayerPattern;
+pub use calibrate::{CalibrationOptions, CalibrationReport, DarkScaling, Masters, calibrate};
+pub use debayer::{Method as DebayerMethod, debayer_frame, debayer_frame_with};
 pub use error::ImageProcError;
+pub use frame::{Frame, ValueScale};
 pub use preview::{MAX_DISPLAY_DIM, PreviewImage, decode_preview};
+pub use register::{
+    Background, Candidate, FwhmStats, Profile, PsfStar, StarfindOptions, StarfindReport,
+    detect_candidates, find_stars, fwhm_stats,
+};
+pub use runtime::{Block, BlockPlan, ImageDims, MemoryLimit, ResourceBudget, Runtime};
+pub use sequence::{FrameInfo, FrameSet};
+pub use stack::{
+    BlockSource, LoadedFrames, Method, NormMethod, Normalization, Rejection, StackOptions,
+    StackResult, stack, stack_calibrated, stack_normalized,
+};
+pub use stats::ChannelStats;
